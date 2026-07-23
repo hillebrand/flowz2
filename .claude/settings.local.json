@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)",
+      "Bash(bmad-loop --version)",
+      "Bash(uv tool *)",
+      "Bash(rtk find *)",
+      "Bash(python3 ./scripts/merge-config.py --help)",
+      "Bash(python3 ./scripts/merge-help-csv.py --help)",
+      "Bash(python3 *)",
+      "Bash(bmad-loop init *)",
+      "Bash(bmad-loop validate *)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(git *)",
+      "Bash(uv run *)",
+      "Bash(rtk grep *)",
+      "Bash(awk -F',' '{print $2\",\"$4\",\"$8\",\"$9\",\"$10\",\"$11}')",
+      "Bash(xdg-open /home/hillebrand/IdeaProjects/flowz/.claude/skills/bmad-brainstorming/assets/brain-selector.html)",
+      "WebSearch",
+      "WebFetch(domain:service.magister.nl)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.studieplannerpro.nl)",
+      "WebFetch(domain:partnerportal.magister.nl)",
+      "WebFetch(domain:magister-api.readthedocs.io)",
+      "WebFetch(domain:docplayer.nl)",
+      "WebFetch(domain:apps.apple.com)",
+      "Bash(rtk wc *)",
+      "Bash(/usr/bin/find . *)",
+      "WebFetch(domain:aws.amazon.com)",
+      "Skill(artifact-design)",
+      "Artifact"
+    ]
+  }
+}

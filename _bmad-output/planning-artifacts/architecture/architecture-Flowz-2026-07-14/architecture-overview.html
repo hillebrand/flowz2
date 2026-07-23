@@ -1,0 +1,426 @@
+<title>Flowz — Architectuur</title>
+<style>
+  :root {
+    --bg: #F2F4F3;
+    --bg-raised: #FFFFFF;
+    --bg-sunken: #E7ECEA;
+    --text: #1A2422;
+    --text-soft: #4B5854;
+    --border: #D3DAD7;
+    --accent: #2F6F62;
+    --accent-soft: #E3EEEB;
+    --accent-text: #1E4A41;
+    --warn: #A8631F;
+    --warn-soft: #F3E7D8;
+    --warn-text: #7A4715;
+    --code-bg: #EAEFED;
+    --shadow: 0 1px 2px rgba(20,30,28,0.06), 0 4px 16px rgba(20,30,28,0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #12181A;
+    --bg-raised: #1A2224;
+    --bg-sunken: #0D1213;
+    --text: #E7EDE9;
+    --text-soft: #A9B7B2;
+    --border: #2A3538;
+    --accent: #6FBBA8;
+    --accent-soft: #1E3430;
+    --accent-text: #9BD8C6;
+    --warn: #D69A5C;
+    --warn-soft: #35291A;
+    --warn-text: #E8B67D;
+    --code-bg: #0F1516;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12181A;
+      --bg-raised: #1A2224;
+      --bg-sunken: #0D1213;
+      --text: #E7EDE9;
+      --text-soft: #A9B7B2;
+      --border: #2A3538;
+      --accent: #6FBBA8;
+      --accent-soft: #1E3430;
+      --accent-text: #9BD8C6;
+      --warn: #D69A5C;
+      --warn-soft: #35291A;
+      --warn-text: #E8B67D;
+      --code-bg: #0F1516;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent-text); }
+
+  a { color: var(--accent-text); }
+
+  .masthead {
+    padding: 3.5rem 1.5rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--accent-soft) 0%, var(--bg) 100%);
+  }
+  .masthead-inner { max-width: 780px; margin: 0 auto; }
+  .eyebrow {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+    font-weight: 600;
+    margin: 0 0 0.6rem;
+  }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    margin: 0 0 0.5rem;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .subtitle { font-size: 1.1rem; color: var(--text-soft); max-width: 60ch; margin: 0 0 1.2rem; }
+  .meta-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.8rem; font-weight: 600;
+    padding: 0.3rem 0.7rem; border-radius: 999px;
+    background: var(--accent); color: var(--bg-raised);
+  }
+  .pill.muted { background: var(--bg-sunken); color: var(--text-soft); font-weight: 500; }
+
+  main { max-width: 780px; margin: 0 auto; padding: 0 1.5rem 5rem; }
+
+  nav.toc {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem;
+    margin: 2rem 0 3rem;
+    padding: 1rem 1.2rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+  nav.toc a { color: var(--text-soft); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+
+  section { margin: 3.2rem 0; scroll-margin-top: 1.5rem; }
+  h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 1.55rem;
+    margin: 0 0 0.3rem;
+    text-wrap: balance;
+  }
+  .section-lede { color: var(--text-soft); margin: 0 0 1.4rem; max-width: 62ch; }
+  h3 { font-size: 1.05rem; margin: 1.6rem 0 0.5rem; }
+  p { max-width: 68ch; }
+
+  .diagram {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .diagram svg { max-width: 100%; height: auto; }
+
+  .ad-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+  }
+  .ad-card h3 { margin-top: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .ad-id {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--accent-text);
+    background: var(--accent-soft);
+    padding: 0.1rem 0.45rem;
+    border-radius: 5px;
+    font-weight: 700;
+  }
+  .ad-card dl { margin: 0.6rem 0 0; }
+  .ad-card dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); margin-top: 0.7rem; font-weight: 600; }
+  .ad-card dd { margin: 0.2rem 0 0; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  th, td { text-align: left; padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-sunken); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); }
+  tr:last-child td { border-bottom: none; }
+  td code, p code, li code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.1rem 0.35rem; border-radius: 4px; }
+
+  pre.tree {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+  .comment { color: var(--text-soft); }
+
+  .deferred-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  .deferred-list li {
+    background: var(--warn-soft);
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.94rem;
+  }
+  .deferred-list strong { color: var(--warn-text); }
+
+  .log { border-left: 2px solid var(--border); margin-left: 0.4rem; padding-left: 1.3rem; display: flex; flex-direction: column; gap: 1rem; }
+  .log-entry { position: relative; font-size: 0.92rem; }
+  .log-entry::before {
+    content: "";
+    position: absolute; left: -1.55rem; top: 0.35rem;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .log-entry .tag {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--accent-text); font-weight: 700; margin-right: 0.5rem;
+  }
+  .log-entry.event .tag { color: var(--text-soft); }
+  .log-entry.event::before { background: var(--text-soft); }
+
+  footer {
+    max-width: 780px; margin: 0 auto; padding: 2rem 1.5rem 3rem;
+    color: var(--text-soft); font-size: 0.85rem; border-top: 1px solid var(--border);
+  }
+</style>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">Architectuurspine · initiative-niveau</p>
+    <h1>Flowz — hoe het technisch in elkaar zit</h1>
+    <p class="subtitle">Eén Nuxt-app, één AWS Lambda-functie, en een handvol bewuste keuzes die voorkomen dat losse onderdelen elkaar tegenspreken naarmate Flowz gebouwd wordt.</p>
+    <div class="meta-row">
+      <span class="pill">Concept</span>
+      <span class="pill muted">14 juli 2026</span>
+      <span class="pill muted">Gebaseerd op PRD: Flowz (final)</span>
+    </div>
+  </div>
+</div>
+
+<main>
+  <nav class="toc">
+    <a href="#paradigma">Paradigma</a>
+    <a href="#keuzes">De keuzes</a>
+    <a href="#data">Data</a>
+    <a href="#stack">Techniek</a>
+    <a href="#structuur">Structuur &amp; hosting</a>
+    <a href="#journeys">Van journey naar code</a>
+    <a href="#later">Wat bewust nog niet is opgelost</a>
+    <a href="#log">Besluitvormingslog</a>
+  </nav>
+
+  <section id="paradigma">
+    <h2>Eén codebase, vier lagen</h2>
+    <p class="section-lede">Flowz wordt gebouwd als één Nuxt 4-project — geen aparte frontend- en backend-app om apart te onderhouden. Binnen die ene codebase is er wel een vaste laagverdeling, zodat het altijd duidelijk is waar iets hoort.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+graph LR
+    A["app/ (Vue UI)"] --> B["server/api/ (Nitro routes)"]
+    B --> C["server/domain/ (scheduling, calendar-sync, escalatie)"]
+    C --> D["server/data/ (Drizzle repositories)"]
+    D --> E[("Turso / libSQL")]
+    C --> F(["Google Calendar API"])
+      </pre>
+    </div>
+    <p><code>app/</code> praat alleen met <code>server/api/</code>, nooit rechtstreeks met de laag eronder. En <code>server/domain/</code> — waar de planninglogica leeft — weet niets van hoe het scherm eruitziet. Dat betekent: als de scheduling-regels ooit veranderen, hoeft de UI daar niets van te weten, en andersom.</p>
+  </section>
+
+  <section id="keuzes">
+    <h2>De keuzes die ertoe doen</h2>
+    <p class="section-lede">Dit zijn geen losse voorkeuren, maar afspraken die voorkomen dat twee stukken van Flowz — gebouwd op verschillende momenten — elkaar tegenspreken.</p>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-1</span> De planning wordt alleen door de server bedacht</h3>
+      <p>Het "doelmoment" van een taak, de volgorde tussen concurrerende taken, en de studiedruk-inschatting: dat gebeurt allemaal in <code>server/domain/scheduling/</code>. Geen enkel scherm — ook een toekomstige tweede app niet — verzint zelf een planning; het toont en vraagt alleen aan.</p>
+      <dl>
+        <dt>Voorkomt</dt>
+        <dd>Dat een toekomstige tweede client zijn eigen, afwijkende planninglogica bouwt — en dat twee gelijktijdige triggers (te weinig tijd én te weinig energie op dezelfde dag) tot een tegenstrijdige planning leiden.</dd>
+      </dl>
+    </div>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-2</span> Inloggen = Google-account, punt</h3>
+      <p>Geen apart wachtwoord voor Flowz. Evelien logt in met haar Google-account, en datzelfde account geeft meteen ook toegang tot haar Google Agenda. Het OAuth-consentscherm blijft bewust in "Testing"-modus: geen Google-reviewproces vooraf nodig, wel moet elke gebruiker (Evelien, later zusje/vrienden) handmatig worden toegevoegd, en moet iedereen zich na 7 dagen opnieuw aanmelden.</p>
+      <dl>
+        <dt>Voorkomt</dt>
+        <dd>Een los wachtwoordsysteem dat later alsnog samengevoegd moet worden met Google-identiteit, zodra er meerdere profielen bijkomen.</dd>
+      </dl>
+    </div>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-3</span> Eén bron van waarheid voor de planning</h3>
+      <p>Een taak "bezit" haar sessies en deeltaken. De dag- en weekplanning zelf wordt steeds opnieuw uitgerekend uit die brongegevens — er bestaat geen aparte tabel "vandaag se planning" die apart bijgewerkt moet worden en dus uit de pas kan raken.</p>
+      <dl>
+        <dt>Voorkomt</dt>
+        <dd>Een verouderde of tegenstrijdige planning omdat een losse kopie niet is meeveranderd toen een taak werd aangepast.</dd>
+      </dl>
+    </div>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-4</span> Agenda ophalen, niet ontvangen</h3>
+      <p>Flowz haalt Google Agenda-gegevens live op het moment dat een scherm ze nodig heeft — bij het openen van de app, bij het weekoverzicht. Geen achtergrondproces dat continu meeluistert; dat past ook niet bij hoe de app gehost wordt (alleen actief tijdens een verzoek, niet continu).</p>
+      <dl>
+        <dt>Voorkomt</dt>
+        <dd>Dat er stilletjes een achtergrondtaak of proactieve melding wordt toegevoegd die de huidige, simpele hostingvorm niet ondersteunt.</dd>
+      </dl>
+    </div>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-5</span> Geheimen leven niet in de code</h3>
+      <p>Het Google-wachtwoord-equivalent (OAuth client secret) en de sleutel naar de database staan nooit letterlijk in een bestand dat wordt opgeslagen — alleen via het deploy-gereedschap (SST) zelf beheerd.</p>
+    </div>
+
+    <div class="ad-card">
+      <h3><span class="ad-id">AD-6</span> Een waarschuwing is geen foutmelding</h3>
+      <p>Meldingen als "je hebt te weinig tijd" of "te weinig energie" (UJ-6/7/8) krijgen een eigen, zachtere vorm — losstaand van de technische foutmelding die de app gebruikt als er écht iets misgaat. Dat is de technische garantie achter het ontwerpprincipe "geen schuldgevoel": een implementatie kan deze twee dingen niet per ongeluk door elkaar halen.</p>
+    </div>
+  </section>
+
+  <section id="data">
+    <h2>Hoe de gegevens samenhangen</h2>
+    <p class="section-lede">Niet het volledige datamodel — alleen de relaties die vastliggen, zodat elk onderdeel dezelfde vorm gebruikt.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+erDiagram
+    USER ||--o{ TASK : heeft
+    USER ||--|| AVAILABLE_TIME_PATTERN : heeft
+    USER ||--o{ AVAILABLE_TIME_EXCEPTION : heeft
+    TASK ||--o{ SESSION : heeft
+    TASK ||--o{ SUBTASK : heeft
+      </pre>
+    </div>
+  </section>
+
+  <section id="stack">
+    <h2>De techniek, met versie</h2>
+    <p class="section-lede">Vastgepind op wat op dit moment (juli 2026) actueel en bij elkaar passend is geverifieerd.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Onderdeel</th><th>Keuze</th></tr></thead>
+        <tbody>
+          <tr><td>Framework</td><td>Nuxt 4.x</td></tr>
+          <tr><td>Server-engine</td><td>Nitro, preset <code>aws-lambda</code></td></tr>
+          <tr><td>UI</td><td>Vue 3.x</td></tr>
+          <tr><td>Runtime</td><td>Node 24.x (actuele LTS op AWS Lambda)</td></tr>
+          <tr><td>Database-toegang</td><td>Drizzle ORM (migraties via <code>generate</code> + <code>migrate</code>)</td></tr>
+          <tr><td>Database</td><td>Turso Cloud (libSQL) — niet de losstaande bèta-rewrite</td></tr>
+          <tr><td>Deployment</td><td>SST v3/Ion (officiële Nuxt-ondersteuning)</td></tr>
+          <tr><td>Agenda-koppeling</td><td>Google Calendar API v3 (OAuth 2.0)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Verwachte maandkosten: ~€0.</strong> Lambda (1M requests + 400.000 GB-s/maand) en CloudFront (1TB + 10M requests/maand) hebben een permanent gratis niveau dat voor élk AWS-account geldt — bij Flowz' schaal (enkele gebruikers, sporadisch gebruik) blijft dat ruim binnen die grens. Turso's eigen gratis tier dekt de database. Enige optionele kostenpost: een eigen domeinnaam (~€10-15/jaar), niet nodig om te starten.</p>
+  </section>
+
+  <section id="structuur">
+    <h2>Waar het in de code komt te staan</h2>
+    <pre class="tree"><span class="comment">flowz/</span>
+  app/              <span class="comment"># Vue UI: hoofdscherm, sessie, taak-formulier, weekoverzicht</span>
+  server/
+    api/            <span class="comment"># Nitro HTTP routes — dun, valideert en delegeert</span>
+    domain/
+      tasks/        <span class="comment"># Task/Session/Subtask CRUD</span>
+      scheduling/    <span class="comment"># scheduling engine, escalatielogica (UJ-6/7/8)</span>
+      calendar-sync/ <span class="comment"># Google Calendar pull + conflict-detectie (UJ-7)</span>
+    data/           <span class="comment"># Drizzle schema + repositories (Turso)</span>
+  sst.config.ts     <span class="comment"># infra-as-code: Lambda, stages, secrets</span></pre>
+
+    <h3>Hosting</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+graph TB
+    Browser["Browser (desktop/mobiel, responsive)"] --> CF
+    subgraph AWS["AWS (via SST sst.aws.Nuxt, per stage: dev/prod)"]
+        CF["CloudFront"]
+        CF -->|statisch| S3[("S3 — build-assets")]
+        CF -->|dynamisch| Lambda["Lambda: Nuxt/Nitro SSR + API"]
+    end
+    Lambda --> Turso[("Turso — per stage")]
+    Lambda --> GCal(["Google Calendar API"])
+    Lambda --> GAuth(["Google OAuth"])
+      </pre>
+    </div>
+    <p>SST's <code>sst.aws.Nuxt</code>-component zet deze driedeling automatisch neer: statische bestanden (JS/CSS/afbeeldingen) komen direct uit S3 via CloudFront, alleen dynamische verzoeken bereiken de Lambda. Let op: CloudFront's standaard requesttimeout is 60 seconden — ruim voldoende voor Flowz, maar goed om te weten.</p>
+  </section>
+
+  <section id="journeys">
+    <h2>Van user journey naar code</h2>
+    <p class="section-lede">Elke journey uit de PRD heeft een vaste plek — zo is bij het bouwen altijd te zien waar iets hoort.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Journey</th><th>Leeft in</th><th>Bewaakt door</th></tr></thead>
+        <tbody>
+          <tr><td>UJ-1 · Werksessie</td><td><code>app/</code> sessiescherm + <code>server/domain/scheduling</code></td><td>AD-1, AD-3</td></tr>
+          <tr><td>UJ-2 · Taak aanmaken</td><td><code>app/</code> formulier + <code>server/domain/tasks</code> + <code>scheduling</code></td><td>AD-1, AD-3</td></tr>
+          <tr><td>UJ-3 · Beschikbare tijd</td><td><code>server/data</code></td><td>AD-3</td></tr>
+          <tr><td>UJ-4 · Takenoverzicht</td><td><code>app/</code> + <code>server/domain/tasks</code></td><td>AD-3</td></tr>
+          <tr><td>UJ-5 · Weekplanning</td><td><code>server/domain/scheduling</code> + Calendar-pull</td><td>AD-3, AD-4</td></tr>
+          <tr><td>UJ-6 · Tijdgebrek</td><td><code>server/domain/scheduling</code> escalatie</td><td>AD-1</td></tr>
+          <tr><td>UJ-7 · Agendaconflict</td><td><code>server/domain/calendar-sync</code></td><td>AD-1, AD-4</td></tr>
+          <tr><td>UJ-8 · Dag niet volgens plan</td><td><code>server/domain/scheduling</code> escalatie</td><td>AD-1</td></tr>
+          <tr><td>Inloggen + Agenda-toegang</td><td><code>server/api/auth</code></td><td>AD-2, AD-5</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem; color: var(--text-soft); font-size: 0.92rem;">"Rustig hoofdscherm" (het ontwerpprincipe achter het hoofdscherm) is een puur visuele eis zonder gevolgen voor data of API's — geen technische regel nodig, wel genoteerd voor de UX-fase.</p>
+  </section>
+
+  <section id="later">
+    <h2>Wat bewust nog niet is opgelost</h2>
+    <p class="section-lede">Bewust uitgesteld, met de reden waarom — zodat het geen vergeten gat is maar een keuze.</p>
+    <ul class="deferred-list">
+      <li><strong>Meerdere profielen</strong> — elk profiel wordt straks gewoon een extra Google-account; geen herontwerp nodig dankzij AD-2.</li>
+      <li><strong>Meerdere apparaten tegelijk</strong> — zit er eigenlijk al in (Turso is overal bereikbaar), alleen de UX daarvoor is niet ontworpen.</li>
+      <li><strong>Spraak-naar-tekst</strong> — puur een toevoeging aan het scherm, raakt de server niet.</li>
+      <li><strong>"Flowz leert van jou"</strong> — vereist een nieuw stuk logica bovenop de huidige scheduling; nog geen ruimte voor gereserveerd in de data.</li>
+      <li><strong>Magister / Microsoft-inloggen</strong> — zou een tweede inlogmethode naast Google betekenen; bij oppakken een echte keuze om te maken.</li>
+      <li><strong>Uitstelgedrag-aanpak</strong> — bewust uitgesteld, raakt de architectuur niet.</li>
+      <li><strong>Achtergrondmeldingen</strong> (bv. "je hebt vandaag nog niks gedaan") — vereist een achtergrondproces dat er nu niet is.</li>
+      <li><strong>Logging/monitoring &amp; back-ups</strong> — de standaardvoorzieningen van Lambda en Turso volstaan voorlopig; geen zelfgebouwde oplossing.</li>
+      <li><strong>Opstartsnelheid (cold start)</strong> — reëel risico: P50 ~200-400ms, maar P95 ~1,2-2,8s, en bij Eveliens sporadische gebruik raakt een flink deel van de opens waarschijnlijk een koude Lambda. Bewust nu geaccepteerd; bij hinder eerst een goedkope keep-warm-ping overwegen, pas daarna provisioned concurrency (dat kost een vast bedrag, ook stil).</li>
+    </ul>
+  </section>
+
+  <section id="log">
+    <h2>Hoe we hier kwamen</h2>
+    <p class="section-lede">Het volledige besluitvormingslog van deze sessie, kort samengevat — inclusief het moment waarop een eerdere keuze werd teruggedraaid.</p>
+    <div class="log">
+      <div class="log-entry"><span class="tag">Besluit</span>Paradigma eerst gekozen: Vue-frontend + Java/Spring Boot-backend, om volledig gebruik te maken van bestaande Java-ervaring.</div>
+      <div class="log-entry event"><span class="tag">Gebeurtenis</span>Na een vraag over AWS-hosting heroverwogen en ingetrokken — Java bleek meer ops-overhead te vragen dan gewenst voor een hobbyproject.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Definitief paradigma: Nuxt 4 (Vue-fullstack, één codebase), op AWS Lambda via Nitro's ingebouwde preset.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Database: Turso in plaats van lokaal SQLite-bestand — veilig bij meerdere gelijktijdige Lambda-instances.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Alleen Google-login, geen eigen wachtwoordsysteem.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Scheduling-logica leeft uitsluitend server-side.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Deployment via SST; geheimen via SST's secrets-mechanisme.</div>
+      <div class="log-entry"><span class="tag">Aanname</span>AWS Free Tier waarschijnlijk niet opnieuw beschikbaar — bevestigd tijdens deze sessie na navraag bij de officiële AWS-FAQ.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Drizzle ORM; Google Calendar-sync pull-based zonder achtergrondproces; planning is een berekende weergave, geen losse opslag.</div>
+      <div class="log-entry event"><span class="tag">Gebeurtenis</span>Reviewer-gate gedraaid: 4 onafhankelijke controles (PRD-check, kwaliteits-rubric, versie-verificatie, adversarial two-unit-test) — bevindingen direct verwerkt in de spine.</div>
+      <div class="log-entry"><span class="tag">Besluit</span>Google OAuth-consentscherm blijft bewust in Testing-modus.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Architectuurspine: <code>_bmad-output/planning-artifacts/architecture/architecture-Flowz-2026-07-14/ARCHITECTURE-SPINE.md</code> · Volledig besluitlog: <code>.memlog.md</code> in dezelfde map · Gebaseerd op PRD <code>prd-Flowz-2026-07-11</code>
+</footer>
