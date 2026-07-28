@@ -1,0 +1,95 @@
+# generated: 2026-07-26
+# last_updated: 2026-07-26
+# project: Flowz
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+
+generated: 2026-07-26
+last_updated: 2026-07-28
+project: Flowz
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: in-progress
+  1-1-project-scaffolding-inlogscherm-ui: in-progress
+  1-2-google-oauth-login-met-calendar-consent: backlog
+  1-3-sessieverval-opnieuw-inloggen: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-weekpatroon-instellen: backlog
+  2-2-dag-specifieke-afwijkingen-instellen: backlog
+  2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: backlog
+  3-2-deeltaken-automatische-tijdsom: backlog
+  3-3-benodigdheden-met-auto-suggestie-per-vak: backlog
+  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: backlog
+  3-5-idempotente-herberekening-bij-wijzigingen: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-hoofdscherm-dagplanning-eerstvolgende-taak: backlog
+  4-2-hoofdscherm-waarschuwing-banner-later-vandaag-calendar-rij: backlog
+  4-3-sessie-tussenscherm-benodigdheden-bekijken: backlog
+  4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen: backlog
+  4-5-sessie-actief-wegnavigeer-bescherming: backlog
+  4-6-sessie-afronden-overzicht-resterende-tijd-aanpassen: backlog
+  4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-takenoverzicht-lijst-per-week: backlog
+  5-2-taakdetail-bekijken-verwijderen: backlog
+  5-3-taak-bewerken-hergebruik-taak-formulier: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-tijdgebrek-detectie-escalatie-service: backlog
+  6-2-tekort-oplossen-scherm: backlog
+  6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: backlog
+  6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: backlog
+  6-5-weekoverzicht-met-knelpunt-signalering: backlog
+  6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: backlog
+  6-7-agendaconflict-detectie-bij-opstarten: backlog
+  epic-6-retrospective: optional

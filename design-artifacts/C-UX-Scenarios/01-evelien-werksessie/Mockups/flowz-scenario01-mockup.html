@@ -1,0 +1,1347 @@
+<style>
+  :root {
+    --bg: #F2F5F1;
+    --surface: #FFFFFF;
+    --surface-muted: #EAEFEA;
+    --ink: #1C2624;
+    --ink-muted: #5E706C;
+    --ink-faint: #8A9C97;
+    --accent: #2E6B6E;
+    --accent-ink: #FFFFFF;
+    --accent-soft: #DCEBE8;
+    --accent-soft-ink: #1F4A4C;
+    --warn: #93672B;
+    --warn-soft: #F1E3C9;
+    --border: #D8E0DB;
+    --shadow: 0 1px 2px rgba(28,38,36,0.06), 0 8px 24px -12px rgba(28,38,36,0.18);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #101616;
+    --surface: #182120;
+    --surface-muted: #1F2A28;
+    --ink: #E6EDEA;
+    --ink-muted: #93A6A1;
+    --ink-faint: #647975;
+    --accent: #59B0A8;
+    --accent-ink: #0B1D1C;
+    --accent-soft: #1E3735;
+    --accent-soft-ink: #A9DAD4;
+    --warn: #D8A85C;
+    --warn-soft: #33291A;
+    --border: #29342F;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.6);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101616;
+      --surface: #182120;
+      --surface-muted: #1F2A28;
+      --ink: #E6EDEA;
+      --ink-muted: #93A6A1;
+      --ink-faint: #647975;
+      --accent: #59B0A8;
+      --accent-ink: #0B1D1C;
+      --accent-soft: #1E3735;
+      --accent-soft-ink: #A9DAD4;
+      --warn: #D8A85C;
+      --warn-soft: #33291A;
+      --border: #29342F;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+  }
+
+  .page {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    padding: 3rem 1.5rem 6rem;
+    min-height: 100vh;
+  }
+
+  .intro {
+    max-width: 40rem;
+    margin: 0 auto 3.5rem;
+    text-align: center;
+  }
+
+  .eyebrow {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-soft-ink);
+    background: var(--accent-soft);
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    margin-bottom: 1rem;
+  }
+
+  .intro h1 {
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem);
+    line-height: 1.2;
+    margin: 0 0 0.6rem;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .intro p {
+    color: var(--ink-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .flow {
+    max-width: 30rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .step-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0 0.25rem 0.6rem;
+  }
+
+  .step-label .name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+  }
+
+  .step-label .route {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+  }
+
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .windowbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+  }
+
+  .windowbar .pill {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    color: var(--ink-faint);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.15rem 0.7rem;
+  }
+
+  .screen {
+    padding: 1.4rem 1.3rem 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.9rem 0 1.6rem;
+    gap: 0.3rem;
+  }
+
+  .connector .line {
+    width: 1px;
+    height: 1.4rem;
+    background: var(--border);
+  }
+
+  .connector .action {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+  }
+
+  .connector .chevron {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid var(--border);
+    border-bottom: 2px solid var(--border);
+    transform: rotate(45deg);
+    margin-top: -0.1rem;
+  }
+
+  /* ---- shared UI atoms ---- */
+
+  button {
+    font: inherit;
+    cursor: default;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 10px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .btn-secondary {
+    background: var(--surface-muted);
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .btn-quiet {
+    background: transparent;
+    color: var(--ink-muted);
+    padding: 0.3rem 0.2rem;
+    font-weight: 600;
+  }
+
+  .icon {
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+  }
+
+  /* ---- 1.1 Home ---- */
+
+  .home-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .hamburger {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0.4rem;
+    background: none;
+    border: none;
+  }
+  .hamburger span {
+    width: 1.1rem;
+    height: 2px;
+    background: var(--ink-muted);
+    border-radius: 1px;
+  }
+
+  .brand {
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  .time-pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .task-card {
+    background: var(--surface-muted);
+    border-radius: 14px;
+    padding: 1.1rem 1.1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .task-subject {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+
+  .task-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0.1rem 0 0.2rem;
+    text-wrap: balance;
+  }
+
+  .task-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+  }
+
+  .task-duration {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .secondary-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+  }
+
+  .secondary-col h3 {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    margin: 0 0 0.5rem;
+  }
+
+  .later-list {
+    max-height: 6.2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding-right: 0.2rem;
+  }
+
+  .later-item {
+    display: flex;
+    flex-direction: column;
+    padding: 0.4rem 0.55rem;
+    border-radius: 8px;
+    background: var(--surface-muted);
+  }
+
+  .later-item .subj {
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+
+  .later-item .name {
+    font-size: 0.78rem;
+    color: var(--ink);
+  }
+
+  .cal {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+  }
+
+  .cal-row {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    align-items: center;
+    min-height: 1.5rem;
+    gap: 0.4rem;
+  }
+
+  .cal-row time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cal-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+
+  .cal-event .cal-track {
+    background: var(--accent);
+    position: relative;
+  }
+
+  .cal-event .cal-label {
+    font-size: 0.68rem;
+    color: var(--ink-muted);
+    margin-top: 0.15rem;
+  }
+
+  /* ---- 1.2 prep ---- */
+
+  .prep-back {
+    align-self: flex-start;
+  }
+
+  .needs-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    margin: 0;
+  }
+
+  .needs-list {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .needs-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .needs-list li::before {
+    content: "";
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .prep-cta {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.4rem;
+  }
+
+  /* ---- 1.3 active ---- */
+
+  .active-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .active-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .timer {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .subtask-count {
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+  }
+
+  .active-main {
+    text-align: center;
+    padding: 1.6rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.1rem;
+  }
+
+  .active-main .subtask-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-wrap: balance;
+    max-width: 18rem;
+  }
+
+  .active-actions {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  /* ---- 1.4 wrap ---- */
+
+  .wrap-heading {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .overview-row {
+    display: flex;
+    gap: 1.4rem;
+  }
+
+  .overview-item .label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+  }
+
+  .overview-item .value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.1rem;
+  }
+
+  .progress-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .progress-head .summary {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .subtask-detail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .subtask-detail li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--surface-muted);
+    border-radius: 8px;
+  }
+
+  .status-chip {
+    font-size: 0.66rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+  }
+
+  .status-done {
+    background: var(--accent-soft);
+    color: var(--accent-soft-ink);
+  }
+
+  .status-todo {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--ink-faint);
+  }
+
+  .deviation-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    border-radius: 10px;
+  }
+
+  .remaining-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .remaining-block .needs-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .time-field {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .time-field input {
+    width: 2.4rem;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .time-field span {
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+  }
+
+  .wrap-cta {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.3rem;
+  }
+
+  /* ---- scenario grouping ---- */
+
+  .scenario-group {
+    max-width: 30rem;
+    margin: 0 auto;
+  }
+
+  .scenario-group + .scenario-group {
+    margin-top: 4.5rem;
+  }
+
+  .scenario-heading {
+    text-align: center;
+    margin: 0 0 2rem;
+  }
+
+  .scenario-heading h2 {
+    font-size: 1.25rem;
+    margin: 0.6rem 0 0.35rem;
+    letter-spacing: -0.01em;
+  }
+
+  .scenario-heading p {
+    color: var(--ink-muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  /* ---- 2.1 taak-formulier ---- */
+
+  .taak-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .taak-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .icon-btn {
+    background: none;
+    border: none;
+    color: var(--ink-faint);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.3rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+  }
+
+  .form-input {
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.85rem;
+    color: var(--ink);
+    font: inherit;
+  }
+
+  .segmented {
+    display: flex;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.2rem;
+    gap: 0.2rem;
+  }
+
+  .segmented button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+  }
+
+  .segmented button.active {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .subtask-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .subtask-row .form-input {
+    flex: 1;
+  }
+
+  .subtask-row .time-field,
+  .subtask-row .icon-btn {
+    flex-shrink: 0;
+  }
+
+  .add-link {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.2rem 0;
+  }
+
+  .hint-text {
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: var(--accent-soft);
+    color: var(--accent-soft-ink);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.3rem 0.5rem 0.3rem 0.6rem;
+    border-radius: 999px;
+  }
+
+  .tag button {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 0.75rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .tag-add {
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    background: transparent;
+  }
+
+  .taak-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+  }
+
+  /* ---- 3.1 reden-kiezen ---- */
+
+  .choice-cards {
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .choice-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    background: var(--surface-muted);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem;
+    text-align: left;
+  }
+
+  .choice-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .choice-card .choice-icon {
+    font-size: 1.3rem;
+  }
+
+  .choice-card .choice-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .choice-card .choice-sub {
+    font-size: 0.76rem;
+    color: var(--ink-muted);
+  }
+
+  .choice-card.selected .choice-sub {
+    color: var(--accent-soft-ink);
+  }
+
+  /* ---- 3.2 tekort-oplossen ---- */
+
+  .shortfall-heading {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 0.2rem;
+    letter-spacing: -0.01em;
+  }
+
+  .shortfall-sub {
+    color: var(--ink-muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .shortfall-remaining {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0.3rem 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rec-card {
+    background: var(--surface-muted);
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .rec-tier {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+
+  .rec-desc {
+    font-size: 0.85rem;
+    color: var(--ink);
+  }
+
+  .rec-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.2rem;
+  }
+
+  .rec-gain {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rec-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <span class="eyebrow">Flowz &middot; UX-mockup</span>
+    <h1>Drie scenario&rsquo;s uit Phase 4</h1>
+    <p>Statische schermen met dummy-data, op basis van de Phase 4-specificaties. Geen functionaliteit &mdash; puur om de flows te bekijken.</p>
+  </div>
+
+  <div class="scenario-group">
+    <div class="scenario-heading">
+      <span class="eyebrow">Scenario 01</span>
+      <h2>Evelien&rsquo;s Werksessie</h2>
+      <p>Van hoofdscherm tot afgeronde sessie &mdash; vier schermen.</p>
+    </div>
+
+  <div class="flow">
+
+    <div class="step-label">
+      <span class="name">1.1 &middot; Home</span>
+      <span class="route">/</span>
+    </div>
+    <div class="frame">
+      <div class="windowbar"><span class="pill">flowz.app/</span></div>
+      <div class="screen">
+        <div class="home-header">
+          <button class="hamburger" aria-hidden="true"><span></span><span></span><span></span></button>
+          <span class="brand">Flowz</span>
+          <span class="time-pill">3u 20m resterend</span>
+        </div>
+
+        <div class="task-card">
+          <span class="task-subject">Wiskunde</span>
+          <p class="task-name">Hoofdstuk 4: Vergelijkingen oefenen</p>
+          <div class="task-meta-row">
+            <span class="task-duration">&#9201; 25 min</span>
+            <button class="btn btn-primary">Start sessie</button>
+          </div>
+        </div>
+
+        <div class="prep-cta">
+          <button class="btn btn-quiet">Vandaag niet als gepland?</button>
+        </div>
+
+        <div class="secondary-row">
+          <div class="secondary-col">
+            <h3>Later vandaag</h3>
+            <div class="later-list">
+              <div class="later-item"><span class="subj">Engels</span><span class="name">Samenvatting hoofdstuk 3</span></div>
+              <div class="later-item"><span class="subj">Geschiedenis</span><span class="name">H5 lezen</span></div>
+              <div class="later-item"><span class="subj">Biologie</span><span class="name">Begrippen leren</span></div>
+              <div class="later-item"><span class="subj">Nederlands</span><span class="name">Leesverslag afmaken</span></div>
+            </div>
+          </div>
+          <div class="secondary-col">
+            <h3>Vandaag</h3>
+            <div class="cal">
+              <div class="cal-row"><time>15:00</time><div class="cal-track"></div></div>
+              <div class="cal-row cal-event"><time>16:00</time><div><div class="cal-track"></div><div class="cal-label">Tennis</div></div></div>
+              <div class="cal-row"><time>17:00</time><div class="cal-track"></div></div>
+              <div class="cal-row cal-event"><time>18:00</time><div><div class="cal-track"></div><div class="cal-label">Avondeten</div></div></div>
+              <div class="cal-row"><time>19:00</time><div class="cal-track"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="line"></div>
+      <span class="action">Start sessie</span>
+      <div class="chevron"></div>
+    </div>
+
+    <div class="step-label">
+      <span class="name">1.2 &middot; Sessie-Tussenscherm</span>
+      <span class="route">/sessie/starten?taak=42</span>
+    </div>
+    <div class="frame">
+      <div class="windowbar"><span class="pill">flowz.app/sessie/starten</span></div>
+      <div class="screen">
+        <button class="btn btn-quiet prep-back">&larr; Terug</button>
+
+        <div>
+          <span class="task-subject">Wiskunde</span>
+          <p class="task-name">Hoofdstuk 4: Vergelijkingen oefenen</p>
+        </div>
+
+        <div>
+          <p class="needs-label">Wat heb je nodig?</p>
+          <ul class="needs-list">
+            <li>Rekenmachine</li>
+            <li>Schrift</li>
+            <li>Wiskundeboek</li>
+          </ul>
+        </div>
+
+        <div class="prep-cta">
+          <button class="btn btn-primary">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="line"></div>
+      <span class="action">Start</span>
+      <div class="chevron"></div>
+    </div>
+
+    <div class="step-label">
+      <span class="name">1.3 &middot; Sessie-Actief</span>
+      <span class="route">/sessie/actief?taak=42</span>
+    </div>
+    <div class="frame">
+      <div class="windowbar"><span class="pill">flowz.app/sessie/actief &middot; Bezig met Wiskunde</span></div>
+      <div class="screen">
+        <div class="active-top">
+          <div class="active-progress">
+            <span class="timer">12:34</span>
+            <button class="btn btn-secondary">Pauzeren</button>
+            <span class="subtask-count">Subtaak 2 van 4</span>
+          </div>
+          <button class="btn btn-secondary">Stoppen</button>
+        </div>
+
+        <div class="active-main">
+          <p class="subtask-name">Opgave 4.1 t/m 4.6 maken</p>
+          <div class="active-actions">
+            <button class="btn btn-secondary">Later</button>
+            <button class="btn btn-primary">Klaar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">
+      <div class="line"></div>
+      <span class="action">Stoppen</span>
+      <div class="chevron"></div>
+    </div>
+
+    <div class="step-label">
+      <span class="name">1.4 &middot; Sessie-Afronden</span>
+      <span class="route">/sessie/overzicht?taak=42</span>
+    </div>
+    <div class="frame">
+      <div class="windowbar"><span class="pill">flowz.app/sessie/overzicht</span></div>
+      <div class="screen">
+        <h2 class="wrap-heading">Sessie afgerond</h2>
+
+        <div class="overview-row">
+          <div class="overview-item"><div class="label">Gepland</div><div class="value">25 min</div></div>
+          <div class="overview-item"><div class="label">Besteed</div><div class="value">21 min</div></div>
+        </div>
+
+        <div class="progress-block">
+          <div class="progress-head">
+            <span class="summary">3 van 4 subtaken afgerond</span>
+            <button class="btn btn-quiet">Details verbergen</button>
+          </div>
+          <ul class="subtask-detail">
+            <li>Opgave 4.1 t/m 4.3 <span class="status-chip status-done">Afgerond</span></li>
+            <li>Opgave 4.4 t/m 4.6 <span class="status-chip status-done">Afgerond</span></li>
+            <li>Theorie herhalen <span class="status-chip status-done">Afgerond</span></li>
+            <li>Extra oefenopgaven <span class="status-chip status-todo">Niet gestart</span></li>
+          </ul>
+        </div>
+
+        <div class="deviation-banner">Dit ging sneller dan gepland!</div>
+
+        <div class="remaining-block">
+          <p class="needs-label">Hoeveel tijd heb je hier nog voor nodig?</p>
+          <div class="time-inputs">
+            <label class="time-field">
+              <input type="text" value="0" inputmode="numeric" aria-label="Uren" />
+              <span>u</span>
+            </label>
+            <label class="time-field">
+              <input type="text" value="15" inputmode="numeric" aria-label="Minuten" />
+              <span>m</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="wrap-cta">
+          <button class="btn btn-primary">Terug naar hoofdscherm</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  </div>
+
+  <div class="scenario-group">
+    <div class="scenario-heading">
+      <span class="eyebrow">Scenario 02</span>
+      <h2>Evelien Maakt een Taak Aan</h2>
+      <p>E&eacute;n scherm &mdash; het taak-formulier.</p>
+    </div>
+
+    <div class="flow">
+
+      <div class="step-label">
+        <span class="name">2.1 &middot; Taak-Formulier</span>
+        <span class="route">/taak/nieuw</span>
+      </div>
+      <div class="frame">
+        <div class="windowbar"><span class="pill">flowz.app/taak/nieuw</span></div>
+        <div class="screen">
+          <div class="taak-header">
+            <h2>Nieuwe taak</h2>
+            <button class="icon-btn" aria-hidden="true">&#10005;</button>
+          </div>
+
+          <div class="field">
+            <label>Vak</label>
+            <select class="form-input"><option>Aardrijkskunde</option></select>
+          </div>
+
+          <div class="field">
+            <label>Titel</label>
+            <input class="form-input" type="text" value="Hoofdstuk 6: Klimaatzones samenvatten" />
+          </div>
+
+          <div class="field">
+            <label>Soort taak</label>
+            <select class="form-input"><option>Proefwerk</option></select>
+          </div>
+
+          <div class="field">
+            <label>Deadline</label>
+            <input class="form-input" type="text" value="12-08-2026" />
+          </div>
+
+          <div class="field">
+            <label>Moeilijkheid</label>
+            <div class="segmented">
+              <button>Laag</button>
+              <button class="active">Gemiddeld</button>
+              <button>Hoog</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Prioriteit</label>
+            <div class="segmented">
+              <button>Laag</button>
+              <button>Gemiddeld</button>
+              <button class="active">Hoog</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Standaard sessieduur</label>
+            <div class="time-field" style="align-self: flex-start;">
+              <input type="text" value="30" inputmode="numeric" aria-label="Minuten" />
+              <span>min</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Deeltaken</label>
+            <div class="subtask-row">
+              <input class="form-input" type="text" value="Paragraaf 6.1 samenvatten" />
+              <div class="time-field"><input type="text" value="20" inputmode="numeric" aria-label="Minuten" /><span>m</span></div>
+              <button class="icon-btn" aria-hidden="true">&#10005;</button>
+            </div>
+            <div class="subtask-row">
+              <input class="form-input" type="text" value="Paragraaf 6.2 samenvatten" />
+              <div class="time-field"><input type="text" value="15" inputmode="numeric" aria-label="Minuten" /><span>m</span></div>
+              <button class="icon-btn" aria-hidden="true">&#10005;</button>
+            </div>
+            <button class="add-link">+ Deeltaak toevoegen</button>
+          </div>
+
+          <div class="field">
+            <label>Totale benodigde tijd</label>
+            <div class="time-inputs">
+              <label class="time-field">
+                <input type="text" value="0" inputmode="numeric" aria-label="Uren" />
+                <span>u</span>
+              </label>
+              <label class="time-field">
+                <input type="text" value="35" inputmode="numeric" aria-label="Minuten" />
+                <span>m</span>
+              </label>
+            </div>
+            <span class="hint-text">Som van deeltaken: 35 min</span>
+          </div>
+
+          <div class="field">
+            <label>Omschrijving</label>
+            <textarea class="form-input" rows="2">Extra details over de taak (optioneel)</textarea>
+          </div>
+
+          <div class="field">
+            <label>Benodigdheden</label>
+            <div class="tag-list">
+              <span class="tag">Aardrijkskundeboek <button aria-hidden="true">&#10005;</button></span>
+              <span class="tag">Atlas <button aria-hidden="true">&#10005;</button></span>
+              <button class="tag-add">+ Voeg iets toe...</button>
+            </div>
+          </div>
+
+          <div class="taak-actions">
+            <button class="btn btn-secondary">Annuleren</button>
+            <button class="btn btn-primary">Opslaan</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="scenario-group">
+    <div class="scenario-heading">
+      <span class="eyebrow">Scenario 03</span>
+      <h2>Evelien&rsquo;s Schuldvrije Herstel</h2>
+      <p>Van reden kiezen tot het tekort is opgelost &mdash; twee schermen.</p>
+    </div>
+
+    <div class="flow">
+
+      <div class="step-label">
+        <span class="name">3.1 &middot; Reden-Kiezen</span>
+        <span class="route">/herstel/reden-kiezen</span>
+      </div>
+      <div class="frame">
+        <div class="windowbar"><span class="pill">flowz.app/herstel/reden-kiezen</span></div>
+        <div class="screen">
+          <button class="btn btn-quiet prep-back">&larr; Terug</button>
+
+          <p class="needs-label" style="text-transform:none; letter-spacing:0; font-size:0.95rem; color:var(--ink); font-weight:700;">Wat is er aan de hand?</p>
+
+          <div class="choice-cards">
+            <button class="choice-card selected">
+              <span class="choice-icon" aria-hidden="true">&#9200;</span>
+              <span class="choice-title">Te weinig tijd</span>
+              <span class="choice-sub">De geplande tijd gaat vandaag niet lukken</span>
+            </button>
+            <button class="choice-card">
+              <span class="choice-icon" aria-hidden="true">&#128267;</span>
+              <span class="choice-title">Te weinig energie</span>
+              <span class="choice-sub">Brain is op vandaag</span>
+            </button>
+          </div>
+
+          <div class="field">
+            <label style="text-transform:none; letter-spacing:0; font-size:0.85rem; color:var(--ink); font-weight:600;">Hoeveel tijd heb je vandaag nog?</label>
+            <div class="time-inputs">
+              <label class="time-field">
+                <input type="text" value="1" inputmode="numeric" aria-label="Uren" />
+                <span>u</span>
+              </label>
+              <label class="time-field">
+                <input type="text" value="30" inputmode="numeric" aria-label="Minuten" />
+                <span>m</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="prep-cta">
+            <button class="btn btn-primary">Bevestigen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="connector">
+        <div class="line"></div>
+        <span class="action">Bevestigen</span>
+        <div class="chevron"></div>
+      </div>
+
+      <div class="step-label">
+        <span class="name">3.2 &middot; Tekort-Oplossen</span>
+        <span class="route">/herstel/tekort-oplossen</span>
+      </div>
+      <div class="frame">
+        <div class="windowbar"><span class="pill">flowz.app/herstel/tekort-oplossen</span></div>
+        <div class="screen">
+          <div>
+            <h2 class="shortfall-heading">Tekort oplossen</h2>
+            <p class="shortfall-sub">Er is altijd een oplossing &mdash; we lossen het samen op</p>
+            <p class="shortfall-remaining">Nog 20 min op te lossen</p>
+          </div>
+
+          <div class="rec-card">
+            <span class="rec-tier">Uitstellen</span>
+            <p class="rec-desc">Geschiedenis &mdash; H5 lezen uitgesteld naar morgen</p>
+            <div class="rec-footer">
+              <span class="rec-gain">+25 min</span>
+              <div class="rec-actions">
+                <button class="btn btn-secondary">Afwijzen</button>
+                <button class="btn btn-primary">Accepteren</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="rec-card">
+            <span class="rec-tier">Tijd verruimen</span>
+            <p class="rec-desc">Maandag van 2u naar 2,5u</p>
+            <div class="rec-footer">
+              <span class="rec-gain">+30 min</span>
+              <div class="rec-actions">
+                <button class="btn btn-secondary">Afwijzen</button>
+                <button class="btn btn-primary">Accepteren</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="rec-card">
+            <span class="rec-tier">Alleen het belangrijkste</span>
+            <p class="rec-desc">Biologie &mdash; begrippen leren: alleen het belangrijkste</p>
+            <div class="rec-footer">
+              <span class="rec-gain">+10 min</span>
+              <div class="rec-actions">
+                <button class="btn btn-secondary">Afwijzen</button>
+                <button class="btn btn-primary">Accepteren</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>

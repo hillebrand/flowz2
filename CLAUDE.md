@@ -70,3 +70,9 @@ Each workflow skill reads its inputs from `_bmad-output/planning-artifacts/...` 
 output folder alongside prior phases (e.g. `prds/prd-Flowz-2026-07-11/`) plus a `reconcile-*.md` comparing
 it against the phase(s) it was derived from — check for an open reconcile file before assuming a phase is
 finished.
+
+## AWS Agent Toolkit
+
+The AWS Agent Toolkit (MCP server + skills, installed 2026-07-26) is available for any future AWS work —
+see `AWS-AGENT-RULES.md` for its usage guidance. Kept as a separate file rather than folded into this one,
+since it's general AWS tooling guidance unrelated to the Flowz/BMad workflow above.

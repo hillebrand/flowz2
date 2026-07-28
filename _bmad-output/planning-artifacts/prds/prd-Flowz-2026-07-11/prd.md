@@ -2,7 +2,7 @@
 title: PRD: Flowz
 status: final
 created: 2026-07-11
-updated: 2026-07-14
+updated: 2026-07-26
 ---
 
 # PRD: Flowz
@@ -83,7 +83,7 @@ Via het **hamburgermenu** opent Evelien het weekoverzicht.
 - Voor elke dag van de komende week staat onder elkaar, in cijfers (geen balk): de **beschikbare tijd** en de **benodigde tijd**.
 - Per dag zijn ook de **ingeplande taken/sessies** voor die dag zichtbaar.
 - Waar mogelijk worden ook de overige items uit **Google Calendar** getoond, puur indicatief — dit scherm is niet de plek om beschikbare tijd aan te passen.
-- Overschrijding van benodigde t.o.v. beschikbare tijd kan op dit scherm niet voorkomen (wordt elders al voorkomen/opgelost); er is hier geen aparte afhandeling voor nodig.
+- Wordt voor een dag zichtbaar dat de benodigde tijd de beschikbare tijd overschrijdt, dan markeert Flowz die dag als knelpunt en toont een concrete, direct accepteerbare oplossingssuggestie (dezelfde escalatielogica als UJ-6, maar hier als één voorstel per knelpunt in plaats van de volledige aanbeveling-voor-aanbeveling-flow). Zo ziet Evelien een drukke dag vroeg in de week aankomen, mét oplossing — dit is toegevoegd na de Trigger Map-fase (Objective 2: "Minder gemiste deadlines"), die dit scherm expliciet een proactieve rol gaf naast het oorspronkelijke, puur informatieve karakter.
 
 ### UJ-6: Flowz signaleert tijdgebrek en helpt oplossen
 

@@ -7,7 +7,7 @@ paradigm: 'Layered modular monolith (Nuxt fullstack on Lambda)'
 scope: 'Flowz v1 — hobby, single-user greenfield (UJ-1 t/m UJ-8 uit prd.md)'
 status: final
 created: '2026-07-14'
-updated: '2026-07-14'
+updated: '2026-07-26'
 binds: [UJ-1, UJ-2, UJ-3, UJ-4, UJ-5, UJ-6, UJ-7, UJ-8]
 sources: ['_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/addendum.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/reconcile-brief.md', '_bmad-output/planning-artifacts/research/technical-magister-api-integratie-en-microsoft-sso-research-2026-07-10.md']
 companions: []
@@ -68,6 +68,13 @@ graph LR
 - **Prevents:** dat een implementatie de technische `{error:{code,message}}`-envelope (Consistency Conventions) hergebruikt voor tijd-/energiegebrek-meldingen, waardoor de botte technische toon de PRD's schuldvrije formulering ondermijnt
 - **Rule:** escalatie- en signaleringsberichten (UJ-6/7/8) gebruiken een apart `Notification`-shape (`{ notification: { type, message, actions } }`), nooit de technische error-envelope. De exacte formulering is UX-scope, maar de scheiding in shape is hier vastgelegd zodat een implementatie ze niet per ongeluk samenvoegt.
 
+### AD-7 — Calendar write-sync is synchroon binnen het request-pad, geen nieuwe achtergrondverwerking [TOEGEVOEGD 2026-07-26]
+
+- **Binds:** UJ-2, UJ-6, UJ-7, UJ-8 (elk moment waarop de scheduling-engine een sessie plant of herplant), AD-4
+- **Prevents:** dat Calendar-schrijfacties alsnog een achtergrondtaak, cron-job of webhook worden — wat in strijd zou zijn met AD-4's request-gedreven Lambda-deployment
+- **Rule:** indien Evelien een vaste Google Calendar-kleur voor huiswerk heeft ingesteld, schrijft Flowz geplande/herplande sessies terug als events met die kleur (`server/domain/calendar-sync/`, `POST`/`PATCH`/`DELETE` per sessie). Dit gebeurt uitsluitend **synchroon, binnen hetzelfde request** dat de (her)planning uitvoert — nooit via een aparte achtergrondtaak. AD-4's "pull-only"-regel wordt hiermee expliciet verruimd: pull-only blijft gelden voor lezen (geen webhook-abonnement op Calendar-wijzigingen), maar synchrone push binnen het request-pad is toegestaan voor schrijven. Bij een handmatige wijziging/verwijdering van het event door Evelien zelf, buiten Flowz om: geen conflict-detectie in v1 — Flowz overschrijft/hermaakt het event gewoon bij de eerstvolgende (her)planning (Flowz is bron van waarheid voor zijn eigen events, niet voor Evelien's overige agenda-items).
+- **Herkomst:** ontstaan tijdens de UX-fase (Phase 4, `design-artifacts/C-UX-Scenarios/04.../4.1-...` en `08.../8.1-...`) als oplossing voor valse agendaconflict-meldingen — geen PRD-eis, wel productbeslissing van Hillebrand, bekrachtigd via `bmad-check-implementation-readiness` op 2026-07-26.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -99,7 +106,7 @@ flowz/
     domain/
       tasks/        # Task/Session/Subtask CRUD + mutatie-ownership
       scheduling/    # scheduling engine, escalatielogica (UJ-6/7/8)
-      calendar-sync/ # Google Calendar pull + conflict-detectie (UJ-7)
+      calendar-sync/ # Google Calendar pull + conflict-detectie (UJ-7); synchrone write-sync van huiswerk-events (AD-7)
     data/           # Drizzle schema + repositories (Turso)
   sst.config.ts     # infra-as-code: Lambda, stages, secrets
 ```
@@ -133,13 +140,13 @@ SST's `sst.aws.Nuxt`-component zet deze driedeling (S3 + CloudFront + Lambda) au
 | Capability / UJ | Lives in | Governed by |
 | --- | --- | --- |
 | UJ-1 werksessie | `app/` sessiescherm + `server/domain/scheduling` (voortgang) | AD-1, AD-3 |
-| UJ-2 taak aanmaken | `app/` formulier + `server/api/tasks` + `server/domain/tasks` (CRUD) + `server/domain/scheduling` (initiële plaatsing) | AD-1, AD-3 |
+| UJ-2 taak aanmaken | `app/` formulier + `server/api/tasks` + `server/domain/tasks` (CRUD) + `server/domain/scheduling` (initiële plaatsing) | AD-1, AD-3, AD-7 |
 | UJ-3 beschikbare tijd | `server/data` AvailableTimePattern/Exception | AD-3 |
 | UJ-4 takenoverzicht | `app/` + `server/api/tasks` + `server/domain/tasks` (CRUD) | AD-3 |
-| UJ-5 weekplanning | `server/domain/scheduling` (read) + Calendar pull | AD-3, AD-4 |
-| UJ-6 tijdgebrek | `server/domain/scheduling` escalatieketen | AD-1 |
-| UJ-7 agendaconflict bij opstarten | `server/domain/calendar-sync` + escalatieketen | AD-1, AD-4 |
-| UJ-8 dag niet volgens plan | `server/domain/scheduling` escalatie (tijd/energie) | AD-1 |
+| UJ-5 weekplanning | `server/domain/scheduling` (read, incl. knelpunt-signalering) + Calendar pull | AD-3, AD-4 |
+| UJ-6 tijdgebrek | `server/domain/scheduling` escalatieketen | AD-1, AD-7 |
+| UJ-7 agendaconflict bij opstarten | `server/domain/calendar-sync` + escalatieketen | AD-1, AD-4, AD-7 |
+| UJ-8 dag niet volgens plan | `server/domain/scheduling` escalatie (tijd/energie) | AD-1, AD-7 |
 | Auth + Calendar-toegang | `server/api/auth` (Google OAuth) | AD-2, AD-5 |
 
 **UX-randvoorwaarde zonder architectuur-impact:** "Rustig hoofdscherm" (Ontwerpprincipes) is een puur visueel/UX-gestuurde eis op `app/`'s hoofdscherm-component — geen data- of API-consequentie, dus geen eigen AD. Genoteerd hier voor traceerbaarheid naar de UX-fase.
