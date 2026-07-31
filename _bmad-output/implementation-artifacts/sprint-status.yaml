@@ -51,7 +51,7 @@ development_status:
   epic-1: in-progress
   1-1-project-scaffolding-inlogscherm-ui: done
   1-2-google-oauth-login-met-calendar-consent: done
-  1-3-sessieverval-opnieuw-inloggen: review
+  1-3-sessieverval-opnieuw-inloggen: done
   epic-1-retrospective: optional
 
   epic-2: backlog
