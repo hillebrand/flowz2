@@ -1,0 +1,19 @@
+{
+  // Losse typecheck voor root-tooling die buiten Nuxt's vier gegenereerde tsconfigs valt.
+  // `.nuxt/tsconfig.node.json` include't alleen nuxt.config/modules/layers, dus
+  // drizzle.config.ts werd nergens getypecheckt — inclusief het `Resource`-gebruik erin
+  // (code review 2026-07-30). Nuxt biedt geen hook om die node-tsconfig uit te breiden,
+  // vandaar een eigen project i.p.v. een reference in het gegenereerde graafwerk.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "include": ["drizzle.config.ts", "sst-env.d.ts"]
+}

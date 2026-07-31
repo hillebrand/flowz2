@@ -1,0 +1,162 @@
+import { sendRedirect } from 'h3'
+import { Resource } from 'sst'
+import { loginWithGoogle } from '../../domain/auth/users'
+
+// Google's OIDC-discoverydocument; hieruit haalt de handler authorization_endpoint,
+// token_endpoint en userinfo_endpoint. Bewust de discovery-URL i.p.v. de drie endpoints
+// hardcoderen, zodat een wijziging aan Google's kant ons niet stilzwijgend breekt.
+const GOOGLE_OPENID_CONFIG = 'https://accounts.google.com/.well-known/openid-configuration'
+
+const LOGIN_ERROR_PATH = '/inloggen?login_error=1'
+
+const SESSIE_COOKIE = 'nuxt-session'
+
+// Dwingt een sessie met een verse `createdAt` af bij het inloggen (code review 2026-07-30).
+//
+// Het probleem: h3 zet `createdAt` alléén wanneer er nog geen geldige sessie is
+// (`if (!session.id)` in `getSession`), en `setUserSession` loopt via `session.update()`
+// naar `updateSession`, dat uitsluitend `session.data` samenvoegt en `createdAt` ongemoeid
+// laat. Een anonieme request mint echter al een sessiecookie — de middleware raakt de
+// sessie aan, en `/api/_auth/session` doet dat ook. Die cookie is `SameSite=Lax` en gaat
+// dus mee op de top-level callback naar `/auth/google`, waar hij succesvol ontzegeld wordt.
+// Gevolg: de sessieklok liep al vóór de login, en wie na een paar dagen pas inlogde kreeg
+// een sessie die veel te vroeg verliep.
+//
+// `clearUserSession()` alléén is níét genoeg — empirisch getest tegen een echte h3-server:
+// het verwijdert de sessie uit `event.context`, maar de daaropvolgende `getSession` leest
+// de cookie gewoon opnieuw uit de *request*-header en herstelt de oude `createdAt`. Pas
+// door die cookie óók uit de request-header te halen kan h3 niets meer herstellen en maakt
+// hij een werkelijk nieuwe sessie aan.
+//
+// Alleen `nuxt-session` wordt gestript, niet de hele header. Veilig op dit punt in de flow:
+// de OIDC-handler verbruikt zijn `nuxt-auth-state`/`-nonce`/`-pkce`-cookies ruim vóór
+// `onSuccess` (oidc.js regels 26-28 versus 87), dus die zijn hier al opgehaald en verwijderd.
+// h3 leest de cookie via `_getReqHeader`, dat `event.node` exclusief voorrang geeft en pas
+// daarna naar `event.request`/`event.headers` kijkt. Nitro's aws-lambda-preset levert
+// `event.node`, dus in productie is dat de bron — maar alle drie worden hier opgeruimd,
+// zodat deze fix niet stilzwijgend zijn werking verliest als die situatie ooit verandert.
+function zonderSessieCookie(waarde: string): string {
+  return waarde
+    .split(';')
+    .filter(deel => !deel.trimStart().startsWith(`${SESSIE_COOKIE}=`))
+    .join(';')
+    .trim()
+}
+
+async function startNieuweSessie(event: Parameters<typeof setUserSession>[0]) {
+  await clearUserSession(event)
+
+  const node = event.node?.req
+  if (node?.headers.cookie) {
+    const rest = zonderSessieCookie(node.headers.cookie)
+    if (rest) {
+      node.headers.cookie = rest
+    } else {
+      delete node.headers.cookie
+    }
+  }
+
+  // Web-varianten van hetzelfde, voor runtimes zonder `event.node`.
+  const web = (event as { request?: Request, headers?: Headers })
+  for (const headers of [web.request?.headers, web.headers]) {
+    const bestaand = headers?.get('cookie')
+    if (!headers || !bestaand) continue
+    const rest = zonderSessieCookie(bestaand)
+    if (rest) {
+      headers.set('cookie', rest)
+    } else {
+      headers.delete('cookie')
+    }
+  }
+}
+
+// Bewust de generieke `oidc`-provider i.p.v. `defineOAuthGoogleEventHandler` (code review
+// 2026-07-30). Die laatste heeft drie gebreken die hier alle drie bindend zijn:
+//   1. hij stuurt `state` alleen door en verifieert 'm nooit bij de callback → login-CSRF;
+//   2. hij leest `query.error` niet, dus een geweigerde consent viel in de `if (!query.code)`-tak
+//      en stuurde de gebruiker terug naar Google's consentscherm i.p.v. naar onze foutstate (AC #2);
+//   3. hij typeert `tokens` als `any`, dus de typechecker dekte hier niets af.
+// De oidc-provider doet state- én nonce-validatie, voegt PKCE toe, handelt `query.error`
+// expliciet af, en levert een getypeerde `OidcTokens` waarin `refresh_token` terecht optioneel is.
+let _handler: ReturnType<typeof defineOAuthOidcEventHandler> | undefined
+
+function getHandler() {
+  if (!_handler) {
+    // Lazy opgebouwd, net als `getDb()`: `Resource.*` gooit bij een inactieve of ontbrekende
+    // SST-link, en op module-scope trok dat de héle bundel mee — inclusief `/inloggen` zelf,
+    // want `nitro.inlineDynamicImports` bundelt alles samen. Nu faalt alleen de loginroute,
+    // met een nette foutstate, en blijft de rest van de app overeind.
+    const siteUrl = useRuntimeConfig().public.siteUrl
+
+    _handler = defineOAuthOidcEventHandler({
+      config: {
+        clientSecret: Resource.GoogleOAuthClientSecret.value,
+        openidConfig: GOOGLE_OPENID_CONFIG,
+        // Vaste redirect_uri i.p.v. dynamische host-detectie — nodig achter
+        // CloudFront + Lambda Function URL (zie nuxt.config.ts). Leeg op
+        // localhost: dan valt nuxt-auth-utils terug op detectie, wat daar klopt.
+        ...(siteUrl ? { redirectURL: `${siteUrl}/auth/google` } : {}),
+        // Calendar-scope: alleen lezen in deze story (schrijf-scope volgt in Story 2.3).
+        scope: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/calendar.readonly'],
+        params: {
+          // access_type=offline + prompt=consent: nodig om daadwerkelijk een refresh-token
+          // terug te krijgen (Google geeft die anders alleen bij de allereerste consent).
+          authorization_endpoint: {
+            access_type: 'offline',
+            prompt: 'consent'
+          }
+        }
+      },
+
+      async onSuccess(event, { user, tokens }) {
+        // `refresh_token` is in OidcTokens terecht optioneel: Google garandeert 'm niet.
+        // Zonder deze guard belandt `undefined` in een NOT NULL-kolom en krijg je een
+        // constraint-fout midden in de login i.p.v. de gebruikersgerichte foutstate.
+        if (!tokens.refresh_token) {
+          console.error('[auth] Google leverde geen refresh_token terug; login afgebroken.')
+          return sendRedirect(event, LOGIN_ERROR_PATH)
+        }
+
+        const dbUser = await loginWithGoogle({
+          googleSubjectId: user.sub,
+          calendarAccessToken: tokens.access_token,
+          calendarRefreshToken: tokens.refresh_token
+        })
+
+        await startNieuweSessie(event)
+
+        await setUserSession(event, {
+          user: { id: dbUser.id }
+        })
+
+        return sendRedirect(event, '/')
+      },
+
+      onError(event, error) {
+        // Loggen, want zonder dit is elke productiestoring ononderscheidbaar: een ontbrekende
+        // client-id, een state-mismatch en een geweigerde consent zien er voor de gebruiker
+        // identiek uit. Alleen foutcode en boodschap — nooit tokens of PII.
+        console.error('[auth] Google-login mislukt:', error.statusCode, error.message)
+        // Geen technische error-envelope (server/domain/errors.ts) — dit is een
+        // gebruikersgerichte melding, geen API-fout (AD-6-scheiding in geest toegepast).
+        return sendRedirect(event, LOGIN_ERROR_PATH)
+      }
+    })
+  }
+
+  return _handler
+}
+
+// Vangnet om de hele keten heen. De library laat uitzonderingen namelijk ontsnappen:
+// `requestAccessToken` zet alléén status 401 om in data en gooit al het andere door, dus een
+// 400 `invalid_grant` (herladen callback, verlopen code) kwam nooit bij `onError` terecht.
+// Hetzelfde geldt voor een mislukte userinfo-fetch en voor elke databasefout in `onSuccess`.
+// Zonder deze catch werd dat allemaal een rauwe 500 i.p.v. de foutstate die AC #2 eist.
+export default defineEventHandler(async (event) => {
+  try {
+    return await getHandler()(event)
+  } catch (error) {
+    console.error('[auth] Onverwachte fout in de Google-loginflow:', error)
+    return sendRedirect(event, LOGIN_ERROR_PATH)
+  }
+})

@@ -2,3 +2,18 @@
 .bmad-loop/cache/
 progress/
 .DS_Store
+
+# Nuxt / Node
+node_modules/
+.nuxt/
+.output/
+.data/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+# SST
+.sst/
+
