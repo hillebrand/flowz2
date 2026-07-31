@@ -4,7 +4,7 @@ baseline_commit: 2ebad59
 
 # Story 2.1: Weekpatroon Instellen
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -21,28 +21,29 @@ so that de motor met mijn echte beschikbare tijd rekent.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: `AvailableTimePattern`-schema + migratie (AC: #1)
-  - [ ] `server/data/schema.ts` uitbreiden met `availableTimePatterns` (nieuwe tabel, **niet** een nieuw bestand — dit project houdt alle Drizzle-tabellen in één schema.ts, zie de bestaande `users`-export). Kolommen: `id` (UUID PK, `$defaultFn`), `userId` (text, **unique** FK-achtige referentie naar `users.id` — uniek omdat dit `User` 1:1 is, geen losse foreign-key-constraint nodig zolang er geen cross-tabel-joins zijn die dat vereisen), zeven integer-kolommen `monday`..`sunday` (minuten, `notNull`, default 0), `createdAt`/`updatedAt` (zelfde patroon als `users`).
-  - [ ] **Waarom één rij met 7 kolommen, niet 7 rijen:** de AC zegt letterlijk "`AvailableTimePattern`, User 1:1" — één rij per user is de directe, letterlijke lezing. Zeven rijen (user+weekday) zou "User 1:N" zijn, wat de PRD/epics-tekst niet zegt. Bouw dit niet als een aparte tabel per dag.
-  - [ ] Migratie genereren en toepassen: `npx sst shell --stage dev -- npx drizzle-kit generate` gevolgd door `npx sst shell --stage dev -- npx drizzle-kit migrate`. **Nooit `push`** (bekende table-recreation-bug tegen libSQL, al twee keer eerder gedocumenteerd in dit project).
-- [ ] Task 2: Repository + domain-service (AC: #1, #2)
-  - [ ] `server/data/availability.ts` (nieuw): `getOrCreateWeekPattern(userId)` — leest de rij, en als die nog niet bestaat: insert met alle dagen op 0, analoog aan het lazy-aanmaak-patroon dat dit project al kent (`getDb()` in `db.ts`, de upsert in `users.ts`). Er is geen apart aanmaakmoment bij signup — de eerste keer dat Evelien deze pagina opent, moet de rij vanzelf ontstaan.
-  - [ ] `server/data/availability.ts`: `updateWeekPatternDay(userId, day, direction)` — `direction` is `'increase' | 'decrease'`. Past de kolom voor die dag aan met ±15, **met een `GREATEST(0, ...)`-achtige ondergrens in de query zelf** (of een equivalente clamp na het lezen, binnen dezelfde repository-functie) zodat de 0-ondergrens niet alleen client-side afgedwongen wordt. Retourneert de bijgewerkte rij.
-  - [ ] `server/domain/availability/week-pattern.ts` (nieuw domein-submap, analoog aan `server/domain/auth/` uit Story 1.2 — de Structural Seed noemt alleen `tasks/scheduling/calendar-sync`, `availability` is een kleine, redelijke uitbreiding daarvan, geen architectuurwijziging): dunne wrapper die de twee repository-functies aanroept. Route-handlers roepen nooit rechtstreeks `server/data/` aan (mutatie-ownership-regel, Consistency Conventions).
-- [ ] Task 3: API-routes (AC: #1, #2)
-  - [ ] `server/api/availability/week.get.ts` — `GET /api/availability/week`. Roept `getOrCreateWeekPattern` aan via het domain-laag, retourneert `{ pattern: { monday: number, tuesday: number, ..., sunday: number } }` (minuten per dag, Engelse sleutels — zie Dev Notes voor waarom).
-  - [ ] `server/api/availability/week/[day].patch.ts` — `PATCH /api/availability/week/{day}`, Nitro's `[day]`-bestandsnaam-syntax voor de route-param (zelfde mechanisme als elke andere dynamische Nitro-route). Body: `{ direction: 'increase' | 'decrease' }`. Valideer `day` tegen de zeven geldige sleutels vóór aanroep van de domain-laag; ongeldige waarde → 400 met de technische error-envelope (zie hieronder, nieuwe errorcode nodig). Retourneert `{ day: string, minutes: number }` — genoeg voor de client om `avail-day-time` bij te werken zonder de hele pattern opnieuw te moeten ophalen.
-  - [ ] `server/domain/errors.ts` uitbreiden met één nieuwe code (bijv. `ValidationError: 'validation_error'`) voor de ongeldige-`day`-situatie — **niet** een ad-hoc string in de route zelf verzinnen; de Consistency Conventions eisen één gedeelde vocabulaire in dit bestand.
-- [ ] Task 4: Front-end — alléén het weekpatroon-gedeelte van 4.1 (AC: #1, #2)
-  - [ ] `app/pages/instellingen/beschikbare-tijd.vue` (nieuw). Bouw uitsluitend: `avail-back-section`/`avail-back-link`, `avail-page-heading`, `avail-week-heading`, `avail-week-list` met 7× `avail-day-row` (`avail-day-label`, `avail-day-minus-button`, `avail-day-time`, `avail-day-plus-button`). **Bouw NIET** `avail-calendar-section` (dag-specifieke afwijkingen, Story 2.2) of `avail-homework-sync-section` (Calendar-kleur, Story 2.3, FR28) — die staan in dezelfde UX-spec-file omdat WDS de hele scenario-pagina in één document beschrijft, maar horen bij latere stories. Zie Dev Notes voor de volledige object-ID-lijst en het exacte 4.1-Object-model.
-  - [ ] Laadstate: subtiele skeleton (géén spinner) tijdens de eerste `GET /api/availability/week`. Er is geen bestaande skeleton-component om te hergebruiken — `1.1-hoofdscherm` is zelf nog een placeholder (Epic 4-scope) — dus een eenvoudige, lokale skeleton is voldoende (bv. 7 grijze balken op de plek van de dagrijen).
-  - [ ] Elke klik op min/plus: directe, niet-gedebouncete `fetch`/`$fetch`-call naar de PATCH-route (bewuste keuze uit de UX-spec, geen debounce/batching ondanks het verkeersrisico bij snel doorklikken — niet "verbeteren"). Minus-knop krijgt `disabled` zodra de lokale waarde 0 is (client-side UX-feedback; de server-side clamp uit Task 2 is het echte vangnet, niet dit).
-  - [ ] `aria-label`s exact zoals in de UX-spec: "Minder tijd op {dag}" / "Meer tijd op {dag}", met de Nederlandse dagnaam ingevuld. `avail-day-time` krijgt `aria-live="polite"` (bevestigt de nieuwe waarde na elke klik — **let op:** dit is een `polite`-regio die van meet af aan met de juiste waarde gerenderd wordt en pas ná een klik muteert, dus dit heeft niet de valkuil uit Story 1.2/1.3's `assertive`-regio's die pas ná mount gevuld moesten worden om aangekondigd te worden — hier is de content al aanwezig vóór de eerste mutatie, wat voor `polite` prima is).
-- [ ] Task 5: Verificatie
-  - [ ] `npm run typecheck` slaagt.
-  - [ ] `npx nuxt build` slaagt.
-  - [ ] Live geverifieerd op de dev-stage: pagina laadt met 7 dagen op 0 minuten bij een nieuw account, +/- werkt per dag, minus-knop disabled bij 0, geen bovengrens, ververst de pagina en de waarden blijven staan (persisted).
-  - [ ] Geen secrets of placeholder-waarden in code/commits.
+- [x] Task 1: `AvailableTimePattern`-schema + migratie (AC: #1)
+  - [x] `server/data/schema.ts` uitbreiden met `availableTimePatterns` (nieuwe tabel, **niet** een nieuw bestand — dit project houdt alle Drizzle-tabellen in één schema.ts, zie de bestaande `users`-export). Kolommen: `id` (UUID PK, `$defaultFn`), `userId` (text, **unique** FK-achtige referentie naar `users.id` — uniek omdat dit `User` 1:1 is, geen losse foreign-key-constraint nodig zolang er geen cross-tabel-joins zijn die dat vereisen), zeven integer-kolommen `monday`..`sunday` (minuten, `notNull`, default 0), `createdAt`/`updatedAt` (zelfde patroon als `users`).
+  - [x] **Waarom één rij met 7 kolommen, niet 7 rijen:** de AC zegt letterlijk "`AvailableTimePattern`, User 1:1" — één rij per user is de directe, letterlijke lezing. Zeven rijen (user+weekday) zou "User 1:N" zijn, wat de PRD/epics-tekst niet zegt. Bouw dit niet als een aparte tabel per dag.
+  - [x] Migratie genereren en toepassen: `npx sst shell --stage dev -- npx drizzle-kit generate` gevolgd door `npx sst shell --stage dev -- npx drizzle-kit migrate`. **Nooit `push`** (bekende table-recreation-bug tegen libSQL, al twee keer eerder gedocumenteerd in dit project).
+- [x] Task 2: Repository + domain-service (AC: #1, #2)
+  - [x] `server/data/availability.ts` (nieuw): `getOrCreateWeekPattern(userId)` — leest de rij, en als die nog niet bestaat: insert met alle dagen op 0, analoog aan het lazy-aanmaak-patroon dat dit project al kent (`getDb()` in `db.ts`, de upsert in `users.ts`). Er is geen apart aanmaakmoment bij signup — de eerste keer dat Evelien deze pagina opent, moet de rij vanzelf ontstaan.
+  - [x] `server/data/availability.ts`: `updateWeekPatternDay(userId, day, direction)` — `direction` is `'increase' | 'decrease'`. Past de kolom voor die dag aan met ±15, **met een `GREATEST(0, ...)`-achtige ondergrens in de query zelf** (of een equivalente clamp na het lezen, binnen dezelfde repository-functie) zodat de 0-ondergrens niet alleen client-side afgedwongen wordt. Retourneert de bijgewerkte rij.
+  - [x] `server/domain/availability/week-pattern.ts` (nieuw domein-submap, analoog aan `server/domain/auth/` uit Story 1.2 — de Structural Seed noemt alleen `tasks/scheduling/calendar-sync`, `availability` is een kleine, redelijke uitbreiding daarvan, geen architectuurwijziging): dunne wrapper die de twee repository-functies aanroept. Route-handlers roepen nooit rechtstreeks `server/data/` aan (mutatie-ownership-regel, Consistency Conventions).
+- [x] Task 3: API-routes (AC: #1, #2)
+  - [x] `server/api/availability/week.get.ts` — `GET /api/availability/week`. Roept `getOrCreateWeekPattern` aan via het domain-laag, retourneert `{ pattern: { monday: number, tuesday: number, ..., sunday: number } }` (minuten per dag, Engelse sleutels — zie Dev Notes voor waarom).
+  - [x] `server/api/availability/week/[day].patch.ts` — `PATCH /api/availability/week/{day}`, Nitro's `[day]`-bestandsnaam-syntax voor de route-param (zelfde mechanisme als elke andere dynamische Nitro-route). Body: `{ direction: 'increase' | 'decrease' }`. Valideer `day` tegen de zeven geldige sleutels vóór aanroep van de domain-laag; ongeldige waarde → 400 met de technische error-envelope (zie hieronder, nieuwe errorcode nodig). Retourneert `{ day: string, minutes: number }` — genoeg voor de client om `avail-day-time` bij te werken zonder de hele pattern opnieuw te moeten ophalen.
+  - [x] `server/domain/errors.ts` uitbreiden met één nieuwe code (bijv. `ValidationError: 'validation_error'`) voor de ongeldige-`day`-situatie — **niet** een ad-hoc string in de route zelf verzinnen; de Consistency Conventions eisen één gedeelde vocabulaire in dit bestand.
+- [x] Task 4: Front-end — alléén het weekpatroon-gedeelte van 4.1 (AC: #1, #2)
+  - [x] `app/pages/instellingen/beschikbare-tijd.vue` (nieuw). Bouw uitsluitend: `avail-back-section`/`avail-back-link`, `avail-page-heading`, `avail-week-heading`, `avail-week-list` met 7× `avail-day-row` (`avail-day-label`, `avail-day-minus-button`, `avail-day-time`, `avail-day-plus-button`). **Bouw NIET** `avail-calendar-section` (dag-specifieke afwijkingen, Story 2.2) of `avail-homework-sync-section` (Calendar-kleur, Story 2.3, FR28) — die staan in dezelfde UX-spec-file omdat WDS de hele scenario-pagina in één document beschrijft, maar horen bij latere stories. Zie Dev Notes voor de volledige object-ID-lijst en het exacte 4.1-Object-model.
+  - [x] Laadstate: subtiele skeleton (géén spinner) tijdens de eerste `GET /api/availability/week`. Er is geen bestaande skeleton-component om te hergebruiken — `1.1-hoofdscherm` is zelf nog een placeholder (Epic 4-scope) — dus een eenvoudige, lokale skeleton is voldoende (bv. 7 grijze balken op de plek van de dagrijen).
+  - [x] Elke klik op min/plus: directe, niet-gedebouncete `fetch`/`$fetch`-call naar de PATCH-route (bewuste keuze uit de UX-spec, geen debounce/batching ondanks het verkeersrisico bij snel doorklikken — niet "verbeteren"). Minus-knop krijgt `disabled` zodra de lokale waarde 0 is (client-side UX-feedback; de server-side clamp uit Task 2 is het echte vangnet, niet dit).
+  - [x] `aria-label`s exact zoals in de UX-spec: "Minder tijd op {dag}" / "Meer tijd op {dag}", met de Nederlandse dagnaam ingevuld. `avail-day-time` krijgt `aria-live="polite"` (bevestigt de nieuwe waarde na elke klik — **let op:** dit is een `polite`-regio die van meet af aan met de juiste waarde gerenderd wordt en pas ná een klik muteert, dus dit heeft niet de valkuil uit Story 1.2/1.3's `assertive`-regio's die pas ná mount gevuld moesten worden om aangekondigd te worden — hier is de content al aanwezig vóór de eerste mutatie, wat voor `polite` prima is).
+- [x] Task 5: Verificatie
+  - [x] `npm run typecheck` slaagt.
+  - [x] `npx nuxt build` slaagt.
+  - [x] Live geverifieerd op de dev-stage (API-laag, via een zelf verzegelde sessiecookie tegen de echte gedeployde app — zie Debug Log): geen sessie → 401; eerste bezoek → alle dagen lazy-created op 0; +15 werkt; clamp bij 0 houdt stand (geen negatieve waarde); geen bovengrens (75 na 5 klikken); ongeldige dag/direction → 400 met de juiste error-envelope; persistence klopt bij een herhaalde GET. Middleware beschermt ook de pagina zelf (`/instellingen/beschikbare-tijd` zonder sessie → 302 naar `/inloggen`).
+  - [x] **Rendering geverifieerd door Hillebrand** op `https://flowz.fyi/instellingen/beschikbare-tijd` (echte ingelogde sessie, echte browser — de Chrome-extensie was niet verbonden, dus dit kon ik niet zelf via browserautomatisering doen): "Werkt perfect". Skeleton, 7 dagrijen en de +/- interactie bevestigd.
+  - [x] Geen secrets of placeholder-waarden in code/commits.
 
 ## Dev Notes
 
@@ -112,6 +113,50 @@ Laatste commits (`b073b87`, `9c3ca0e`, `c35434a`, `a4e2180`, `2ebad59`) zijn de 
 - [Source: _bmad-output/implementation-artifacts/1-2-google-oauth-login-met-calendar-consent.md] — precedent voor `server/domain/<naam>/`-submap als kleine, redelijke Seed-uitbreiding
 - [Source: _bmad-output/implementation-artifacts/1-3-sessieverval-opnieuw-inloggen.md] — precedent voor "claims empirisch verifiëren, niet aannemen"
 - [Source: _bmad-output/implementation-artifacts/deferred-work.md] — bekend, nog open: geen testframework, geen lint/import-boundary-handhaving
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (claude-opus-5)
+
+### Debug Log References
+
+- **Duplicate-ID-bug gevonden en zelf gecorrigeerd vóór typecheck/build.** De eerste versie van `beschikbare-tijd.vue` gaf de vier herhaalde Object IDs (`avail-day-label`, `avail-day-minus-button`, `avail-day-time`, `avail-day-plus-button`) letterlijk als DOM-`id` mee binnen de `v-for`-lus — dat levert zeven keer dezelfde `id` op, ongeldige HTML. De WDS-spec markeert `avail-day-row` zelf al als "herhaalbaar ×7"; voor zulke componenten is de Object ID een basisnaam, geen letterlijk uniek DOM-id. Opgelost door elk ID te suffixen met de weekdag-sleutel (`avail-day-label-monday`, enz.) vóórdat er getypecheckt of gebouwd werd.
+- **Live E2E-verificatie via een zelf verzegelde sessiecookie** (zelfde techniek als de verificaties in Story 1.2/1.3): `iron-webcrypto`'s `seal()` met het echte `SessionPassword` uit SST, tegen Hillebrand's echte `User`-rij. Acht scenario's getest tegen de gedeployde dev-stage: geen sessie → 401; eerste bezoek → lazy-create met alle dagen op 0; `PATCH increase` → +15; `PATCH decrease` vanaf 0 → blijft 0 (server-side clamp, niet client-side); vijf keer `increase` → 75 (geen bovengrens); ongeldige `day` → 400 met `{error:{code:'validation_error',...}}`; ongeldige `direction` → zelfde envelope; herhaalde `GET` → waarden persisteren. Na de test zijn `monday`/`tuesday` teruggezet naar 0 via een rechtstreekse UPDATE, zodat Hillebrand geen testwaarden zag bij zijn eigen bezoek.
+- **Rendering (skeleton, 7 dagrijen, disabled-state) kon ik niet zelf verifiëren.** De Chrome-browserextensie was niet verbonden ("Browser extension is not connected"), dus browserautomatisering was niet beschikbaar. Dit vereist bovendien een echte ingelogde sessie plus clientside JavaScript (`server:false`-fetch) — niet te simuleren met een server-side request zoals de API-tests hierboven. Hillebrand heeft dit zelf gecontroleerd op `flowz.fyi` en bevestigd: "Werkt perfect."
+- Migratie `0001_amazing_magdalene.sql` gegenereerd en toegepast; geverifieerd via `PRAGMA table_info` dat de live Turso-tabel exact het schema volgt (alle zeven dagkolommen `INTEGER NOT NULL DEFAULT 0`). Geen herhaling van de Story 1.2-valkuil (CLI-foutmelding die wordt ingeslikt) — deze migratie slaagde in één keer.
+
+### Completion Notes List
+
+- **Alle taken voltooid, beide AC's end-to-end geverifieerd** — AC #1 (7 dagrijen, skeleton, `User` 1:1) en AC #2 (+/- 15 min per klik, directe niet-gedebouncete call, 0-ondergrens met disabled-knop, geen bovengrens) zijn zowel op API-niveau (door mij) als op rendering-niveau (door Hillebrand) bevestigd.
+- **Scope strak gehouden:** alleen `avail-back-section` en `avail-week-section` uit de 4.1-UX-spec gebouwd. `avail-calendar-section` (Story 2.2) en `avail-homework-sync-section`/Calendar-write-scope (Story 2.3, FR28) zijn niet aangeraakt — geverifieerd door `server/routes/auth/google.get.ts`'s scope-lijst ongewijzigd te laten.
+- **Twee ontwerpbeslissingen uit de story-Dev Notes zijn zonder wijziging geïmplementeerd:** het "User 1:1 → één rij, zeven kolommen"-datamodel, en de directe route zonder hamburgermenu. Geen van beide bleek tijdens implementatie problematisch.
+- **Nieuwe precedenten voor toekomstige stories:** dit is de eerste keer dat `server/domain/errors.ts`'s `ErrorEnvelope` daadwerkelijk gebruikt wordt (eerder alleen gedefinieerd, nul aanroepen) — geïmplementeerd als een rechtstreeks geretourneerd object (`setResponseStatus` + de envelope teruggeven), niet via h3's `createError`, omdat die laatste een andere JSON-vorm serialiseert dan de architectuur voorschrijft. Ook de eerste keer dat een pagina een herhaalbaar Object-ID-patroon (`×7`) heeft — de suffix-per-instantie-aanpak (zie Debug Log) is nu het precedent voor Story 2.2's kalenderdagen.
+- **Server-side clamp is empirisch bevestigd, niet aangenomen** (les uit Story 1.3): scenario 4 in de E2E-test bewijst dat `decrease` vanaf 0 op 0 blijft via de API zelf, los van de disabled-knop op de client.
+
+### File List
+
+**Nieuw:**
+- `server/data/availability.ts`
+- `server/domain/availability/week-pattern.ts`
+- `server/api/availability/week.get.ts`
+- `server/api/availability/week/[day].patch.ts`
+- `app/pages/instellingen/beschikbare-tijd.vue`
+- `server/data/migrations/0001_amazing_magdalene.sql` (+ bijbehorende meta-bestanden)
+
+**Gewijzigd:**
+- `server/data/schema.ts` (nieuwe `availableTimePatterns`-tabel + `Weekday`-type)
+- `server/domain/errors.ts` (nieuwe `ValidationError`-code)
+
+**Live gedeployed:** dev-stage op `flowz.fyi`, migratie toegepast op de echte Turso-database.
+
+## Change Log
+
+| Datum | Wijziging |
+| --- | --- |
+| 2026-07-31 | Story aangemaakt via create-story, direct aansluitend op het afsluiten van Epic 1. Twee gaten (datamodel voor "User 1:1", ontbrekend hamburgermenu) als beargumenteerde keuzes vastgelegd i.p.v. als open vraag. |
+| 2026-07-31 | Alle vier implementatietaken voltooid: schema + migratie, repository + domain-laag, twee API-routes, front-end beperkt tot het weekpatroon-gedeelte van 4.1. Eigen duplicate-ID-bug gevonden en gecorrigeerd vóór typecheck. Typecheck en build slagen, migratie live toegepast en schema-geverifieerd. Acht API-scenario's end-to-end getest tegen de dev-stage via een zelf verzegelde sessiecookie. Rendering kon niet door mij geverifieerd worden (Chrome-extensie niet verbonden) — door Hillebrand zelf gecontroleerd en bevestigd: "Werkt perfect." Status → review. |
 
 ## Open Questions
 
