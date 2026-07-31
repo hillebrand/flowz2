@@ -25,7 +25,11 @@
 - [x] Create Epics and Stories — BMad Phase 3 — `_bmad-output/planning-artifacts/epics.md` (6 epics, 28 stories)
 - [x] Check Implementation Readiness — status `READY` — `_bmad-output/planning-artifacts/implementation-readiness-report-2026-07-26.md`
 - [x] Sprint Planning — `_bmad-output/implementation-artifacts/sprint-status.yaml` (28 stories, alle `backlog`)
-- [ ] **Create Story 1.1 (Project Scaffolding & Inlogscherm-UI) — volgende sessie, eerste story van Epic 1**
+- [x] Create Story 1.1 (Project Scaffolding & Inlogscherm-UI) — `_bmad-output/implementation-artifacts/1-1-project-scaffolding-inlogscherm-ui.md`
+- [x] Implement Story 1.1 (`bmad-dev-story`) — status `review`, live gedeployed op `https://flowz.fyi`
+- [ ] **Code-review Story 1.1 — volgende sessie, bij voorkeur ander model dan de implementatie deed**
+- [ ] www.flowz.fyi-redirect verifiëren (waarschijnlijk alleen nog DNS-propagatie, zie Story 1.1 Completion Notes)
+- [ ] Story 1.2 (Google OAuth Login met Calendar-consent) — volgende story van Epic 1
 
 ---
 
@@ -447,6 +451,32 @@ Status na fixes: **READY**. Report: `_bmad-output/planning-artifacts/implementat
 **Zijstap (niet-Flowz):** op verzoek van Hillebrand de AWS Agent Toolkit ingesteld (AWS CLI, `aws login`, MCP-server + skills) — bewust **niet** in dit project se `CLAUDE.md` verwerkt (instructies vroegen om volledige bestandsvervanging); AWS-rules staan los in `AWS-AGENT-RULES.md` met een korte verwijzing vanuit `CLAUDE.md`.
 
 **Pauze:** Sessie gepauzeerd op verzoek van Hillebrand. **Hervatten:** skill `bmad-create-story` draaien om **Story 1.1 (Project Scaffolding & Inlogscherm-UI, Epic 1)** voor te bereiden, daarna `bmad-dev-story` om 'm te implementeren. Bij het maken van latere stories: check de niet-kritieke Implementation Readiness-bevindingen (met name de sprint-volgorde-afspraak voor Epic 4/5's lineaire pagina-flows) mee.
+
+---
+
+### 2026-07-28 — Story 1.1 Geïmplementeerd: Project Scaffolding & Inlogscherm-UI + Live Deploy op flowz.fyi
+
+**Agent:** Dev-rol, skills `bmad-create-story`, `bmad-dev-story`
+
+**Story 1.1 gemaakt en volledig geïmplementeerd** (`_bmad-output/implementation-artifacts/1-1-project-scaffolding-inlogscherm-ui.md`, status `review`, `sprint-status.yaml` bijgewerkt, Epic 1 → `in-progress`):
+- Nuxt 4.5.1/Vue 3.5.40-scaffold met de volledige Structural Seed-mapstructuur (`app/`, `server/api/`, `server/domain/{tasks,scheduling,calendar-sync}`, `server/data/`)
+- `sst.config.ts` (SST v3/Ion, `sst.aws.Nuxt`-component) met twee `sst.Secret`-resources (`GoogleOAuthClientSecret`, `TursoAuthToken`) — placeholder-waarden gezet, echte waarden volgen in latere stories
+- Statisch 5.1-inlogscherm (`app/pages/inloggen.vue`) met alle Object IDs uit de WDS-spec
+- `server/domain/errors.ts` + `notification.ts` — gedeelde error-envelope/Notification-conventies (AD-6)
+- Alle 4 ACs end-to-end geverifieerd: geslaagde `sst deploy`, SSR-curl + browser-screenshots (incl. focus-state), `nuxt typecheck` schoon
+
+**Omgevingswerk onderweg:** Node.js ontbrak → `brew install node@24`; `npm add -D typescript` greep per ongeluk TS 7.x (incompatibel met `vue-tsc`) → gepind naar 5.9.3; AWS-login was verlopen → gebruiker opnieuw ingelogd; AWS-regio niet ingesteld → `eu-west-1` als default gekozen.
+
+**Na status → review, ad-hoc verzoeken van Hillebrand:**
+1. **Visuele restyle van het inlogscherm**, twee iteraties: eerst een felle "gen-z" gradient (paars/roze/oranje) — vervolgens teruggebracht naar een pastel/zen-variant (lavendel/blush/mint, frosted-glass kaart) na feedback dat de eerste versie tegen "Rustig hoofdscherm" inging; accentkleur op verzoek van paars naar blauw (`#2563eb`). Alle Object IDs/content ongewijzigd, puur CSS.
+2. **Custom domain `flowz.fyi`** gekoppeld en live gedeployed. Hillebrand registreerde het domein zelf rechtstreeks via Route53 (hosted zone al aanwezig — geen handmatige nameserver-stap nodig, bevestigd met `dig`). `sst.config.ts` uitgebreid met `domain: { name: "flowz.fyi", redirects: ["www.flowz.fyi"] }`. Twee tussentijdse deploy-fails onderweg (verlopen sessietoken tijdens ACM-validatie, daarna een achtergebleven state-lock) — derde poging geslaagd, ACM-validatie duurde ~7 min. Apex-domein (`https://flowz.fyi`) geverifieerd werkend; kale CloudFront-URL geeft nu bewust 403 (SST blokkeert na domain-koppeling het default-hostname). **`www.flowz.fyi` nog niet geverifieerd bij pauze** — Route53-records staan correct, vermoedelijk alleen nog DNS-propagatie.
+
+**Noemenswaardig proces-incident:** tijdens het debuggen van credential-doorgifte aan de SST CLI zijn eenmalig tijdelijke AWS-sessietokens (STS, kortlevend) per ongeluk in tool-output beland. Vanaf dat moment consequent via `eval "$(aws configure export-credentials --format env)"` gewerkt zodat waarden nooit meer zichtbaar werden. Zie [[feedback-aws-credential-handling]].
+
+**Pauze:** Sessie gepauzeerd op verzoek van Hillebrand, tijdens het verifiëren van de `www.flowz.fyi`-redirect. **Hervatten:**
+1. Check of `www.flowz.fyi` inmiddels resolvet (`dig A www.flowz.fyi @8.8.8.8`, dan `curl -sI https://www.flowz.fyi/`) — als het na een paar uur nog niet werkt, verder uitzoeken (niet zomaar opnieuw deployen, config was al correct)
+2. Skill `code-review` draaien op Story 1.1 (bij voorkeur ander model dan de implementatie)
+3. Daarna skill `bmad-create-story` voor **Story 1.2 (Google OAuth Login met Calendar-consent)**
 
 ---
 

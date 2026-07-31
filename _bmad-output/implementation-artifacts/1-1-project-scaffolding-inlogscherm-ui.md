@@ -4,7 +4,7 @@ baseline_commit: bdcc6535a19a61a0d66e4a826da7fd85122a7adb
 
 # Story 1.1: Project Scaffolding & Inlogscherm-UI
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -23,23 +23,38 @@ so that elke volgende story infrastructuur heeft om op te bouwen, en Evelien met
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Nuxt 4 project init + Structural Seed folderstructuur (AC: #1)
-  - [ ] `npx nuxi@latest init` (Nuxt 4.x, Vue 3.x), TypeScript strict
-  - [ ] Maak lege/placeholder mappen aan conform Structural Seed: `app/`, `server/api/`, `server/domain/tasks/`, `server/domain/scheduling/`, `server/domain/calendar-sync/`, `server/data/` (elk met een `.gitkeep` of index-stub zodat de map in git bestaat, zonder er nu al logica in te bouwen — die volgt pas in de story die de map voor het eerst nodig heeft, bv. `server/data/` pas echt gevuld in Story 1.2 met het `User`-model)
-  - [ ] `nuxt.config.ts`: `nitro: { preset: 'aws-lambda', inlineDynamicImports: true }` (cold-start-optimalisatie, expliciet genoemd in architectuur) + verplichte `compatibilityDate` (Nuxt 4-vereiste, anders faalt de build)
-- [ ] Task 2: SST v3/Ion setup (AC: #1, #2)
-  - [ ] `sst.config.ts` met `sst.aws.Nuxt`-component (zet CloudFront + S3 + Lambda automatisch neer, geen losse configuratie nodig)
-  - [ ] Declareer twee `sst.Secret`-resources (illustratieve namen: `GoogleOAuthClientSecret`, `TursoAuthToken` — architectuur schrijft geen exacte naam voor, dit is een implementatiekeuze) — Story 1.2 gebruikt de eerste, latere stories de tweede zodra Drizzle/Turso wordt aangesloten — koppel ze aan de Nuxt-component's `environment`/`link`, nooit als letterlijke waarde in `sst.config.ts` of elders in de repo
-  - [ ] Stages/dev+prod-scheiding conform architectuur ("Turso — per stage")
-  - [ ] Verifieer lokaal draaien (`sst dev`) én een deploy (`sst deploy --stage dev`) slagen
-- [ ] Task 3: Statisch inlogscherm bouwen volgens 5.1-inlogscherm-spec (AC: #3)
-  - [ ] Pagina/route `/inloggen` (Nuxt file-based routing, `app/pages/inloggen.vue` of vergelijkbaar) met exact de Object IDs uit de spec: `login-section` (container), `login-brand` ("Flowz", h1), `login-tagline` ("Jouw rustige planner voor huiswerk"), `login-google-button` (primary button + Google-icoon, `aria-label="Inloggen met Google"`, focus-ring 2px), `login-error` (conditioneel, `aria-live="assertive"`, standaard niet gerenderd/verborgen — pas relevant vanaf Story 1.2 als de OAuth-flow kan mislukken)
-  - [ ] Layout: één verticaal + horizontaal gecentreerde sectie (zie ASCII-mockup in de spec), WDS-standaardschaal voor spacing (`space-md`/`space-lg` padding, `space-sm` element-gap) — geen eigen design system (`design_system_mode: none`)
-  - [ ] Root-route `/` toont voor nu ook dit scherm (redirect naar `/inloggen`, of render het rechtstreeks op `/`) — er bestaat nog geen auth-check/middleware in deze story (die komt in Story 1.2/1.3), dus dit is puur "enige pagina die er is", geen routing-logica te bouwen
-  - [ ] `login-google-button` is static: geen `onClick`-handler die iets doet (geen redirect, geen state) — dat is expliciet Story 1.2's scope
-- [ ] Task 4: Gedeelde server-side conventies (AC: #4)
-  - [ ] `server/domain/errors.ts`: TypeScript-type voor de technische envelope `{ error: { code: string, message: string } }` + een leeg/initieel error-code-vocabulaire (bv. een `const`-object of string-union-type, uit te breiden door latere stories — nog geen concrete codes nodig in deze story, er is nog geen endpoint)
-  - [ ] Apart type/bestand voor de `Notification`-shape (`{ notification: { type, message, actions } }`, AD-6) — bewust een ander bestand/type dan de error-envelope, nooit samengevoegd (dat is precies wat AD-6 voorkomt)
+- [x] Task 1: Nuxt 4 project init + Structural Seed folderstructuur (AC: #1)
+  - [x] Nuxt 4.5.1 + Vue 3.5.40, TypeScript strict (handmatig gescaffold i.p.v. `nuxi init` om bestaande repo-content niet te raken — zie Completion Notes)
+  - [x] Structural Seed-mappen aangemaakt: `app/`, `server/api/`, `server/domain/tasks/`, `server/domain/scheduling/`, `server/domain/calendar-sync/`, `server/data/`, elk met `.gitkeep`
+  - [x] `nuxt.config.ts`: `nitro: { preset: 'aws-lambda', inlineDynamicImports: true }` + `compatibilityDate: '2026-07-28'`
+- [x] Task 2: SST v3/Ion setup (AC: #1, #2)
+  - [x] `sst.config.ts` met `sst.aws.Nuxt`-component
+  - [x] Twee `sst.Secret`-resources (`GoogleOAuthClientSecret`, `TursoAuthToken`), gelinkt via `link: [...]`, waarden gezet via `sst secret set` (CLI), nooit letterlijk in code
+  - [x] Stage `dev` gebruikt (prod-stage niet aangemaakt in deze story — geen AC vereist dat, alleen dat stage-scheiding *mogelijk* is, wat de `input.stage`-conditie in `sst.config.ts` al aantoont)
+  - [x] Geverifieerd: `sst dev` crasht op de interactieve TUI in deze niet-interactieve omgeving (omgevingsbeperking, geen config-fout — zie Completion Notes); `sst deploy --stage dev` is wél geslaagd, live op `https://d3au50i72ruhvr.cloudfront.net`, geverifieerd met curl (root → 302 → `/inloggen`, juiste content)
+- [x] Task 3: Statisch inlogscherm bouwen volgens 5.1-inlogscherm-spec (AC: #3)
+  - [x] `app/pages/inloggen.vue` met alle Object IDs: `login-section`, `login-brand`, `login-tagline`, `login-google-button` (met Google-icoon, `aria-label`, focus-ring), `login-error` (conditioneel via `v-if`, dus standaard niet gerenderd)
+  - [x] Layout: verticaal + horizontaal gecentreerd, lokale spacing-variabelen (`--space-sm/md/lg`) — geen eigen design system
+  - [x] `app/pages/index.vue` redirect (`navigateTo`) naar `/inloggen`
+  - [x] `login-google-button` heeft geen `onClick`-handler
+  - [x] Geverifieerd: SSR-curl (lokaal én live op CloudFront) + browser-screenshot incl. keyboard-focus-state
+- [x] Task 4: Gedeelde server-side conventies (AC: #4)
+  - [x] `server/domain/errors.ts`: `ErrorEnvelope`-type + `ErrorCodes`-const-object (initieel: `InternalError`)
+  - [x] `server/domain/notification.ts`: apart `Notification`-type (AD-6), nooit samengevoegd met de error-envelope
+  - [x] Geverifieerd: `nuxt typecheck` slaagt zonder fouten
+
+### Review Findings
+
+- [x] [Review][Decision] Custom domain `flowz.fyi` is niet stage-gated in `sst.config.ts` — **Opgelost:** Hillebrand koos ervoor het domein op alle stages te laten staan en in plaats daarvan `removal` altijd op `"retain"` te zetten (i.p.v. alleen bij `production`), zodat een `sst remove` de live site nooit per ongeluk sloopt [sst.config.ts:5-8].
+- [x] [Review][Patch] `login-brand` rendert "Flowz." i.p.v. exact "Flowz" uit de spec [app/pages/inloggen.vue:14] — **Bewust niet gefixt:** Hillebrand koos ervoor de decoratieve punt te laten staan (afwijking van de 5.1-spec, geaccepteerd).
+- [x] [Review][Patch] Focus-ring is 3px, spec vereist 2px [app/pages/inloggen.vue:170] — **Gefixt:** `3px` → `2px`.
+- [x] [Review][Patch] `login-error`'s aria-live-regio wordt via `v-if` ingevoegd i.p.v. altijd in de DOM aanwezig te zijn (screenreader-announcement-betrouwbaarheid) [app/pages/inloggen.vue] — **Gefixt:** `v-if` → `v-show`.
+- [x] [Review][Patch] Ontbrekende `<html lang="nl">` [nuxt.config.ts / app/app.vue] — **Gefixt:** `app.head.htmlAttrs.lang: 'nl'` toegevoegd aan `nuxt.config.ts`, geverifieerd met curl.
+- [x] [Review][Patch] Onafgemaakte "AD-..."-placeholder in comment [nuxt.config.ts:35] — **Gefixt:** comment herschreven zonder placeholder.
+- [x] [Review][Patch] `nitropack-nightly`-override in `package.json` is ongedocumenteerd én momenteel niet effectief (geïnstalleerd is gewoon stabiele `nitropack@2.13.4`, geverifieerd in `node_modules`) [package.json] — **Gefixt:** override verwijderd, `npm install` opnieuw gedraaid — nitropack blijft stabiel op 2.13.4.
+- [x] [Review][Patch] Geen minimale README met opstart-vereisten (Node 24, `sst secret set`, AWS-credentials/regio) — **Gefixt:** `README.md` toegevoegd.
+- [x] [Review][Defer] `CLAUDE.md` is feitelijk onjuist ("no application source code") [CLAUDE.md] — deferred, pre-existing (al expliciet als niet-blokkerend genoteerd in Dev Notes)
+- [x] [Review][Defer] Geen lint/import-boundary-handhaving voor `app/`→`server/domain/` [geen tooling aanwezig] — deferred, pre-existing (expliciet "nog niet besloten, hoort bij deze epic/story-fase" in epics.md Additional Requirements)
 
 ## Dev Notes
 
@@ -84,10 +99,59 @@ so that elke volgende story infrastructuur heeft om op te bouwen, en Evelien met
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Sonnet 5 (claude-sonnet-5)
 
 ### Debug Log References
 
+- `sst dev` faalt met een `SIGSEGV` in de tcell-terminal-library (`multiplexer.go`) — de interactieve mosaic-TUI heeft een echte TTY nodig, die deze uitvoeringsomgeving niet biedt. Geen config-probleem: `sst deploy` (non-interactief) met exact dezelfde `sst.config.ts` is wél volledig geslaagd. Latere sessies met een echte terminal kunnen `sst dev` gewoon gebruiken.
+- Eerste `sst deploy`-poging faalde op `SecretMissingError` voor beide secrets (SST eist een waarde bij resource-aanmaak, ook als niets die waarde nog leest) — opgelost met `sst secret set <naam> <placeholder> --stage dev`. `GoogleOAuthClientSecret` moet in Story 1.2 de echte OAuth client secret krijgen; `TursoAuthToken` zodra Turso wordt aangesloten.
+
 ### Completion Notes List
 
+- Nuxt-project is handmatig gescaffold (package.json/nuxt.config.ts/tsconfig.json/app.vue) in plaats van via `nuxi init` op de repo-root, om te voorkomen dat de interactieve/`--force`-scaffold bestaande planning-content (`_bmad/`, `design-artifacts/`, `CLAUDE.md`, ...) zou raken. Inhoud is 1:1 gebaseerd op een testrun van `nuxi init -t minimal` in een scratch-directory.
+- `npx nuxi@latest init --help` loste eerst Nuxt 3-tooling (`nuxi 3.37.0`) op — dat is alleen de CLI-versie, niet de Nuxt-versie van het project; het geïnstalleerde `nuxt`-package is correct `^4.5.1`.
+- `npm add -D typescript` installeerde in eerste instantie TypeScript 7.x (native/Go-preview-lijn), wat botste met `vue-tsc` (`ERR_PACKAGE_PATH_NOT_EXPORTED`). Gepind naar `typescript@^5.9.3` (stabiele lijn) — `nuxt typecheck` slaagt sindsdien.
+- `npm install` rapporteert 11 high-severity audit-findings, allemaal transitief via `archiver`/`brace-expansion` binnen Nitro's eigen build-tooling (niet in de runtime-dependency-graph van de Flowz-app zelf). `npm audit fix --force` zou een *downgrade* van Nuxt forceren — bewust niet toegepast. Geaccepteerd, niet-blokkerend risico, consistent met hoe de architectuur andere build-tijd-risico's documenteert (bv. de `@libsql/client`-bundling-waarschuwing).
+- Node.js was niet aanwezig in de uitvoeringsomgeving; geïnstalleerd via `brew install node@24` en toegevoegd aan het fish-PATH van de gebruiker (niet in scope van de repo, dus niet in File List).
+- AWS-credentials (via `aws login`) waren verlopen; gebruiker heeft opnieuw ingelogd. Regio was niet ingesteld — `eu-west-1` als default gekozen (geen instructie hierover in de architectuur).
+- Live deploy geverifieerd op `https://d3au50i72ruhvr.cloudfront.net` (stage `dev`) — root redirect + `/inloggen`-content kloppen, identiek aan de lokale dev-server. Deze deployment blijft staan als het project se `dev`-stage (niet afgebroken na verificatie); af te breken met `npx sst remove --stage dev` indien gewenst.
+- Alle 4 acceptatiecriteria zijn end-to-end geverifieerd (niet alleen code geschreven): AC1/AC2 via een geslaagde `sst deploy`, AC3 via SSR-curl + browser-screenshot (lokaal én live), AC4 via `nuxt typecheck`.
+
+**Na status → review, op verzoek van Hillebrand (ad-hoc, buiten de oorspronkelijke ACs om):**
+- `app/pages/inloggen.vue` restyled in twee iteraties: eerst een felle "gen-z" gradient-look (paars/roze/oranje), daarna teruggebracht naar een rustiger pastel-variant ("hip maar zen" — lavendel/blush/mint-gradient, frosted-glass kaart) na feedback dat de eerste versie tegen het "Rustig hoofdscherm"-ontwerpprincipe inging. Accentkleur vervolgens op verzoek van paars naar blauw (`#2563eb`) gewijzigd. Object IDs en tekstinhoud zijn in alle iteraties ongewijzigd gebleven (puur CSS/visueel) — telkens geverifieerd met SSR-curl + `nuxt typecheck`.
+- Custom domain `flowz.fyi` gekoppeld aan de `dev`-stage-deployment (`sst.config.ts`: `domain: { name: "flowz.fyi", redirects: ["www.flowz.fyi"] }`). Domein is door Hillebrand zelf rechtstreeks via Route53 geregistreerd (hosted zone al aanwezig, comment "HostedZone created by Route53 Registrar" — geen handmatige nameserver-stap nodig, geverifieerd met `dig` tegen 8.8.8.8).
+  - Twee deploy-pogingen faalden onderweg: (1) tijdelijke AWS-sessietoken verliep tijdens het wachten op ACM-certificaatvalidatie (~7 min) — opgelost door credentials te verversen; (2) de gefaalde poging liet een Pulumi state-lock achter — opgelost met `sst secret unlock`... eigenlijk `sst unlock --stage dev`. Derde poging is geslaagd.
+  - **Geverifieerd:** apex-domein `https://flowz.fyi` — 302-redirect naar `/inloggen`, content klopt (curl). De kale CloudFront-URL (`d3au50i72ruhvr.cloudfront.net`) geeft nu bewust een 403 (SST's routing-functie accepteert na domain-koppeling alleen nog het geconfigureerde hostname) — verwacht gedrag, geen bug.
+  - **Nog niet geverifieerd bij pauze:** `https://www.flowz.fyi`-redirect. De Route53 alias-records (A/AAAA → aparte redirect-CloudFront-distributie) bestaan correct in de hosted zone, maar `www.flowz.fyi` gaf bij de laatste curl-poging nog "kon host niet herleiden" (DNS-propagatievertraging voor dit specifieke record, geen configuratiefout — vergelijkbare vertraging als eerder bij de ACM-validatie). Actie bij hervatten: opnieuw `dig A www.flowz.fyi @8.8.8.8` en/of `curl -sI https://www.flowz.fyi/` proberen; als het na een paar uur nog niet resolvet, verder uitzoeken.
+
 ### File List
+
+**Nieuw:**
+- `package.json`
+- `package-lock.json`
+- `nuxt.config.ts`
+- `tsconfig.json`
+- `sst.config.ts`
+- `sst-env.d.ts` (auto-gegenereerd door SST — typing voor gelinkte resources, standaard gecommit)
+- `README.md` (toegevoegd tijdens code review)
+- `app/app.vue`
+- `app/pages/index.vue`
+- `app/pages/inloggen.vue`
+- `server/domain/errors.ts`
+- `server/domain/notification.ts`
+- `server/api/.gitkeep`
+- `server/domain/tasks/.gitkeep`
+- `server/domain/scheduling/.gitkeep`
+- `server/domain/calendar-sync/.gitkeep`
+- `server/data/.gitkeep`
+
+**Gewijzigd:**
+- `.gitignore` (Nuxt/Node/SST-ignores toegevoegd, bestaande regels behouden)
+
+## Change Log
+
+| Datum | Wijziging |
+| --- | --- |
+| 2026-07-28 | Story geïmplementeerd: Nuxt 4/SST-scaffold, statisch inlogscherm, error/notification-conventies. Alle 4 ACs geverifieerd incl. live AWS-deploy. Status → review. |
+| 2026-07-28 | (Post-review, ad-hoc) Inlogscherm visueel restyled (2 iteraties, eindresultaat: pastel/zen met blauw accent) en custom domain `flowz.fyi` gekoppeld + gedeployed. `www.flowz.fyi`-redirect nog niet geverifieerd bij sessie-pauze (vermoedelijk DNS-propagatie). |
+| 2026-07-28 | Code review (`bmad-code-review`): 1 decision-needed (domain-stage-scoping → `removal` altijd `retain`), 7 patch-findings (6 gefixt: focus-ring 2px, `v-show` i.p.v. `v-if` voor `login-error`, `lang="nl"`, AD-placeholder verwijderd, dode `nitropack-nightly`-override verwijderd, README toegevoegd; 1 bewust ongewijzigd: "Flowz."-punt blijft staan), 2 defer (CLAUDE.md, lint-tooling — zie `deferred-work.md`), 9 dismissed. Status → done. |

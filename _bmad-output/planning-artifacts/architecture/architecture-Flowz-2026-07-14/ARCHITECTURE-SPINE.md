@@ -7,7 +7,7 @@ paradigm: 'Layered modular monolith (Nuxt fullstack on Lambda)'
 scope: 'Flowz v1 — hobby, single-user greenfield (UJ-1 t/m UJ-8 uit prd.md)'
 status: final
 created: '2026-07-14'
-updated: '2026-07-26'
+updated: '2026-07-30'
 binds: [UJ-1, UJ-2, UJ-3, UJ-4, UJ-5, UJ-6, UJ-7, UJ-8]
 sources: ['_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/addendum.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/reconcile-brief.md', '_bmad-output/planning-artifacts/research/technical-magister-api-integratie-en-microsoft-sso-research-2026-07-10.md']
 companions: []
@@ -74,6 +74,13 @@ graph LR
 - **Prevents:** dat Calendar-schrijfacties alsnog een achtergrondtaak, cron-job of webhook worden — wat in strijd zou zijn met AD-4's request-gedreven Lambda-deployment
 - **Rule:** indien Evelien een vaste Google Calendar-kleur voor huiswerk heeft ingesteld, schrijft Flowz geplande/herplande sessies terug als events met die kleur (`server/domain/calendar-sync/`, `POST`/`PATCH`/`DELETE` per sessie). Dit gebeurt uitsluitend **synchroon, binnen hetzelfde request** dat de (her)planning uitvoert — nooit via een aparte achtergrondtaak. AD-4's "pull-only"-regel wordt hiermee expliciet verruimd: pull-only blijft gelden voor lezen (geen webhook-abonnement op Calendar-wijzigingen), maar synchrone push binnen het request-pad is toegestaan voor schrijven. Bij een handmatige wijziging/verwijdering van het event door Evelien zelf, buiten Flowz om: geen conflict-detectie in v1 — Flowz overschrijft/hermaakt het event gewoon bij de eerstvolgende (her)planning (Flowz is bron van waarheid voor zijn eigen events, niet voor Evelien's overige agenda-items).
 - **Herkomst:** ontstaan tijdens de UX-fase (Phase 4, `design-artifacts/C-UX-Scenarios/04.../4.1-...` en `08.../8.1-...`) als oplossing voor valse agendaconflict-meldingen — geen PRD-eis, wel productbeslissing van Hillebrand, bekrachtigd via `bmad-check-implementation-readiness` op 2026-07-26.
+
+### AD-8 — Turso blijft de databasekeuze; AWS-native alternatieven overwogen en afgewezen [TOEGEVOEGD 2026-07-30]
+
+- **Binds:** Stack (Turso Cloud), `server/data/`
+- **Prevents:** een toekomstige "waarom niet gewoon DynamoDB/Aurora, dat is toch AWS-native"-heroverweging die de relationele modelleerkeuze (AD-3) stilzwijgend ondermijnt door alsnog naar een access-pattern-first NoSQL-ontwerp te migreren, of die de vrijwel-gratis-kostendoelstelling ondermijnt door alsnog een VPC-gebonden database te introduceren
+- **Rule:** de databasekeuze blijft Turso (libSQL, via Drizzle). Twee AWS-native alternatieven zijn expliciet overwogen en afgewezen: **Aurora Serverless v2** (Postgres-compatible) — afgevallen omdat het standaard in een VPC draait; Lambda-toegang vereist óf Lambda-in-VPC + een NAT-gateway (~€30+/mnd, ondermijnt de vrijwel-€0-idle-doelstelling achter de Lambda-keuze) óf de beperktere RDS Data API. **DynamoDB** — past qua kostenprofiel (écht serverless, geen VPC, blijvend gratis niveau) en AWS-native-wens, maar afgevallen omdat het geen joins ondersteunt: het volgorde-algoritme (AD-1, Epic 3) en de weekoverzicht-aggregatie (Epic 6) zouden herontworpen moeten worden rond vooraf-vastgelegde access patterns — risicovol omdat 5 van de 6 epics nog gebouwd moeten worden en toekomstige querybehoeften nog niet vastliggen, en zou bovendien de al gebouwde Drizzle-laag (Story 1.2) vervangen door een DynamoDB-specifieke library (bv. ElectroDB). Turso's belangrijkste nadeel (externe leverancier buiten AWS, kleine VC-gefinancierde startup ~60 medewerkers) weegt lichter dan deze herontwerpkosten.
+- **Herkomst:** vraag van Hillebrand naar aanleiding van dev-story-werk aan Story 1.2 ("waarom Turso en niet DynamoDB") — geen PRD-eis, productbeslissing van Hillebrand na expliciete afweging tussen Turso, Aurora Serverless v2 en DynamoDB.
 
 ## Consistency Conventions
 
