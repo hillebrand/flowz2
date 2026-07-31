@@ -1,4 +1,10 @@
-import { getOrCreateWeekPattern, updateWeekPatternDay } from '../../data/availability'
+import {
+  getExceptionsForMonth as dataGetExceptionsForMonth,
+  getOrCreateWeekPattern,
+  updateExceptionForDate,
+  updateWeekPatternDay,
+  type ExceptionRow
+} from '../../data/availability'
 import type { Weekday } from '../../data/schema'
 
 // Mutatie-ownership-regel (Consistency Conventions), hier op AvailableTimePattern
@@ -42,4 +48,22 @@ export async function updateWeekPatternDayFor(
 ): Promise<UpdateWeekPatternDayResult> {
   const row = await updateWeekPatternDay(userId, day, direction)
   return { day, minutes: row[day] }
+}
+
+export interface UpdateExceptionResult {
+  date: string
+  minutes: number
+  active: boolean
+}
+
+export async function getExceptionsForMonth(userId: string, month: string): Promise<ExceptionRow[]> {
+  return dataGetExceptionsForMonth(userId, month)
+}
+
+export async function updateExceptionForDateFor(
+  userId: string,
+  date: string,
+  direction: 'increase' | 'decrease'
+): Promise<UpdateExceptionResult> {
+  return updateExceptionForDate(userId, date, direction)
 }

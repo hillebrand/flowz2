@@ -21,3 +21,22 @@ export interface UpdateWeekPatternDayResponse {
   day: Weekday
   minutes: number
 }
+
+export interface ExceptionEntry {
+  date: string
+  minutes: number
+}
+
+export interface ExceptionsResponse {
+  exceptions: ExceptionEntry[]
+}
+
+export interface UpdateExceptionResponse {
+  date: string
+  minutes: number
+  // false = de exceptie is zojuist opgeruimd (waarde weer gelijk aan het weekpatroon)
+  // of heeft nooit bestaan; `minutes` is dan de effectieve waarde (= het weekpatroon
+  // voor die weekdag). Niet letterlijk in de UX-spec, nodig zodat de client de
+  // kalendermarkering kan bijwerken zonder de hele maand opnieuw op te halen.
+  active: boolean
+}

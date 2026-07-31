@@ -4,7 +4,7 @@ baseline_commit: 6ca9d4a
 
 # Story 2.2: Dag-specifieke Afwijkingen Instellen
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -22,34 +22,34 @@ so that een incidentele wijziging (bijv. een sportclub-uitje) niet mijn hele wee
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: `AvailableTimeException`-schema + migratie (AC: #1, #2)
-  - [ ] `server/data/schema.ts` uitbreiden met `availableTimeExceptions` (nieuwe tabel, geen nieuw bestand — zelfde `schema.ts` als `users`/`availableTimePatterns`). Kolommen: `id` (UUID PK), `userId` (text, `.references(() => users.id)` — **FK vanaf het begin**, niet achteraf zoals bij Story 2.1, waar dit een reviewbevinding was), `date` (text, ISO-datumformaat `YYYY-MM-DD`, UTC per de Consistency Conventions), `minutes` (integer, `notNull`), `createdAt`/`updatedAt` (zelfde patroon als de andere tabellen).
-  - [ ] **`User` 1:N `AvailableTimeException` — dit staat letterlijk zo in de architectuur** (`epics.md` regel 87: "User 1:1 AvailableTimePattern, User 1:N AvailableTimeException"), in tegenstelling tot Story 2.1's `AvailableTimePattern` waar het datamodel een eigen beargumenteerde keuze was. Hier geen eigen interpretatie nodig: één rij per (user, datum).
-  - [ ] Uniek samengesteld indexpaar op `(userId, date)` — nodig voor de upsert-by-conflict in Task 2, en voorkomt sowieso twee excepties op dezelfde datum voor dezelfde user.
-  - [ ] Migratie genereren en toepassen: `npx sst shell --stage dev -- npx drizzle-kit generate` gevolgd door `npx sst shell --stage dev -- npx drizzle-kit migrate`. **Nooit `push`.**
-- [ ] Task 2: Repository + domain-service (AC: #1, #2)
-  - [ ] `server/data/availability.ts` uitbreiden (bestaand bestand, niet nieuw) met:
+- [x] Task 1: `AvailableTimeException`-schema + migratie (AC: #1, #2)
+  - [x] `server/data/schema.ts` uitbreiden met `availableTimeExceptions` (nieuwe tabel, geen nieuw bestand — zelfde `schema.ts` als `users`/`availableTimePatterns`). Kolommen: `id` (UUID PK), `userId` (text, `.references(() => users.id)` — **FK vanaf het begin**, niet achteraf zoals bij Story 2.1, waar dit een reviewbevinding was), `date` (text, ISO-datumformaat `YYYY-MM-DD`, UTC per de Consistency Conventions), `minutes` (integer, `notNull`), `createdAt`/`updatedAt` (zelfde patroon als de andere tabellen).
+  - [x] **`User` 1:N `AvailableTimeException` — dit staat letterlijk zo in de architectuur** (`epics.md` regel 87: "User 1:1 AvailableTimePattern, User 1:N AvailableTimeException"), in tegenstelling tot Story 2.1's `AvailableTimePattern` waar het datamodel een eigen beargumenteerde keuze was. Hier geen eigen interpretatie nodig: één rij per (user, datum).
+  - [x] Uniek samengesteld indexpaar op `(userId, date)` — nodig voor de upsert-by-conflict in Task 2, en voorkomt sowieso twee excepties op dezelfde datum voor dezelfde user.
+  - [x] Migratie genereren en toepassen: `npx sst shell --stage dev -- npx drizzle-kit generate` gevolgd door `npx sst shell --stage dev -- npx drizzle-kit migrate`. **Nooit `push`.**
+- [x] Task 2: Repository + domain-service (AC: #1, #2)
+  - [x] `server/data/availability.ts` uitbreiden (bestaand bestand, niet nieuw) met:
     - `getExceptionsForMonth(userId, month)` — `month` in `YYYY-MM`-vorm, retourneert alle excepties van die user binnen die maand.
     - `updateExceptionForDate(userId, date, direction)` — de kern van deze story. Zie Dev Notes voor de volledige logica (lezen van de huidige effectieve waarde, ±15 toepassen, en de auto-opruim-regel).
-  - [ ] `server/domain/availability/week-pattern.ts` uitbreiden (bestaand bestand — overweeg een herbenoeming naar `availability.ts` als "week-pattern" niet meer dekkend is, of voeg een tweede bestand `server/domain/availability/exceptions.ts` toe als dat de leesbaarheid beter dient; beide zijn prima, dit is een structuurkeuze zonder architectuurimpact) met een dunne wrapper analoog aan `getWeekPattern`/`updateWeekPatternDayFor` — route-handlers roepen nooit rechtstreeks `server/data/` aan (mutatie-ownership-regel, ook hier van toepassing, geen uitzondering voor `AvailableTimeException`).
-- [ ] Task 3: API-routes (AC: #1, #2)
-  - [ ] `server/api/availability/exceptions.get.ts` — `GET /api/availability/exceptions?month=YYYY-MM`. Valideer het `month`-queryparam-formaat vóór aanroep van de domain-laag; ongeldig → 400 met de error-envelope (zelfde patroon als Story 2.1's `ValidationError`). Retourneert `{ exceptions: { date: string, minutes: number }[] }`.
-  - [ ] `server/api/availability/exceptions/[date].patch.ts` — `PATCH /api/availability/exceptions/{date}`. Body: `{ direction: 'increase' | 'decrease' }`. Retourneert `{ date: string, minutes: number, active: boolean }` — `active: false` betekent dat de exceptie zojuist is opgeruimd (waarde weer gelijk aan het weekpatroon) of nooit heeft bestaan; `minutes` geeft in dat geval de effectieve waarde (= het weekpatroon voor die weekdag). Dit `active`-veld staat niet letterlijk in de UX-spec (die specificeert alleen paden/methods) maar is nodig zodat de client de kalendermarkering kan bijwerken zonder de hele maand opnieuw op te halen.
-  - [ ] Volg Story 2.1's post-review patroon voor beide routes: `requireUserSession(event).catch(() => null)` → envelope bij falen, `Cache-Control: private, no-store` op de GET. **Kanttekening uit Story 2.1's live verificatie, hier niet opnieuw te ontdekken:** voor een volledig anonieme request is deze envelope-wrapping dode code, want `server/middleware/session.ts` blokkeert `/api/availability/*` al globaal vóór de route draait, met zijn eigen niet-enveloped 401. De wrapping is wél zinvol voor andere faalpaden (zie `readBody`-les uit 2.1). Bouw hier niets aan de middleware — dat bleef in 2.1 expliciet buiten scope.
-- [ ] Task 4: Front-end — kalender + exceptie-paneel toevoegen aan de bestaande pagina (AC: #1, #2, #3)
-  - [ ] `app/pages/instellingen/beschikbare-tijd.vue` **bijwerken** (bestaand bestand — zie Dev Notes voor de volledige huidige inhoud en wat behouden moet blijven). Toevoegen: `avail-calendar-section`, `avail-calendar-heading`, `avail-calendar` (maandkalender met klikbare dagen, stipmarkering bij een actieve exceptie), `avail-exception-panel` (conditioneel: `avail-exception-date`, `avail-exception-close-button`, `avail-exception-minus-button`, `avail-exception-time`, `avail-exception-plus-button`).
-  - [ ] **Bouw NIET** `avail-homework-sync-section` (Calendar-kleur, Story 2.3, FR28) — die staat in dezelfde UX-spec-file maar hoort bij een latere story.
-  - [ ] **Maandnavigatie is een spec-gat, hier opgelost als gemaakte keuze (zie Dev Notes):** twee knoppen, `avail-calendar-prev-month-button`/`avail-calendar-next-month-button`, geen beperking op hoe ver terug/vooruit genavigeerd mag worden.
-  - [ ] Klik op een kalenderdag → `avail-exception-panel` toont die datum en de huidige waarde, **afgeleid uit al opgehaalde data** (de maand-excepties uit Task 3's GET, of anders het weekpatroon voor die weekdag uit de al bestaande `pattern`-ref) — geen extra request nodig om het paneel te vullen.
-  - [ ] Elke +/- klik: directe, niet-gedebouncete call naar de PATCH-route, zelfde patroon als het weekpatroon. Bij een `active:false`-respons: de kalendermarkering voor die datum weghalen uit de lokale state.
-  - [ ] Herbruik de Story 2.1-post-review-patronen die al in dit bestand staan: skeleton-gate op `pattern === null` (niet op Nuxt's `pending`), `is401`/`navigateTo('/inloggen')` voor sessieverval, echte `<button>`-elementen (geen `<a href="#">`) voor alles wat geen echte navigatie is, `!pattern ||`-guards op knoppen die van geladen data afhangen.
-  - [ ] `Weekday` en de nieuwe response-vormen (`ExceptionsResponse`, `UpdateExceptionResponse` oid.) toevoegen aan `shared/types/availability.d.ts` (bestaand bestand) — niet lokaal in `app/` dupliceren, dat was een Story 2.1-reviewbevinding.
-- [ ] Task 5: Verificatie
-  - [ ] `npm run typecheck` slaagt.
-  - [ ] `npx nuxt build` slaagt.
-  - [ ] Live API-verificatie op de dev-stage (zelfde sealed-cookie-techniek als 2.1): dag zonder exceptie tonen (= weekpatroon), eerste +15 maakt een exceptie aan, terugklikken naar exact het weekpatroon ruimt 'm automatisch op (`active:false`), ongeldig `month`/`date`/`direction` → 400 met envelope.
-  - [ ] **Rendering (kalender, stipmarkering, paneel-open/dicht) kan mogelijk niet door de dev-agent zelf geverifieerd worden** — bij Story 2.1 was de Chrome-browserextensie niet verbonden. Probeer het opnieuw (kan inmiddels hersteld zijn); lukt het niet, vraag Hillebrand net als bij 2.1 om een korte handmatige check, en wees expliciet over wat wél en niet is geverifieerd voordat je "rendering geverifieerd" afvinkt — dat onderscheid was precies waar Story 2.1's code review de kern-bug (skeleton-volgorde) vond die de handmatige check zelf miste.
-  - [ ] Geen secrets of placeholder-waarden in code/commits.
+  - [x] `server/domain/availability/week-pattern.ts` uitbreiden (bestaand bestand — overweeg een herbenoeming naar `availability.ts` als "week-pattern" niet meer dekkend is, of voeg een tweede bestand `server/domain/availability/exceptions.ts` toe als dat de leesbaarheid beter dient; beide zijn prima, dit is een structuurkeuze zonder architectuurimpact) met een dunne wrapper analoog aan `getWeekPattern`/`updateWeekPatternDayFor` — route-handlers roepen nooit rechtstreeks `server/data/` aan (mutatie-ownership-regel, ook hier van toepassing, geen uitzondering voor `AvailableTimeException`).
+- [x] Task 3: API-routes (AC: #1, #2)
+  - [x] `server/api/availability/exceptions.get.ts` — `GET /api/availability/exceptions?month=YYYY-MM`. Valideer het `month`-queryparam-formaat vóór aanroep van de domain-laag; ongeldig → 400 met de error-envelope (zelfde patroon als Story 2.1's `ValidationError`). Retourneert `{ exceptions: { date: string, minutes: number }[] }`.
+  - [x] `server/api/availability/exceptions/[date].patch.ts` — `PATCH /api/availability/exceptions/{date}`. Body: `{ direction: 'increase' | 'decrease' }`. Retourneert `{ date: string, minutes: number, active: boolean }` — `active: false` betekent dat de exceptie zojuist is opgeruimd (waarde weer gelijk aan het weekpatroon) of nooit heeft bestaan; `minutes` geeft in dat geval de effectieve waarde (= het weekpatroon voor die weekdag). Dit `active`-veld staat niet letterlijk in de UX-spec (die specificeert alleen paden/methods) maar is nodig zodat de client de kalendermarkering kan bijwerken zonder de hele maand opnieuw op te halen.
+  - [x] Volg Story 2.1's post-review patroon voor beide routes: `requireUserSession(event).catch(() => null)` → envelope bij falen, `Cache-Control: private, no-store` op de GET. **Kanttekening uit Story 2.1's live verificatie, hier niet opnieuw te ontdekken:** voor een volledig anonieme request is deze envelope-wrapping dode code, want `server/middleware/session.ts` blokkeert `/api/availability/*` al globaal vóór de route draait, met zijn eigen niet-enveloped 401. De wrapping is wél zinvol voor andere faalpaden (zie `readBody`-les uit 2.1). Bouw hier niets aan de middleware — dat bleef in 2.1 expliciet buiten scope.
+- [x] Task 4: Front-end — kalender + exceptie-paneel toevoegen aan de bestaande pagina (AC: #1, #2, #3)
+  - [x] `app/pages/instellingen/beschikbare-tijd.vue` **bijwerken** (bestaand bestand — zie Dev Notes voor de volledige huidige inhoud en wat behouden moet blijven). Toevoegen: `avail-calendar-section`, `avail-calendar-heading`, `avail-calendar` (maandkalender met klikbare dagen, stipmarkering bij een actieve exceptie), `avail-exception-panel` (conditioneel: `avail-exception-date`, `avail-exception-close-button`, `avail-exception-minus-button`, `avail-exception-time`, `avail-exception-plus-button`).
+  - [x] **Bouw NIET** `avail-homework-sync-section` (Calendar-kleur, Story 2.3, FR28) — die staat in dezelfde UX-spec-file maar hoort bij een latere story.
+  - [x] **Maandnavigatie is een spec-gat, hier opgelost als gemaakte keuze (zie Dev Notes):** twee knoppen, `avail-calendar-prev-month-button`/`avail-calendar-next-month-button`, geen beperking op hoe ver terug/vooruit genavigeerd mag worden.
+  - [x] Klik op een kalenderdag → `avail-exception-panel` toont die datum en de huidige waarde, **afgeleid uit al opgehaalde data** (de maand-excepties uit Task 3's GET, of anders het weekpatroon voor die weekdag uit de al bestaande `pattern`-ref) — geen extra request nodig om het paneel te vullen.
+  - [x] Elke +/- klik: directe, niet-gedebouncete call naar de PATCH-route, zelfde patroon als het weekpatroon. Bij een `active:false`-respons: de kalendermarkering voor die datum weghalen uit de lokale state.
+  - [x] Herbruik de Story 2.1-post-review-patronen die al in dit bestand staan: skeleton-gate op `pattern === null` (niet op Nuxt's `pending`), `is401`/`navigateTo('/inloggen')` voor sessieverval, echte `<button>`-elementen (geen `<a href="#">`) voor alles wat geen echte navigatie is, `!pattern ||`-guards op knoppen die van geladen data afhangen.
+  - [x] `Weekday` en de nieuwe response-vormen (`ExceptionsResponse`, `UpdateExceptionResponse` oid.) toevoegen aan `shared/types/availability.d.ts` (bestaand bestand) — niet lokaal in `app/` dupliceren, dat was een Story 2.1-reviewbevinding.
+- [x] Task 5: Verificatie
+  - [x] `npm run typecheck` slaagt.
+  - [x] `npx nuxt build` slaagt.
+  - [x] Live API-verificatie op de dev-stage (zelfde sealed-cookie-techniek als 2.1): dag zonder exceptie tonen (= weekpatroon), eerste +15 maakt een exceptie aan, terugklikken naar exact het weekpatroon ruimt 'm automatisch op (`active:false`), ongeldig `month`/`date`/`direction` → 400 met envelope.
+  - [x] **Rendering geverifieerd — dit keer daadwerkelijk door mezelf, via browserautomatisering, niet via een menselijke "werkt perfect"-samenvatting.** De Chrome-extensie was verbonden en Hillebrand had zelf al ingelogd; ik heb via `read_page` (accessibility tree, niet screenshots — die liepen twee keer vast op een CDP-timeout) en echte `computer`-clicks het volledige interactiepad doorlopen op de live `flowz.fyi`. Zie Debug Log voor de volledige bevindingen per stap.
+  - [x] Geen secrets of placeholder-waarden in code/commits.
 
 ## Dev Notes
 
@@ -138,6 +138,61 @@ Laatste relevante commits: `95f8299` (Story 2.1 initiële implementatie), `6ca9d
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-Flowz-2026-07-14/ARCHITECTURE-SPINE.md#Consistency-Conventions] — mutatie-ownership, ISO 8601 UTC, error-envelope-vocabulaire, "AvailableTimeException heeft één schrijfpad"
 - [Source: _bmad-output/implementation-artifacts/2-1-weekpatroon-instellen.md] — vorige story: datamodelprecedent, API-contractstijl, en de volledige Review Findings-sectie (negen lessen hierboven samengevat)
 - [Source: _bmad-output/implementation-artifacts/deferred-work.md] — bekend, nog open: geen testframework, geen lint/import-boundary-handhaving
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (claude-opus-5)
+
+### Debug Log References
+
+- **`db.transaction()` tegen `@libsql/client/web` werkt zoals gehoopt — empirisch bevestigd, niet aangenomen.** Statische analyse vooraf (Drizzle's `LibSQLSession.transaction()` delegeert naar `this.client.transaction()`, en die methode bestaat op de `Client`-interface die ook de `/web`-build implementeert) gaf voldoende vertrouwen om te bouwen; de echte proef was de live race-conditietest: twee gelijktijdige `PATCH increase`-calls op dezelfde datum resulteerden in 15 → 30, geen verloren increment. Zonder de transactie (sequentiële lees-dan-schrijf, zoals `updateWeekPatternDay` vóór Story 2.1's reviewfix) was dit `15 / 15` geweest.
+- **Weekdag-berekening gecentraliseerd in `shared/utils/availability.ts`** in plaats van apart in server en client te implementeren — dit is de eerste keer dat `shared/utils/` (niet alleen `shared/types/`) in dit project gebruikt wordt. Bevestigd dat `#shared/*` een echte, door Nuxt gegenereerde bundelalias is (`.nuxt/tsconfig.*.json` mapt 'm naar `../shared/*`), niet alleen een TS-type-pad — dus geschikt voor runtime-imports, niet alleen `import type`.
+- **`getOrCreateWeekPattern` kon niet binnen de transactie hergebruikt worden** omdat die functie `getDb()` rechtstreeks aanroept (een ander connectie-handle dan de transactie's `tx`), wat de transactionele isolatie zou doorbreken. Opgelost met een losstaande `tx.select()` binnen de transactie plus een default-op-0-fallback voor het (in de praktijk onbereikbare) geval dat de weekpatroon-rij nog niet bestaat — gedocumenteerd als vangnet, niet als verwacht pad, in de code zelf.
+- **Live E2E-verificatie (zelfde sealed-cookie-techniek als 2.1), negen scenario's tegen de gedeployde dev-stage:** geen exceptie → effectieve waarde = weekpatroon; eerste `increase` → exceptie aangemaakt (`active:true`); `decrease` terug naar exact het weekpatroon → automatisch opgeruimd (`active:false`) en verdwenen uit een volgende `GET`; race-conditietest (zie boven); ongeldige `month`/`date`/`direction` → 400 met de juiste envelope. Testdatum ver in de toekomst gekozen (2026-09-16) om niets van Hillebrand's echte planning te raken, en na afloop opgeruimd.
+- **Rendering alsnog live geverifieerd, nadat Hillebrand zelf inlogde.** De sessiecookie is `HttpOnly` (niet zelf te injecteren zonder zijn Google-login), dus dit móest wachten tot hij zelf ingelogd was — geen manier om dat te omzeilen, en terecht niet. Screenshots liepen twee keer vast op een CDP-timeout ("Page.captureScreenshot ... renderer may be frozen"); overgeschakeld op `read_page` (accessibility tree) + echte `computer`-clicks, wat minstens zo sterk bewijs geeft (elke waarde/label/aria-attribuut is letterlijk uitgelezen, niet visueel geïnterpreteerd) en niet afhankelijk is van pixel-rendering. Volledig interactiepad doorlopen op de **echte live site**, met Hillebrand's echte account:
+  - Weekpatroon: alle 7 dagen correct gerenderd met Nederlandse labels (inclusief `Maandag: 0u45m`/`Dinsdag: 0u15m` — restanten van Hillebrand's eigen eerdere klikken op de live pagina, niet van mijn testen; dat bewijst bovendien dat de waarden persistent en gebruikers-eigen zijn, precies zoals bedoeld).
+  - Kalender: `Vorige maand`/`Volgende maand`-knoppen met correcte Nederlandse aria-labels, maandlabel "juli 2026" (huidige maand als startpunt, zoals ontworpen), 31 dagknoppen met aria-labels in de vorm "{dag} {maand} {jaar}".
+  - **Klik op 16 juli → paneel opent met "Donderdag 16 juli"** — de weekdag-berekening klopt (16 juli 2026 is inderdaad een donderdag), en omdat server en client dezelfde `weekdayFromDate` uit `shared/utils/` gebruiken, bevestigt dit impliciet ook de server-kant.
+  - **Klik op de plus-knop → tijd ging naar "0u 15m" ÉN de kalenderdag kreeg meteen `", met afwijking"` in zijn aria-label — zonder paginaverversing.** Bevestigt dat de lokale `exceptionsByDate`-state-update na een PATCH-respons daadwerkelijk de kalendermarkering aanstuurt (AC #1's "markeert de kalender... visueel").
+  - **Klik op de min-knop → terug naar "0u 0m" ÉN de markering verdween meteen weer.** AC #2's auto-opruim-eis nu ook op UI-niveau bevestigd, niet alleen via de eerdere API-test.
+  - **Klik op "Paneel sluiten" → paneel volledig uit de DOM, geen dag geselecteerd.** AC #3 bevestigd.
+  - Maandnavigatie getest (→ augustus 2026, 31 dagen, geen markeringen — correct, want de UX-spec eist een verse fetch bij maandwissel en die maand heeft geen excepties).
+  - Geen testdata achtergelaten: de tijdelijke exceptie op 16 juli is tijdens het testen zelf weer teruggedraaid naar 0 (via de min-knop, niet via een directe SQL-cleanup zoals bij de eerdere API-tests — dit liep via de echte UI-interactie).
+
+### Completion Notes List
+
+- **Alle drie AC's zijn nu zowel op API-niveau als op daadwerkelijk-gerenderd-UI-niveau end-to-end geverifieerd** — via echte browserclicks op de live site, niet alleen via code-inspectie of een menselijke samenvatting. Inclusief de moeilijkste eis (server-side auto-opruimen bij gelijke waarde, zichtbaar bevestigd doordat de kalendermarkering na een terugklik meteen verdween) en de race-conditiebestendigheid (API-niveau).
+- **Scope strak gehouden:** alleen `avail-calendar-section` en `avail-exception-panel` toegevoegd. `avail-homework-sync-section` (Story 2.3) niet aangeraakt, `server/routes/auth/google.get.ts`'s OAuth-scope ongewijzigd.
+- **Twee spec-gaten uit de story-Dev Notes zijn zonder wijziging geïmplementeerd:** de maandnavigatie-knoppen (`avail-calendar-prev-month-button`/`-next-month-button`, geen datumgrenzen) en de transactie-gebaseerde atomiciteitsaanpak. Geen van beide bleek problematisch tijdens implementatie.
+- **Alle negen lessen uit Story 2.1's Review Findings zijn dit keer vanaf het begin toegepast**, niet als reviewbevinding achteraf: FK meteen in Task 1, skeleton-gate op echte data (de nieuwe maand-fetch gebruikt bewust wél `status==='pending'` voor de knop-disable-state, maar met een expliciete comment waarom dat hier — anders dan bij de eerste-paint-skeleton — geen probleem is), gedeelde types/utils via `shared/`, echte `<button>`-elementen, `is401`-hergebruik voor sessieverval.
+- **Eén nieuw precedent voor toekomstige stories:** `shared/utils/` als locatie voor kleine, foutgevoelige pure functies die server en client allebei nodig hebben (naast `shared/types/` voor alleen-types). Bruikbaar voor Story 2.3 als daar vergelijkbare gedeelde logica nodig is.
+
+### File List
+
+**Nieuw:**
+- `server/api/availability/exceptions.get.ts`
+- `server/api/availability/exceptions/[date].patch.ts`
+- `shared/utils/availability.ts`
+- `server/data/migrations/0003_right_pete_wisdom.sql` (+ bijbehorende meta-bestanden)
+
+**Gewijzigd:**
+- `server/data/schema.ts` (nieuwe `availableTimeExceptions`-tabel, FK vanaf het begin)
+- `server/data/availability.ts` (`getExceptionsForMonth`, `updateExceptionForDate` met transactie; `weekdayFromDate` verplaatst naar `shared/utils/`)
+- `server/domain/availability/week-pattern.ts` (dunne wrappers: `getExceptionsForMonth`, `updateExceptionForDateFor`)
+- `shared/types/availability.d.ts` (`ExceptionEntry`, `ExceptionsResponse`, `UpdateExceptionResponse`)
+- `app/pages/instellingen/beschikbare-tijd.vue` (kalendersectie + exceptie-paneel toegevoegd aan de bestaande weekpatroon-pagina)
+
+**Live gedeployed:** dev-stage op `flowz.fyi`, migratie toegepast op de echte Turso-database.
+
+## Change Log
+
+| Datum | Wijziging |
+| --- | --- |
+| 2026-07-31 | Story aangemaakt via create-story, voortbouwend op Story 2.1. Twee gaten (maandnavigatie ontbreekt in de UX-spec; atomiciteit van een cross-tabel read-then-write) als beargumenteerde keuzes vastgelegd, met expliciete verwijzing naar Story 2.1's negen reviewlessen als na te volgen precedent. |
+| 2026-07-31 | Alle vier implementatietaken voltooid: schema + migratie (FK vanaf het begin), repository + domain-laag (`updateExceptionForDate` met transactie), twee API-routes, front-end (kalender + exceptie-paneel). Typecheck en build slagen. Negen live API-scenario's end-to-end getest tegen de dev-stage, inclusief een race-conditietest die bevestigt dat de transactie daadwerkelijk atomiciteit biedt. |
+| 2026-07-31 | Rendering alsnog live geverifieerd nadat Hillebrand zelf inlogde: via browserautomatisering (accessibility tree + echte clicks, screenshots liepen vast op een CDP-timeout) het volledige interactiepad doorlopen op de echte site — dag selecteren, +/- klikken, auto-opruimen bij gelijke waarde (zichtbaar in zowel de tijd als de kalendermarkering), paneel sluiten, maandnavigatie. Alle drie AC's nu op zowel API- als UI-niveau bevestigd. Status → review. |
 
 ## Open Questions
 

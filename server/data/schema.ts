@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { Weekday } from '../../shared/types/availability'
 
 export type { Weekday }
@@ -43,3 +43,24 @@ export const availableTimePatterns = sqliteTable('available_time_patterns', {
 
 export type AvailableTimePattern = typeof availableTimePatterns.$inferSelect
 export type NewAvailableTimePattern = typeof availableTimePatterns.$inferInsert
+
+// User 1:N — dit staat letterlijk zo in de architectuur (epics.md: "User 1:1
+// AvailableTimePattern, User 1:N AvailableTimeException"), geen eigen interpretatie
+// nodig zoals bij AvailableTimePattern in Story 2.1. Eén rij per (user, datum).
+// FK vanaf het begin (Story 2.1-les: dit ontbrak daar aanvankelijk en was een
+// reviewbevinding — hier meteen goed).
+export const availableTimeExceptions = sqliteTable('available_time_exceptions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  // ISO-datum (YYYY-MM-DD), UTC — Consistency Conventions. Geen tijdcomponent nodig,
+  // een exceptie geldt voor een hele kalenderdag.
+  date: text('date').notNull(),
+  minutes: integer('minutes').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('available_time_exceptions_user_date_unique').on(table.userId, table.date)
+])
+
+export type AvailableTimeException = typeof availableTimeExceptions.$inferSelect
+export type NewAvailableTimeException = typeof availableTimeExceptions.$inferInsert

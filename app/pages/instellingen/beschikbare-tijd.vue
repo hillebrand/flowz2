@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
-import type { UpdateWeekPatternDayResponse, WeekPatternResponse, Weekday } from '#shared/types/availability'
+import type {
+  ExceptionsResponse,
+  UpdateExceptionResponse,
+  UpdateWeekPatternDayResponse,
+  WeekPatternResponse,
+  Weekday
+} from '#shared/types/availability'
+import { weekdayFromDate } from '#shared/utils/availability'
 
 useHead({ title: 'Beschikbare tijd' })
 
@@ -101,6 +108,130 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
     pendingDays.value.delete(day)
   }
 }
+
+// --- Dag-specifieke afwijkingen (Story 2.2) ---
+
+const MONTH_LABELS = [
+  'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+  'juli', 'augustus', 'september', 'oktober', 'november', 'december'
+]
+const WEEKDAY_HEADER_LABELS = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
+
+const viewMonth = ref(new Date().toISOString().slice(0, 7)) // 'YYYY-MM', start = huidige maand
+
+const viewMonthLabel = computed(() => {
+  const [year, month] = viewMonth.value.split('-').map(Number)
+  return `${MONTH_LABELS[month! - 1]} ${year}`
+})
+
+function shiftMonth(delta: number) {
+  const [year, month] = viewMonth.value.split('-').map(Number)
+  const next = new Date(Date.UTC(year!, month! - 1 + delta, 1))
+  viewMonth.value = next.toISOString().slice(0, 7)
+}
+
+interface CalendarDay {
+  date: string
+  dayOfMonth: number
+}
+
+// Maandag-gebaseerde week (ma..zo, per de 4.1-mockup) — `.getUTCDay()` geeft
+// 0=zondag..6=zaterdag, dus zondag moet 6 leidende lege cellen geven, niet 0.
+const calendarLeadingBlanks = computed(() => {
+  const [year, month] = viewMonth.value.split('-').map(Number)
+  const firstWeekday = new Date(Date.UTC(year!, month! - 1, 1)).getUTCDay()
+  return (firstWeekday + 6) % 7
+})
+
+const calendarDays = computed<CalendarDay[]>(() => {
+  const [year, month] = viewMonth.value.split('-').map(Number)
+  const daysInMonth = new Date(Date.UTC(year!, month!, 0)).getUTCDate()
+  return Array.from({ length: daysInMonth }, (_, i) => {
+    const dayOfMonth = i + 1
+    return { date: `${viewMonth.value}-${String(dayOfMonth).padStart(2, '0')}`, dayOfMonth }
+  })
+})
+
+// `server:false`, zelfde reden als de weekpatroon-fetch hierboven. Reactief op
+// `viewMonth` — Nuxt herhaalt de fetch automatisch zodra de query-waarde wijzigt.
+const { data: exceptionsData, error: exceptionsError, status: exceptionsStatus } = await useFetch<ExceptionsResponse>(
+  '/api/availability/exceptions',
+  { server: false, query: { month: viewMonth } }
+)
+
+watch(exceptionsError, (waarde) => {
+  if (is401(waarde)) {
+    navigateTo('/inloggen')
+  }
+}, { immediate: true })
+
+// `status === 'pending'` is hier wél veilig te gebruiken (in tegenstelling tot de
+// skeleton-gate hierboven): dit is een zuiver client-getriggerde herfetch bij het
+// wisselen van maand, nooit onderdeel van een SSR-eerste-paint, dus de
+// `pendingWhenIdle`/`server:false`-timingvalkuil die de skeleton-bug veroorzaakte
+// speelt hier niet. Gebruikt alleen om de maand-navigatieknoppen kort te pauzeren.
+const monthLoading = computed(() => exceptionsStatus.value === 'pending')
+
+const exceptionsByDate = ref<Record<string, number>>({})
+watch(exceptionsData, (waarde) => {
+  if (!waarde) return
+  const map: Record<string, number> = {}
+  for (const entry of waarde.exceptions) map[entry.date] = entry.minutes
+  exceptionsByDate.value = map
+}, { immediate: true })
+
+function effectiveMinutesFor(date: string): number | null {
+  if (date in exceptionsByDate.value) return exceptionsByDate.value[date]!
+  if (!pattern.value) return null
+  return pattern.value[weekdayFromDate(date)]
+}
+
+const selectedDate = ref<string | null>(null)
+
+function selecteerDag(date: string) {
+  selectedDate.value = date
+}
+
+function sluitPaneel() {
+  selectedDate.value = null
+}
+
+const selectedDateLabel = computed(() => {
+  if (!selectedDate.value) return ''
+  const weekday = weekdayFromDate(selectedDate.value)
+  const label = DAYS.find(d => d.key === weekday)?.label ?? ''
+  const dayOfMonth = Number(selectedDate.value.slice(8, 10))
+  const [year, month] = selectedDate.value.split('-').map(Number)
+  return `${label} ${dayOfMonth} ${MONTH_LABELS[month! - 1]}`
+})
+
+const pendingExceptionDates = ref<Set<string>>(new Set())
+
+async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') {
+  if (pendingExceptionDates.value.has(date)) return
+
+  pendingExceptionDates.value.add(date)
+  try {
+    const resultaat = await $fetch<UpdateExceptionResponse>(`/api/availability/exceptions/${date}`, {
+      method: 'PATCH',
+      body: { direction }
+    })
+    exceptionsByDate.value = { ...exceptionsByDate.value }
+    if (resultaat.active) {
+      exceptionsByDate.value[resultaat.date] = resultaat.minutes
+    } else {
+      delete exceptionsByDate.value[resultaat.date]
+    }
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    console.error('[beschikbare-tijd] Kon exceptie niet aanpassen:', fout)
+  } finally {
+    pendingExceptionDates.value.delete(date)
+  }
+}
 </script>
 
 <template>
@@ -161,6 +292,90 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
           >+</button>
         </div>
       </div>
+
+      <section id="avail-calendar-section" class="avail-calendar-section">
+        <h2 id="avail-calendar-heading" class="avail-calendar-heading">Afwijkingen voor specifieke dagen</h2>
+
+        <div id="avail-calendar" class="avail-calendar">
+          <div class="avail-calendar-nav">
+            <button
+              id="avail-calendar-prev-month-button"
+              type="button"
+              class="avail-calendar-nav-button"
+              aria-label="Vorige maand"
+              :disabled="monthLoading"
+              @click="shiftMonth(-1)"
+            >‹</button>
+            <span class="avail-calendar-month-label">{{ viewMonthLabel }}</span>
+            <button
+              id="avail-calendar-next-month-button"
+              type="button"
+              class="avail-calendar-nav-button"
+              aria-label="Volgende maand"
+              :disabled="monthLoading"
+              @click="shiftMonth(1)"
+            >›</button>
+          </div>
+
+          <div class="avail-calendar-weekday-header">
+            <span v-for="label in WEEKDAY_HEADER_LABELS" :key="label">{{ label }}</span>
+          </div>
+
+          <div class="avail-calendar-grid">
+            <div v-for="n in calendarLeadingBlanks" :key="`blank-${n}`" class="avail-calendar-blank" aria-hidden="true" />
+            <button
+              v-for="day in calendarDays"
+              :key="day.date"
+              type="button"
+              class="avail-calendar-day"
+              :class="{
+                'avail-calendar-day--selected': selectedDate === day.date,
+                'avail-calendar-day--exception': day.date in exceptionsByDate
+              }"
+              :aria-label="`${day.dayOfMonth} ${viewMonthLabel}${day.date in exceptionsByDate ? ', met afwijking' : ''}`"
+              :aria-pressed="selectedDate === day.date"
+              @click="selecteerDag(day.date)"
+            >{{ day.dayOfMonth }}</button>
+          </div>
+        </div>
+
+        <div v-if="selectedDate" id="avail-exception-panel" class="avail-exception-panel">
+          <div class="avail-exception-panel-header">
+            <span id="avail-exception-date" class="avail-exception-date">{{ selectedDateLabel }}</span>
+            <button
+              id="avail-exception-close-button"
+              type="button"
+              class="avail-exception-close-button"
+              aria-label="Paneel sluiten"
+              @click="sluitPaneel"
+            >✕</button>
+          </div>
+
+          <div class="avail-exception-controls">
+            <button
+              id="avail-exception-minus-button"
+              type="button"
+              class="avail-day-button"
+              :aria-label="`Minder tijd op ${selectedDateLabel}`"
+              :disabled="effectiveMinutesFor(selectedDate) === null || effectiveMinutesFor(selectedDate)! <= 0 || pendingExceptionDates.has(selectedDate)"
+              @click="wijzigExceptie(selectedDate, 'decrease')"
+            >−</button>
+
+            <span id="avail-exception-time" class="avail-day-time" aria-live="polite">
+              {{ effectiveMinutesFor(selectedDate) !== null ? formatDuur(effectiveMinutesFor(selectedDate)!) : '' }}
+            </span>
+
+            <button
+              id="avail-exception-plus-button"
+              type="button"
+              class="avail-day-button"
+              :aria-label="`Meer tijd op ${selectedDateLabel}`"
+              :disabled="effectiveMinutesFor(selectedDate) === null || pendingExceptionDates.has(selectedDate)"
+              @click="wijzigExceptie(selectedDate, 'increase')"
+            >+</button>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 </template>
@@ -284,5 +499,152 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
   .avail-skeleton-row {
     animation: none;
   }
+}
+
+.avail-calendar-section {
+  padding: 1.5rem;
+}
+
+.avail-calendar-heading {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.avail-calendar {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.avail-calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.avail-calendar-month-label {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.avail-calendar-nav-button {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.avail-calendar-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avail-calendar-nav-button:focus-visible {
+  outline: 2px solid #a7f3d0;
+  outline-offset: 2px;
+}
+
+.avail-calendar-weekday-header,
+.avail-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+}
+
+.avail-calendar-weekday-header {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-align: center;
+}
+
+.avail-calendar-day,
+.avail-calendar-blank {
+  aspect-ratio: 1;
+}
+
+.avail-calendar-day {
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  position: relative;
+}
+
+.avail-calendar-day:hover {
+  background: #f3f4f6;
+}
+
+.avail-calendar-day--selected {
+  background: #2563eb;
+  color: #fff;
+}
+
+.avail-calendar-day--exception::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #16a34a;
+}
+
+.avail-calendar-day--selected.avail-calendar-day--exception::after {
+  background: #fff;
+}
+
+.avail-calendar-day:focus-visible {
+  outline: 2px solid #a7f3d0;
+  outline-offset: 2px;
+}
+
+.avail-exception-panel {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+}
+
+.avail-exception-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.avail-exception-date {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.avail-exception-close-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+}
+
+.avail-exception-close-button:focus-visible {
+  outline: 2px solid #a7f3d0;
+  outline-offset: 2px;
+}
+
+.avail-exception-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 </style>
