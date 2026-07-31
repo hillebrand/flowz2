@@ -117,7 +117,16 @@ const MONTH_LABELS = [
 ]
 const WEEKDAY_HEADER_LABELS = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
 
-const viewMonth = ref(new Date().toISOString().slice(0, 7)) // 'YYYY-MM', start = huidige maand
+// Lokale tijd, bewust géén `toISOString()` (code review Story 2.2): "de huidige maand"
+// is voor Evelien een lokaal begrip (Europe/Amsterdam), niet UTC — met UTC opende de
+// kalender rond lokale middernacht op een maandgrens de verkéérde maand (om 00:30 CEST
+// op 1 augustus is het pas 22:30 UTC op 31 juli). De opgeslagen datumstrings zelf
+// blijven wél UTC, dat is een ander concern (Consistency Conventions, data-laag).
+function formatMonth(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const viewMonth = ref(formatMonth(new Date())) // 'YYYY-MM', start = huidige maand
 
 const viewMonthLabel = computed(() => {
   const [year, month] = viewMonth.value.split('-').map(Number)
@@ -128,6 +137,11 @@ function shiftMonth(delta: number) {
   const [year, month] = viewMonth.value.split('-').map(Number)
   const next = new Date(Date.UTC(year!, month! - 1 + delta, 1))
   viewMonth.value = next.toISOString().slice(0, 7)
+  // Sluit het paneel bij maandwissel (code review Story 2.2): zonder dit bleef het
+  // paneel een datum uit de vorige maand tonen, en omdat `exceptionsByDate` daarna
+  // volledig door de nieuwe maand vervangen wordt, viel de getoonde waarde stilzwijgend
+  // terug op het weekpatroon i.p.v. de echte, nog bestaande exceptie.
+  selectedDate.value = null
 }
 
 interface CalendarDay {
@@ -216,11 +230,16 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
       method: 'PATCH',
       body: { direction }
     })
-    exceptionsByDate.value = { ...exceptionsByDate.value }
-    if (resultaat.active) {
-      exceptionsByDate.value[resultaat.date] = resultaat.minutes
-    } else {
-      delete exceptionsByDate.value[resultaat.date]
+    // Guard tegen een maandwissel die plaatsvond terwijl deze PATCH onderweg was (code
+    // review Story 2.2): zonder deze check zou het resultaat de state van een inmiddels
+    // andere, zichtbare maand vervuilen met een datum die daar niet in thuishoort.
+    if (resultaat.date.startsWith(viewMonth.value)) {
+      exceptionsByDate.value = { ...exceptionsByDate.value }
+      if (resultaat.active) {
+        exceptionsByDate.value[resultaat.date] = resultaat.minutes
+      } else {
+        delete exceptionsByDate.value[resultaat.date]
+      }
     }
   } catch (fout) {
     if (is401(fout)) {
@@ -254,49 +273,58 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
       Kon de beschikbare tijd niet laden. Probeer de pagina te verversen.
     </p>
 
-    <section v-else id="avail-week-section" class="avail-week-section">
-      <h1 id="avail-page-heading" class="avail-page-heading">Beschikbare tijd</h1>
-      <h2 id="avail-week-heading" class="avail-week-heading">Weekpatroon</h2>
+    <template v-else>
+      <section id="avail-week-section" class="avail-week-section">
+        <h1 id="avail-page-heading" class="avail-page-heading">Beschikbare tijd</h1>
+        <h2 id="avail-week-heading" class="avail-week-heading">Weekpatroon</h2>
 
-      <div id="avail-week-list" class="avail-week-list">
-        <div
-          v-for="day in DAYS"
-          :id="`avail-day-row-${day.key}`"
-          :key="day.key"
-          class="avail-day-row"
-        >
-          <span :id="`avail-day-label-${day.key}`" class="avail-day-label">{{ day.label }}</span>
+        <div id="avail-week-list" class="avail-week-list">
+          <div
+            v-for="day in DAYS"
+            :id="`avail-day-row-${day.key}`"
+            :key="day.key"
+            class="avail-day-row"
+          >
+            <span :id="`avail-day-label-${day.key}`" class="avail-day-label">{{ day.label }}</span>
 
-          <button
-            :id="`avail-day-minus-button-${day.key}`"
-            type="button"
-            class="avail-day-button"
-            :aria-label="`Minder tijd op ${day.label}`"
-            :disabled="!pattern || pattern[day.key] <= 0 || pendingDays.has(day.key)"
-            @click="wijzig(day.key, 'decrease')"
-          >−</button>
+            <button
+              :id="`avail-day-minus-button-${day.key}`"
+              type="button"
+              class="avail-day-button"
+              :aria-label="`Minder tijd op ${day.label}`"
+              :disabled="!pattern || pattern[day.key] <= 0 || pendingDays.has(day.key)"
+              @click="wijzig(day.key, 'decrease')"
+            >−</button>
 
-          <span
-            :id="`avail-day-time-${day.key}`"
-            class="avail-day-time"
-            aria-live="polite"
-          >{{ pattern ? formatDuur(pattern[day.key]) : '' }}</span>
+            <span
+              :id="`avail-day-time-${day.key}`"
+              class="avail-day-time"
+              aria-live="polite"
+            >{{ pattern ? formatDuur(pattern[day.key]) : '' }}</span>
 
-          <button
-            :id="`avail-day-plus-button-${day.key}`"
-            type="button"
-            class="avail-day-button"
-            :aria-label="`Meer tijd op ${day.label}`"
-            :disabled="!pattern || pendingDays.has(day.key)"
-            @click="wijzig(day.key, 'increase')"
-          >+</button>
+            <button
+              :id="`avail-day-plus-button-${day.key}`"
+              type="button"
+              class="avail-day-button"
+              :aria-label="`Meer tijd op ${day.label}`"
+              :disabled="!pattern || pendingDays.has(day.key)"
+              @click="wijzig(day.key, 'increase')"
+            >+</button>
+          </div>
         </div>
-      </div>
+      </section>
 
+      <!-- Zusje van avail-week-section, niet er ouder-kind mee (code review Story 2.2:
+           stond hier eerst genest, wat de kopjes-hiërarchie voor screenreaders verkeerd
+           voorstelde — "Afwijkingen..." leek een sub-onderdeel van "Weekpatroon"). -->
       <section id="avail-calendar-section" class="avail-calendar-section">
         <h2 id="avail-calendar-heading" class="avail-calendar-heading">Afwijkingen voor specifieke dagen</h2>
 
-        <div id="avail-calendar" class="avail-calendar">
+        <p v-if="exceptionsError" class="avail-load-error" role="alert">
+          Kon de afwijkingen niet laden. Probeer de pagina te verversen.
+        </p>
+
+        <div v-else id="avail-calendar" class="avail-calendar">
           <div class="avail-calendar-nav">
             <button
               id="avail-calendar-prev-month-button"
@@ -333,7 +361,6 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
                 'avail-calendar-day--exception': day.date in exceptionsByDate
               }"
               :aria-label="`${day.dayOfMonth} ${viewMonthLabel}${day.date in exceptionsByDate ? ', met afwijking' : ''}`"
-              :aria-pressed="selectedDate === day.date"
               @click="selecteerDag(day.date)"
             >{{ day.dayOfMonth }}</button>
           </div>
@@ -376,7 +403,7 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
           </div>
         </div>
       </section>
-    </section>
+    </template>
   </main>
 </template>
 

@@ -3,7 +3,8 @@ import {
   getOrCreateWeekPattern,
   updateExceptionForDate,
   updateWeekPatternDay,
-  type ExceptionRow
+  type ExceptionRow,
+  type UpdateExceptionResult
 } from '../../data/availability'
 import type { Weekday } from '../../data/schema'
 
@@ -50,12 +51,9 @@ export async function updateWeekPatternDayFor(
   return { day, minutes: row[day] }
 }
 
-export interface UpdateExceptionResult {
-  date: string
-  minutes: number
-  active: boolean
-}
-
+// `UpdateExceptionResult` hergebruikt (niet opnieuw gedeclareerd) uit de data-laag —
+// stond hier voorheen letterlijk dubbel (code review Story 2.2, kleinere server-interne
+// variant van Story 2.1's gedeelde-types-les).
 export async function getExceptionsForMonth(userId: string, month: string): Promise<ExceptionRow[]> {
   return dataGetExceptionsForMonth(userId, month)
 }
