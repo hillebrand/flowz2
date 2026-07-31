@@ -57,7 +57,7 @@ development_status:
   epic-2: in-progress
   2-1-weekpatroon-instellen: done
   2-2-dag-specifieke-afwijkingen-instellen: done
-  2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: backlog
+  2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: ready-for-dev
   epic-2-retrospective: optional
 
   epic-3: backlog
