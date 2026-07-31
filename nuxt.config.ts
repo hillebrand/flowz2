@@ -33,11 +33,15 @@ export default defineNuxtConfig({
       // (= browser-sessiecookie). Beide helften waren daarmee verkeerd tegelijk.
       //
       // Waarom precies 7 dagen: `prompt=consent` in de OAuth-config zorgt dat Google
-      // bij élke login een nieuw refresh-token uitgeeft, op hetzelfde moment dat de
-      // sessie wordt aangemaakt. Sessieleeftijd en refresh-tokenleeftijd lopen dus
-      // gelijk op, en één vervaltermijn dekt allebei — geen aparte tokenadministratie
-      // en geen databasequery per request nodig. Let op: die gelijkloop vervalt als
-      // `prompt=consent` ooit uit server/routes/auth/google.get.ts verdwijnt.
+      // bij élke login een nieuw refresh-token uitgeeft. Eén vervaltermijn dekt daarmee
+      // allebei — geen aparte tokenadministratie en geen databasequery per request nodig.
+      //
+      // Die gelijkloop is echter niet vanzelfsprekend, hij wordt afgedwongen: h3 zet
+      // `createdAt` alléén wanneer er nog geen sessie is, en een anonieme request mint er
+      // al één vóór de login. Zonder ingreep liep de klok dus te vroeg. `startNieuweSessie()`
+      // in server/routes/auth/google.get.ts forceert daarom een verse sessie bij het inloggen.
+      // Twee dingen breken deze aanname als ze wegvallen: `prompt=consent` uit de OAuth-config,
+      // of die reset-aanroep in `onSuccess`.
       //
       // Het venster is absoluut, niet schuivend: h3 toetst
       // `Date.now() - unsealed.createdAt > maxAge`, en `createdAt` wordt alleen bij
