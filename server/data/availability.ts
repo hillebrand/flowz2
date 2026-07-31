@@ -1,7 +1,7 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm'
 import { getDb } from './db'
 import { availableTimeExceptions, availableTimePatterns, type AvailableTimePattern, type Weekday } from './schema'
-import { weekdayFromDate } from '../../shared/utils/availability'
+import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '../../shared/utils/availability'
 
 const DELTA_MINUTES = 15
 
@@ -49,9 +49,11 @@ export async function getOrCreateWeekPattern(userId: string): Promise<AvailableT
   return row
 }
 
-// Server-side clamp op 0, niet optioneel: dit is de enige plek die de 0-ondergrens
-// écht afdwingt. De disabled-state op de client is UX-feedback, geen vangnet — een
-// rechtstreekse PATCH-call zou anders de tijd negatief kunnen maken (Story 2.1 Dev Notes).
+// Server-side clamp op 0 én op 24 uur, niet optioneel: dit is de enige plek die beide
+// grenzen écht afdwingt. De disabled-state op de client is UX-feedback, geen vangnet —
+// een rechtstreekse PATCH-call zou anders de tijd negatief of boven de 1440 minuten
+// kunnen maken (Story 2.1 Dev Notes voor de 0-ondergrens; de 24-uursgrens is later
+// toegevoegd, zie MAX_MINUTES_PER_DAY in shared/utils/availability.ts).
 //
 // Atomair op SQL-niveau i.p.v. lees-dan-schrijf in JavaScript (code review Story 2.1):
 // de vorige versie berekende de nieuwe waarde in JS uit een eerder gelezen snapshot,
@@ -69,7 +71,7 @@ export async function updateWeekPatternDay(
 
   const column = availableTimePatterns[day]
   const next = direction === 'increase'
-    ? sql`${column} + ${DELTA_MINUTES}`
+    ? sql`MIN(${MAX_MINUTES_PER_DAY}, ${column} + ${DELTA_MINUTES})`
     : sql`MAX(0, ${column} - ${DELTA_MINUTES})`
 
   const [updated] = await getDb()
@@ -150,7 +152,9 @@ export async function updateExceptionForDate(
       .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
 
     const current = existing ? existing.minutes : weekPatternMinutes
-    const next = direction === 'increase' ? current + DELTA_MINUTES : Math.max(0, current - DELTA_MINUTES)
+    const next = direction === 'increase'
+      ? Math.min(MAX_MINUTES_PER_DAY, current + DELTA_MINUTES)
+      : Math.max(0, current - DELTA_MINUTES)
 
     // AC #2: "verdwijnt de exceptie automatisch (server-side) zodra de waarde weer
     // exact gelijk is aan het weekpatroon voor die weekdag."

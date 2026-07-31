@@ -1,5 +1,14 @@
 import type { Weekday } from '../types/availability'
 
+// Plafond op 24 uur beschikbare tijd per dag (Hillebrand, 2026-07-31, ná de code review
+// van Story 2.2). Wijkt bewust af van de UX-spec's "geen bovengrens" voor zowel het
+// weekpatroon (4.1, Story 2.1) als de dag-exceptie (4.1, Story 2.2) — een dag heeft
+// hoe dan ook maar 24 uur, en zonder plafond kon een script of een vastgeplakte toets
+// er 3000+ minuten van maken. Gedeeld omdat zowel server (de enige echte afdwinging)
+// als client (de disabled-state op de plus-knoppen, UX-feedback) 'm nodig hebben —
+// zelfde asymmetrie als de bestaande 0-ondergrens.
+export const MAX_MINUTES_PER_DAY = 24 * 60
+
 // `.getUTCDay()`, nooit `.getDay()` — ISO 8601 UTC in de data-laag (Consistency
 // Conventions), en `.getDay()` gebruikt de lokale tijdzone van de runtime. Gedeeld
 // tussen server (server/data/availability.ts) en client (de exceptie-kalender): dit

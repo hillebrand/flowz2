@@ -7,7 +7,7 @@ import type {
   WeekPatternResponse,
   Weekday
 } from '#shared/types/availability'
-import { weekdayFromDate } from '#shared/utils/availability'
+import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '#shared/utils/availability'
 
 useHead({ title: 'Beschikbare tijd' })
 
@@ -307,7 +307,7 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
               type="button"
               class="avail-day-button"
               :aria-label="`Meer tijd op ${day.label}`"
-              :disabled="!pattern || pendingDays.has(day.key)"
+              :disabled="!pattern || pattern[day.key] >= MAX_MINUTES_PER_DAY || pendingDays.has(day.key)"
               @click="wijzig(day.key, 'increase')"
             >+</button>
           </div>
@@ -397,7 +397,7 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
               type="button"
               class="avail-day-button"
               :aria-label="`Meer tijd op ${selectedDateLabel}`"
-              :disabled="effectiveMinutesFor(selectedDate) === null || pendingExceptionDates.has(selectedDate)"
+              :disabled="effectiveMinutesFor(selectedDate) === null || effectiveMinutesFor(selectedDate)! >= MAX_MINUTES_PER_DAY || pendingExceptionDates.has(selectedDate)"
               @click="wijzigExceptie(selectedDate, 'increase')"
             >+</button>
           </div>
