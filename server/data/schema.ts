@@ -1,4 +1,7 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import type { Weekday } from '../../shared/types/availability'
+
+export type { Weekday }
 
 // Geen wachtwoordveld (AD-2) — User is 1:1 aan een Google-account gekoppeld
 // via de OAuth-subject-id, dat is de enige identiteit.
@@ -14,17 +17,19 @@ export const users = sqliteTable('users', {
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 
-// Engelse sleutels, ook al is de UI Nederlands (Story 2.1 Dev Notes) — consistent met hoe
-// dit project Google's technische begrippen al Engels/technisch houdt terwijl de UI
-// Nederlands blijft. Vertaal pas in `app/` naar "Maandag" etc.
-export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
-export type Weekday = (typeof WEEKDAYS)[number]
+// `Weekday` komt uit shared/types/availability.d.ts (code review Story 2.1 — voorheen
+// hier gedefinieerd en losstaand in `app/` gedupliceerd; nu één bron voor beide kanten).
+// Engelse sleutels, ook al is de UI Nederlands — consistent met hoe dit project Google's
+// technische begrippen al Engels/technisch houdt terwijl de UI Nederlands blijft.
+export const WEEKDAYS: readonly Weekday[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 // Eén rij per user (User 1:1, letterlijk), zeven kolommen — geen aparte rij per weekdag.
 // Zie Story 2.1 Dev Notes voor de argumentatie tegen een User-1:N-tabel.
 export const availableTimePatterns = sqliteTable('available_time_patterns', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id').notNull().unique(),
+  // Verwijst naar users.id (code review Story 2.1 — ontbrak eerst, liet wees-rijen
+  // achter bij het verwijderen van een User).
+  userId: text('user_id').notNull().unique().references(() => users.id),
   monday: integer('monday').notNull().default(0),
   tuesday: integer('tuesday').notNull().default(0),
   wednesday: integer('wednesday').notNull().default(0),

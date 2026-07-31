@@ -2,6 +2,7 @@ import { getRouterParam, readBody } from 'h3'
 import { updateWeekPatternDayFor } from '../../../domain/availability/week-pattern'
 import { ErrorCodes, type ErrorEnvelope } from '../../../domain/errors'
 import { WEEKDAYS, type Weekday } from '../../../data/schema'
+import type { UpdateWeekPatternDayResponse } from '../../../../shared/types/availability'
 
 function isWeekday(value: string): value is Weekday {
   return (WEEKDAYS as readonly string[]).includes(value)
@@ -17,23 +18,32 @@ interface PatchBody {
 // serialiseert naar `{statusCode, statusMessage, message, data}`, niet naar de
 // voorgeschreven `{error:{code,message}}`-vorm. Eerste keer dat deze envelope
 // daadwerkelijk gebruikt wordt in dit project.
-function validationError(event: Parameters<typeof getRouterParam>[0], message: string): ErrorEnvelope {
-  setResponseStatus(event, 400)
-  return { error: { code: ErrorCodes.ValidationError, message } }
+function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
+  setResponseStatus(event, statusCode)
+  return { error: { code, message } }
 }
 
-export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+export default defineEventHandler(async (event): Promise<UpdateWeekPatternDayResponse | ErrorEnvelope> => {
+  // `requireUserSession`/`readBody` gooien allebei h3's eigen foutvorm, niet de envelope
+  // hierboven — dat was voorheen inconsistent met de eigen claim van dit bestand
+  // (code review Story 2.1). Beide expliciet afgevangen i.p.v. laten doorgooien.
+  const session = await requireUserSession(event).catch(() => null)
+  if (!session) {
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+  }
 
   const dayParam = getRouterParam(event, 'day')
   if (!dayParam || !isWeekday(dayParam)) {
-    return validationError(event, `Ongeldige dag: "${dayParam}".`)
+    return envelope(event, 400, ErrorCodes.ValidationError, `Ongeldige dag: "${dayParam}".`)
   }
 
-  const body = await readBody<PatchBody>(event)
+  // `.catch(() => null)` i.p.v. readBody's fout laten doorgooien bij ongeldige JSON —
+  // `body` wordt dan `null`, en de bestaande `body?.direction !== ...`-check hieronder
+  // vangt dat vanzelf op via optional chaining, zonder een aparte fouttak nodig te hebben.
+  const body = await readBody<PatchBody>(event).catch(() => null)
   if (body?.direction !== 'increase' && body?.direction !== 'decrease') {
-    return validationError(event, 'direction moet "increase" of "decrease" zijn.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'direction moet "increase" of "decrease" zijn.')
   }
 
-  return updateWeekPatternDayFor(user.id, dayParam, body.direction)
+  return updateWeekPatternDayFor(session.user.id, dayParam, body.direction)
 })

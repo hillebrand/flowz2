@@ -15,6 +15,13 @@
       "when": 1785487653559,
       "tag": "0001_amazing_magdalene",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785502884038,
+      "tag": "0002_needy_guardsmen",
+      "breakpoints": true
     }
   ]
 }

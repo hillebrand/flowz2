@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import type { FetchError } from 'ofetch'
+import type { UpdateWeekPatternDayResponse, WeekPatternResponse, Weekday } from '#shared/types/availability'
+
 useHead({ title: 'Beschikbare tijd' })
 
-type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
-
-// Lokaal gedefinieerd i.p.v. gedeeld met server/data/schema.ts — dit is de enige plek
-// in `app/` die weekdagen nodig heeft, en `app/` mag toch al geen types uit `server/`
-// importeren (import-boundary, Consistency Conventions: `app/` roept alleen `server/api/`
-// aan). Als Story 2.2 dezelfde lijst nodig heeft, is dat het moment om te delen.
+// Dutch UI-labels blijven lokaal (puur presentatie); het `Weekday`-type zelf komt uit
+// shared/types/availability.d.ts — voorheen hier los gedefinieerd met de onjuiste
+// aanname dat `app/` geen types uit `server/` mag importeren (code review Story 2.1:
+// de mutatie-ownership-regel gaat over runtime-aanroepen, niet over compile-time-types,
+// en dit project heeft `shared/` al precies voor dit doel).
 const DAYS: { key: Weekday, label: string }[] = [
   { key: 'monday', label: 'Maandag' },
   { key: 'tuesday', label: 'Dinsdag' },
@@ -25,16 +27,41 @@ function formatDuur(minuten: number): string {
 
 const router = useRouter()
 function terug() {
-  router.back()
+  // Fallback nodig (code review Story 2.1): er is nog geen hamburgermenu, dus een
+  // directe URL-navigatie is momenteel de enige manier om hier te komen — dan bestaat
+  // er geen browser-historie om naar terug te gaan. `history.state.back` is wat
+  // vue-router zelf bijhoudt voor "is er een vorige entry in déze SPA-sessie".
+  if (history.state?.back) {
+    router.back()
+  } else {
+    router.push('/')
+  }
 }
 
-// `server: false`: bewust geen SSR-fetch, anders is er nooit een zichtbaar laadmoment
-// om de skeleton te tonen (AC #1 eist een skeleton, geen spinner, tijdens het laden).
-// Dit is een authenticated/privé instellingenpagina — SEO/SSR-snelheid is hier
-// irrelevant, zie 4.1-spec "SEO/Meta content: n.v.t.".
-const { data, pending } = await useFetch<{ pattern: Record<Weekday, number> }>('/api/availability/week', {
+function is401(fout: unknown): boolean {
+  return (fout as FetchError | undefined)?.statusCode === 401
+}
+
+// `server: false`: bewust geen SSR-fetch voor déze data — dit is een authenticated/
+// privé instellingenpagina, SEO/SSR-snelheid is hier irrelevant (4.1-spec: "SEO/Meta
+// content: n.v.t."). De skeleton-zichtbaarheid hangt hierna niet meer af van Nuxt's
+// interne `pending`/`status`-timing (die tijdens SSR met `server:false` nooit op
+// "pending" komt, waardoor de skeleton bij een eerdere versie ná i.p.v. vóór de content
+// verscheen — code review Story 2.1) maar rechtstreeks op `pattern === null`.
+const { data, error } = await useFetch<WeekPatternResponse>('/api/availability/week', {
   server: false
 })
+
+// Een verlopen sessie tijdens dit bezoek is niet hypothetisch — dit is exact het
+// scenario waar Story 1.3 voor gebouwd is, en dit is de eerste geauthenticeerde
+// API-call in de app die het kan blootleggen (code review Story 2.1). `server/
+// middleware/session.ts` stuurt alleen bij `Accept: text/html` een redirect naar
+// /inloggen; `useFetch`/`$fetch` sturen `Accept: */*`, dus die vangt dit hier niet af.
+watch(error, (waarde) => {
+  if (is401(waarde)) {
+    navigateTo('/inloggen')
+  }
+}, { immediate: true })
 
 // Lokale, muteerbare kopie i.p.v. rechtstreeks op `data` schrijven: `useFetch`'s
 // `data` is voor deze pagina alleen de initiële laad-bron, niet de bron van waarheid
@@ -57,15 +84,19 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
 
   pendingDays.value.add(day)
   try {
-    const resultaat = await $fetch<{ day: Weekday, minutes: number }>(`/api/availability/week/${day}`, {
+    const resultaat = await $fetch<UpdateWeekPatternDayResponse>(`/api/availability/week/${day}`, {
       method: 'PATCH',
       body: { direction }
     })
     if (pattern.value) {
       pattern.value[resultaat.day] = resultaat.minutes
     }
-  } catch (error) {
-    console.error('[beschikbare-tijd] Kon dag niet aanpassen:', error)
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    console.error('[beschikbare-tijd] Kon dag niet aanpassen:', fout)
   } finally {
     pendingDays.value.delete(day)
   }
@@ -75,18 +106,22 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
 <template>
   <main class="avail-page">
     <section id="avail-back-section" class="avail-back-section">
-      <a
+      <button
         id="avail-back-link"
-        href="#"
+        type="button"
         aria-label="Terug"
         class="avail-back-link"
-        @click.prevent="terug"
-      >← Terug</a>
+        @click="terug"
+      >← Terug</button>
     </section>
 
-    <div v-if="pending" class="avail-skeleton" aria-hidden="true">
+    <div v-if="!pattern && !error" class="avail-skeleton" aria-hidden="true">
       <div v-for="n in 7" :key="n" class="avail-skeleton-row" />
     </div>
+
+    <p v-else-if="error" class="avail-load-error" role="alert">
+      Kon de beschikbare tijd niet laden. Probeer de pagina te verversen.
+    </p>
 
     <section v-else id="avail-week-section" class="avail-week-section">
       <h1 id="avail-page-heading" class="avail-page-heading">Beschikbare tijd</h1>
@@ -121,7 +156,7 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
             type="button"
             class="avail-day-button"
             :aria-label="`Meer tijd op ${day.label}`"
-            :disabled="pendingDays.has(day.key)"
+            :disabled="!pattern || pendingDays.has(day.key)"
             @click="wijzig(day.key, 'increase')"
           >+</button>
         </div>
@@ -143,14 +178,26 @@ async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
 }
 
 .avail-back-link {
+  border: none;
+  background: none;
+  padding: 0;
   color: #2563eb;
   text-decoration: none;
   font-weight: 600;
+  font-size: 1rem;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .avail-back-link:focus-visible {
   outline: 2px solid #a7f3d0;
   outline-offset: 2px;
+}
+
+.avail-load-error {
+  padding: 1.5rem;
+  color: #b45309;
+  font-weight: 500;
 }
 
 .avail-week-section {

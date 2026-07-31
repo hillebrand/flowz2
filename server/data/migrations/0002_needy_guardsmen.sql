@@ -1,0 +1,1 @@
+ALTER TABLE `available_time_patterns` ALTER COLUMN "user_id" TO "user_id" text NOT NULL REFERENCES users(id) ON DELETE no action ON UPDATE no action;
