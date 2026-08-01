@@ -96,7 +96,12 @@
       "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *prd* -maxdepth 3)",
       "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *architecture* -maxdepth 3)",
       "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *ux* -maxdepth 3)",
-      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *epic* -maxdepth 3)"
+      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *epic* -maxdepth 3)",
+      "Bash(npx drizzle-kit *)",
+      "Bash(grep *)",
+      "Bash(npx tsx *)",
+      "Bash(echo \"started with PID $!\")",
+      "Bash(node *)"
     ]
   }
 }

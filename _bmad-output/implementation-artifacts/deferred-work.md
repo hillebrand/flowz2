@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening (2026-08-01)
+
+- **Moeilijkheid/Prioriteit-segmented-controls missen het WAI-ARIA-toetsenbordmodel dat `role="radiogroup"`/`role="radio"` belooft** — elke knop blijft individueel Tab-focusbaar, geen pijltjestoetsnavigatie, geen enkele tabstop voor de hele groep. Eerste component van dit type in de codebase. **Reden voor doorschuiven:** geen bestaand roving-tabindex-patroon in dit project om op aan te sluiten; verdient een eigen, doordachte toegankelijkheidspas i.p.v. een haastige losse patch.
+- **`GET /api/tasks/subjects` toont geen foutstatus bij een mislukte aanroep (anders dan 401)** — `taak-subject-select` blijft dan gewoon leeg-typbaar, ononderscheidbaar van een nieuwe gebruiker zonder eerdere taken. **Reden voor doorschuiven:** cosmetische degradatie, geen functionele breuk (het vak blijft vrij typbaar), lage prioriteit.
+
 ## Deferred from: code review of 2-3-huiswerk-kleur-kiezen-calendar-write-sync-service (2026-08-01)
 
 - **`hasCalendarWriteScope` synct nooit terug als de gebruiker Calendar-toegang buiten Flowz om intrekt** — als Evelien de Calendar-toegang via haar eigen Google-accountinstellingen intrekt zonder in Flowz opnieuw in te loggen, blijft `has_calendar_write_scope: 1` in de database staan en dus `needsReconsent: false`. De eerstvolgende write-sync-poging krijgt een 401, probeert te verversen met een inmiddels ongeldig refresh-token, en faalt hard — zonder enig pad terug naar een nieuwe consent-prompt. **Reden voor doorschuiven:** geen enkele intrekkingsdetectie bestaat al ergens in de OAuth-flow (niet specifiek aan deze story); oplossen vereist een bredere aanpak (bv. detecteren-bij-401 en `hasCalendarWriteScope` dan alsnog terugzetten) die buiten deze story's scope valt.

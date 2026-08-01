@@ -177,3 +177,16 @@ export async function updateExceptionForDate(
     return { date, minutes: next, active: true }
   })
 }
+
+// Gerichte per-datum-lookup (Story 3.1) — `getExceptionsForMonth` hierboven is maand-breed,
+// de scheduling-engine's dag-plaatsing heeft per kandidaatdag maar één datum nodig. `null`
+// betekent "geen exceptie voor deze datum" (de aanroeper valt dan terug op het weekpatroon),
+// niet "0 minuten" — zelfde onderscheid als elders in dit bestand.
+export async function getExceptionForDate(userId: string, date: string): Promise<number | null> {
+  const [existing] = await getDb()
+    .select({ minutes: availableTimeExceptions.minutes })
+    .from(availableTimeExceptions)
+    .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
+
+  return existing ? existing.minutes : null
+}

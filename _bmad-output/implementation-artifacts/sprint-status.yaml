@@ -61,7 +61,7 @@ development_status:
   epic-2-retrospective: optional
 
   epic-3: in-progress
-  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: ready-for-dev
+  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done
   3-2-deeltaken-automatische-tijdsom: backlog
   3-3-benodigdheden-met-auto-suggestie-per-vak: backlog
   3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: backlog

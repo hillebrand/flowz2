@@ -1,7 +1,9 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { Weekday } from '../../shared/types/availability'
+import type { Difficulty, Priority, TaskType } from '../../shared/types/tasks'
 
 export type { Weekday }
+export type { Difficulty, Priority, TaskType }
 
 // Geen wachtwoordveld (AD-2) — User is 1:1 aan een Google-account gekoppeld
 // via de OAuth-subject-id, dat is de enige identiteit.
@@ -75,3 +77,67 @@ export const availableTimeExceptions = sqliteTable('available_time_exceptions', 
 
 export type AvailableTimeException = typeof availableTimeExceptions.$inferSelect
 export type NewAvailableTimeException = typeof availableTimeExceptions.$inferInsert
+
+// `TaskType`/`Difficulty`/`Priority` komen uit shared/types/tasks.d.ts (zelfde patroon
+// als `Weekday` hierboven) — Nederlandse waarden, rechtstreeks traceerbaar naar de
+// PRD/UX-spec se eigen terminologie (Consistency Conventions: "PRD-termen blijven
+// ongewijzigd als code-namen").
+export const TASK_TYPES: readonly TaskType[] = ['proefwerk', 'so', 'opdracht', 'po']
+export const DIFFICULTY_LEVELS: readonly Difficulty[] = ['laag', 'gemiddeld', 'hoog']
+export const PRIORITY_LEVELS: readonly Priority[] = ['laag', 'gemiddeld', 'hoog']
+
+// Eerste echte inhoud van server/domain/tasks/ + scheduling/ (Story 3.1) — de Structural
+// Seed reserveerde beide mappen al sinds Story 1.1.
+//
+// `totalMinutes` bestaat al vanaf déze story (niet pas bij Story 3.2, die de deeltaken-UI
+// bouwt): de doelmoment-bufferformule (FR24) heeft nu al een waarde nodig om mee te
+// rekenen. Bij het aanmaken = `defaultSessionDuration` (één impliciete sessie, er zijn nog
+// geen deeltaken); Story 3.2 herberekent dit veld later via de deeltaken-som/handmatige
+// override. Voorkomt een tweede migratie op dezelfde tabel voor hetzelfde concept
+// (Story 3.1 Dev Notes, Open Question — Hillebrand kan dit nog terugdraaien vóór 3.2).
+export const tasks = sqliteTable('tasks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  // Geen aparte "Vak"-tabel — de architectuur se datamodel-lijst kent geen Subject-entiteit.
+  // De combo-select's suggestielijst komt uit een DISTINCT-query over deze user's eigen
+  // taken (server/api/tasks/subjects.get.ts), niet uit een foreign key.
+  subject: text('subject').notNull(),
+  title: text('title').notNull(),
+  type: text('type').$type<TaskType>().notNull(),
+  // ISO-datum (YYYY-MM-DD), UTC — zelfde vorm als `availableTimeExceptions.date`, geen
+  // tijdcomponent (een deadline is een hele kalenderdag, geen tijdstip).
+  deadline: text('deadline').notNull(),
+  difficulty: text('difficulty').$type<Difficulty>().notNull().default('gemiddeld'),
+  priority: text('priority').$type<Priority>().notNull().default('gemiddeld'),
+  defaultSessionDuration: integer('default_session_duration').notNull(),
+  totalMinutes: integer('total_minutes').notNull(),
+  description: text('description'),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type Task = typeof tasks.$inferSelect
+export type NewTask = typeof tasks.$inferInsert
+
+// Task 1:N Session (AD-3) — de planning zelf blijft een berekende weergave, deze tabel is
+// alleen de opgeslagen geplande sessie, geen losse "planning"-tabel. Geen `actualMinutes`/
+// status-kolom nu: Epic 4's sessie-runner voegt die later toe via een eigen migratie —
+// schrijfpaden voor gepland (scheduler, hier) vs. werkelijk (sessie-runner) blijven zo
+// vanaf het begin gescheiden (Consistency Conventions), niet vooruitbouwen op een nog
+// niet geanalyseerde Epic-4-behoefte.
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  // ISO 8601 UTC datetime (Consistency Conventions) — bewust een tijdstip, niet alleen
+  // een datum: de Calendar-sync-aanroep (Story 2.3's createHomeworkEvent) heeft een
+  // concreet start-/eindtijdstip nodig. Vast lokaal ankertijdstip 16:00 Europe/Amsterdam,
+  // opeenvolgend gestapeld bij meerdere sessies op dezelfde dag (Story 3.1 Dev Notes
+  // "Sessie-tijdstip", afgestemd met Hillebrand 2026-08-01).
+  startsAt: text('starts_at').notNull(),
+  plannedMinutes: integer('planned_minutes').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type Session = typeof sessions.$inferSelect
+export type NewSession = typeof sessions.$inferInsert
