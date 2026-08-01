@@ -4,7 +4,7 @@ import { ErrorCodes, type ErrorEnvelope } from '../domain/errors'
 import { DIFFICULTY_LEVELS, PRIORITY_LEVELS, TASK_TYPES, type Difficulty, type Priority, type TaskType } from '../data/schema'
 import { todayInAmsterdam } from '../../shared/utils/scheduling'
 import { isValidCalendarDate } from '../../shared/utils/availability'
-import type { CreateTaskInput, CreateTaskResponse } from '../../shared/types/tasks'
+import type { CreateTaskInput, CreateTaskResponse, SubtaskInput } from '../../shared/types/tasks'
 
 const MAX_TITLE_LENGTH = 100
 const MAX_DESCRIPTION_LENGTH = 500
@@ -14,6 +14,11 @@ const MIN_SESSION_DURATION = 5
 // doelmoment.ts's MAX_SEARCH_DAYS) en levert het geen zinnig "één zitting"-sessiemodel
 // meer op. 8 uur is ruim voldoende voor elke realistische huiswerksessie.
 const MAX_SESSION_DURATION = 480
+const MAX_SUBTASK_NAME_LENGTH = 100
+// Veiligheidsgrens (code review 2026-08-01), geen product-eis: voorkomt een ongebreidelde
+// insert-batch bij misbruik van de route; 50 deeltaken is ruim boven wat een reëel huiswerk
+// ooit heeft.
+const MAX_SUBTASKS = 50
 
 function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   setResponseStatus(event, statusCode)
@@ -86,6 +91,51 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
     }
   }
 
+  // Deeltaken (Story 3.2) — een rij zonder (getrimde) naam wordt genegeerd, niet
+  // opgeslagen, geen foutmelding (UX-spec: "impliciet, geen aparte foutmelding"). Een
+  // ingevulde tijd wordt wél gevalideerd, ook op een genegeerde rij — een ongeldige tijd
+  // is een echte invoerfout, geen "leeg gelaten veld".
+  if (body.subtasks !== undefined && !Array.isArray(body.subtasks)) {
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige deeltaken.')
+  }
+  const rawSubtasks: unknown[] = Array.isArray(body.subtasks) ? body.subtasks : []
+  if (rawSubtasks.length > MAX_SUBTASKS) {
+    return envelope(event, 400, ErrorCodes.ValidationError, `Maximaal ${MAX_SUBTASKS} deeltaken toegestaan.`)
+  }
+  const trimmedSubtasks: SubtaskInput[] = []
+  for (const raw of rawSubtasks) {
+    // Elk element moet een object zijn (code review 2026-08-01) — anders gooit `.name`/
+    // `.minutes` op bv. `null` of `5` een onafgevangen TypeError, wat een rauwe 500
+    // oplevert in plaats van een nette 400.
+    if (typeof raw !== 'object' || raw === null) {
+      return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige deeltaken.')
+    }
+    const subtask = raw as Partial<SubtaskInput>
+    if (subtask.minutes !== undefined && subtask.minutes !== null) {
+      if (typeof subtask.minutes !== 'number' || !Number.isInteger(subtask.minutes) || subtask.minutes <= 0) {
+        return envelope(event, 400, ErrorCodes.ValidationError, 'Tijd van een deeltaak moet een geldig aantal minuten zijn.')
+      }
+    }
+    const name = typeof subtask.name === 'string' ? subtask.name.trim() : ''
+    if (name.length > MAX_SUBTASK_NAME_LENGTH) {
+      return envelope(event, 400, ErrorCodes.ValidationError, `Naam van een deeltaak mag maximaal ${MAX_SUBTASK_NAME_LENGTH} tekens zijn.`)
+    }
+    if (name) {
+      trimmedSubtasks.push({ name, minutes: subtask.minutes ?? null })
+    }
+  }
+
+  // Totale-tijd-override (Story 3.2) — alleen gevalideerd als 'ie is meegestuurd; `null`/
+  // ontbrekend betekent "geen handmatige override", de server berekent dan zelf de
+  // deeltaken-som-of-terugval (server/domain/tasks/create-task.ts).
+  if (
+    body.totalMinutesOverride !== undefined
+    && body.totalMinutesOverride !== null
+    && (typeof body.totalMinutesOverride !== 'number' || !Number.isInteger(body.totalMinutesOverride) || body.totalMinutesOverride < 0)
+  ) {
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Totale benodigde tijd moet een geldig aantal minuten zijn (0 of hoger).')
+  }
+
   // Server trimt zelf (code review 2026-08-01) — de client trimt ook, maar de route is de
   // gezaghebbende laag (mutatie-ownership-regel) en moet niet op clientgedrag leunen: een
   // rechtstreekse API-aanroep zou anders gepadde waarden persisteren, incl. in de
@@ -101,7 +151,9 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
       difficulty: body.difficulty,
       priority: body.priority,
       defaultSessionDuration: body.defaultSessionDuration,
-      description: description || null
+      description: description || null,
+      subtasks: trimmedSubtasks,
+      totalMinutesOverride: body.totalMinutesOverride ?? null
     })
 
     return {

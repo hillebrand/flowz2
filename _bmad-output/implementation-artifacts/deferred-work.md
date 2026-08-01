@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 3-2-deeltaken-automatische-tijdsom (2026-08-01)
+
+- **Zero geautomatiseerde tests voor deze story** — projectbreed al herhaaldelijk gevonden en getrackt, niet uniek aan deze story; zie de eerdere entries hieronder voor dezelfde, nog steeds openstaande reden (geen testframework in het project).
+- **`number | string | null`-getypeerde refs (`totalTimeHours`/`totalTimeMinutes`/`row.minutes` in `app/pages/taak/nieuw.vue`) zijn een latente valkuil voor toekomstige code** — `Number('')` levert stil `0` op i.p.v. een fout; elke huidige call site is al bewust met de `isEmptyField()`-helper afgeschermd, maar een toekomstige uitbreiding die dat patroon niet volgt zou hier stil op stuk kunnen lopen. **Reden voor doorschuiven:** geen huidige bug, alleen een code-hygiëne-notitie voor een volgende wijziging aan dit bestand.
+
 ## Deferred from: code review of 3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening (2026-08-01)
 
 - **Moeilijkheid/Prioriteit-segmented-controls missen het WAI-ARIA-toetsenbordmodel dat `role="radiogroup"`/`role="radio"` belooft** — elke knop blijft individueel Tab-focusbaar, geen pijltjestoetsnavigatie, geen enkele tabstop voor de hele groep. Eerste component van dit type in de codebase. **Reden voor doorschuiven:** geen bestaand roving-tabindex-patroon in dit project om op aan te sluiten; verdient een eigen, doordachte toegankelijkheidspas i.p.v. een haastige losse patch.

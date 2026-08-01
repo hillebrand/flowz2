@@ -6,6 +6,14 @@ export type TaskType = 'proefwerk' | 'so' | 'opdracht' | 'po'
 export type Difficulty = 'laag' | 'gemiddeld' | 'hoog'
 export type Priority = 'laag' | 'gemiddeld' | 'hoog'
 
+// Story 3.2 — een rij zonder (getrimde) naam wordt server-side genegeerd, dus deze vorm
+// is alleen de "kandidaat"-invoer, niet noodzakelijk wat uiteindelijk als Subtask-rij
+// gepersisteerd wordt.
+export interface SubtaskInput {
+  name: string
+  minutes: number | null
+}
+
 export interface CreateTaskInput {
   subject: string
   title: string
@@ -16,6 +24,12 @@ export interface CreateTaskInput {
   priority: Priority
   defaultSessionDuration: number
   description?: string | null
+  // Story 3.2 — lege array als er geen deeltaken zijn ingevuld.
+  subtasks: SubtaskInput[]
+  // Story 3.2 — alleen niet-`null` als Evelien de totale-tijd-velden handmatig heeft
+  // aangepast (client stuurt anders bewust `null`, zodat de server zelf de
+  // deeltaken-som-of-terugval-logica toepast).
+  totalMinutesOverride: number | null
 }
 
 export interface CreateTaskResponse {

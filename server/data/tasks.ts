@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { getDb } from './db'
-import { sessions, tasks, type NewTask, type Session, type Task } from './schema'
+import { sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type Task } from './schema'
 import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
 
 export interface CreateTaskAndSessionInput {
@@ -8,19 +8,22 @@ export interface CreateTaskAndSessionInput {
   sessionDate: string
   sessionAnchorHour: number
   plannedMinutes: number
+  // Al gefilterd op een niet-lege (getrimde) naam vóór aanroep (Story 3.2, server/api/
+  // tasks.post.ts) — deze functie neemt aan dat elke rij hier een echte Subtask wordt.
+  subtasks: Pick<NewSubtask, 'name' | 'minutes'>[]
 }
 
 export interface CreateTaskAndSessionResult {
   task: Task
   session: Session
+  subtasks: Subtask[]
 }
 
-// Atomair: de Task-insert, de stapelings-som-lezing, en de Session-insert lopen allemaal
-// in dezelfde transactie (code review 2026-08-01) — sluit de TOCTOU-race die twee
-// gelijktijdige `createTask`-aanroepen voor dezelfde user/dag anders zouden hebben (twee
-// aanroepen lezen dezelfde `existingMinutes` en zouden overlappende sessies invoegen).
-// Zelfde racecategorie die `updateExceptionForDate` hieronder al met een transactie
-// oplost — hier aanvankelijk gemist, nu toegepast.
+// Atomair: de Task-insert, de stapelings-som-lezing, de Session-insert, én (Story 3.2) de
+// Subtask-inserts lopen allemaal in dezelfde transactie (code review 2026-08-01) — sluit
+// de TOCTOU-race die twee gelijktijdige `createTask`-aanroepen voor dezelfde user/dag
+// anders zouden hebben. Zelfde racecategorie die `updateExceptionForDate` in server/data/
+// availability.ts al met een transactie oplost.
 export async function createTaskAndSession(input: CreateTaskAndSessionInput): Promise<CreateTaskAndSessionResult> {
   return getDb().transaction(async (tx) => {
     const [task] = await tx.insert(tasks).values(input.task).returning()
@@ -45,17 +48,31 @@ export async function createTaskAndSession(input: CreateTaskAndSessionInput): Pr
       plannedMinutes: input.plannedMinutes
     }).returning()
 
-    return { task: task!, session: session! }
+    const insertedSubtasks = input.subtasks.length > 0
+      ? await tx.insert(subtasks).values(
+          input.subtasks.map(subtask => ({ ...subtask, taskId: task!.id }))
+        ).returning()
+      : []
+
+    return { task: task!, session: session!, subtasks: insertedSubtasks }
   })
 }
 
 // Compenserende opruiming (code review 2026-08-01): als de Calendar-sync-aanroep ná de
 // transactie hierboven alsnog faalt, is er geen manier om die transactie zelf terug te
 // draaien (de HTTP-call naar Google valt erbuiten) — dus expliciet opruimen i.p.v. een
-// weeskind-Task/Session achterlaten die de aanroeper nooit meer terugvindt.
+// weeskind-Task/Session/Subtask achter te laten. Geen `onDelete: 'cascade'` op enige FK in
+// dit schema, dus alle drie tabellen expliciet, niet alleen sessions/tasks (Story 3.2 —
+// zonder deze uitbreiding zouden Subtask-rijen alsnog een weeskind worden).
 export async function deleteTaskAndSession(taskId: string, sessionId: string): Promise<void> {
-  await getDb().delete(sessions).where(eq(sessions.id, sessionId))
-  await getDb().delete(tasks).where(eq(tasks.id, taskId))
+  // In één transactie (code review 2026-08-01): drie losse deletes lieten een venster open
+  // waarin een gelijktijdige lezer (of een crash halverwege) een deels opgeruimde Task/
+  // Session/Subtask-combinatie kon zien — dezelfde atomiciteitseis als `createTaskAndSession`.
+  await getDb().transaction(async (tx) => {
+    await tx.delete(subtasks).where(eq(subtasks.taskId, taskId))
+    await tx.delete(sessions).where(eq(sessions.id, sessionId))
+    await tx.delete(tasks).where(eq(tasks.id, taskId))
+  })
 }
 
 // Voor de sessie-tijdstip-stapeling én de dag-plaatsings-capaciteitscheck (Story 3.1):

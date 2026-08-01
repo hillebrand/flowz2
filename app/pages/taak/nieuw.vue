@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
+import type { ComponentPublicInstance } from 'vue'
 import type { CreateTaskResponse, Difficulty, Priority, TaskSubjectsResponse, TaskType } from '#shared/types/tasks'
 import { isValidCalendarDate } from '#shared/utils/availability'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
@@ -47,10 +48,150 @@ const priority = ref<Priority>('gemiddeld')
 const sessionDuration = ref<number | null>(null)
 const description = ref('')
 
+// --- Deeltaken & totale tijd (Story 3.2) ---
+// `v-model.number` laat een leeggemaakt veld de rauwe lege string `''` zijn, niet `null`
+// (empirisch bevestigd, live in de browser — een eerdere aanname hierover bleek fout, zie
+// Debug Log): elk optioneel-getal-veld hieronder moet dus met `''` én `null` rekening
+// houden, niet alleen met `null`.
+function isEmptyField(value: number | string | null): boolean {
+  return value === null || value === ''
+}
+
+interface SubtaskRow {
+  key: number
+  name: string
+  minutes: number | string | null
+  error: string
+}
+
+let nextSubtaskKey = 0
+function createSubtaskRow(): SubtaskRow {
+  return { key: nextSubtaskKey++, name: '', minutes: null, error: '' }
+}
+
+const subtaskRows = ref<SubtaskRow[]>([])
+const subtaskNameInputs = ref<Record<number, HTMLInputElement>>({})
+const subtaskTimeInputs = ref<Record<number, HTMLInputElement>>({})
+
+function setSubtaskNameRef(key: number, el: Element | ComponentPublicInstance | null) {
+  if (el instanceof HTMLInputElement) subtaskNameInputs.value[key] = el
+  else delete subtaskNameInputs.value[key]
+}
+function setSubtaskTimeRef(key: number, el: Element | ComponentPublicInstance | null) {
+  if (el instanceof HTMLInputElement) subtaskTimeInputs.value[key] = el
+  else delete subtaskTimeInputs.value[key]
+}
+
+function addSubtask() {
+  subtaskRows.value.push(createSubtaskRow())
+  const newKey = subtaskRows.value[subtaskRows.value.length - 1]!.key
+  nextTick(() => subtaskNameInputs.value[newKey]?.focus())
+}
+function removeSubtask(key: number) {
+  subtaskRows.value = subtaskRows.value.filter(row => row.key !== key)
+  delete subtaskNameInputs.value[key]
+  delete subtaskTimeInputs.value[key]
+}
+
+const totalTimeHours = ref<number | string | null>(null)
+const totalTimeMinutes = ref<number | string | null>(null)
+// "Leidend" zodra Evelien de velden zelf aanpast (AC #2/#3) — bijgehouden via een
+// expliciete vlag, gezet op een gebruikersgedreven `@input`, nooit op de programmatische
+// auto-vul hieronder (anders zou de auto-vul zichzelf meteen weer als "handmatig" merken).
+const isManualTotalTime = ref(false)
+const totalTimeHoursError = ref('')
+const totalTimeMinutesError = ref('')
+const totalTimeHoursInput = ref<HTMLInputElement>()
+const totalTimeMinutesInput = ref<HTMLInputElement>()
+
+// Telt alleen rijen met zowel een (getrimde) naam als een tijd — een naamloze rij wordt
+// bij Opslaan sowieso genegeerd (client én server), dus de live hint moet daar niet meer
+// tonen dan wat straks daadwerkelijk als totalMinutes wordt opgeslagen.
+const calculatedSumMinutes = computed(() =>
+  subtaskRows.value.reduce((sum, row) => (
+    row.name.trim() && !isEmptyField(row.minutes) ? sum + Number(row.minutes) : sum
+  ), 0)
+)
+
+watch(calculatedSumMinutes, (sum) => {
+  if (isManualTotalTime.value) return
+  if (sum > 0) {
+    totalTimeHours.value = Math.floor(sum / 60)
+    totalTimeMinutes.value = sum % 60
+  } else {
+    // Som gezakt naar 0 (code review 2026-08-01): de auto-gevulde velden anders stil laten
+    // staan zou een waarde tonen die niet meer overeenkomt met de huidige deeltaken.
+    totalTimeHours.value = null
+    totalTimeMinutes.value = null
+  }
+})
+
+function onTotalTimeInput() {
+  isManualTotalTime.value = true
+}
+
+// Reset-gebaar (AC #3, letterlijk — code review-beslissing 2026-08-01): "herstelt het
+// automatische gedrag" gebeurt alléén als alle drie de voorwaarden tegelijk gelden — beide
+// velden leeg, focus verloren, én de berekende som > 0. Bij een som van 0 op dat moment
+// blijft `isManualTotalTime` dus bewust op `true` staan (geen reset), ook al zijn de velden
+// zelf al leeg.
+function onTotalTimeBlur() {
+  if (isEmptyField(totalTimeHours.value) && isEmptyField(totalTimeMinutes.value) && calculatedSumMinutes.value > 0) {
+    isManualTotalTime.value = false
+    totalTimeHours.value = Math.floor(calculatedSumMinutes.value / 60)
+    totalTimeMinutes.value = calculatedSumMinutes.value % 60
+  }
+  totalTimeHoursError.value = validateTotalTimeHours()
+  totalTimeMinutesError.value = validateTotalTimeMinutes()
+}
+
+function formatSumHint(minutes: number): string {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return hours > 0 ? `${hours}u ${mins}min` : `${mins} min`
+}
+
+function validateSubtaskTime(row: SubtaskRow): string {
+  // Een naamloze rij wordt bij Opslaan sowieso genegeerd (client én server) — een tijd
+  // erin dan toch blokkerend valideren zou een fout tonen voor een veld dat nooit opgeslagen
+  // wordt (code review 2026-08-01).
+  if (!row.name.trim() || isEmptyField(row.minutes)) return ''
+  const value = Number(row.minutes)
+  return Number.isInteger(value) && value > 0 ? '' : 'Tijd moet een geldig aantal minuten zijn'
+}
+function validateTotalTimeHours(): string {
+  if (isEmptyField(totalTimeHours.value)) return ''
+  const value = Number(totalTimeHours.value)
+  return Number.isInteger(value) && value >= 0 ? '' : 'Vul een geldig aantal uren in (0 of hoger)'
+}
+function validateTotalTimeMinutes(): string {
+  if (isEmptyField(totalTimeMinutes.value)) return ''
+  const value = Number(totalTimeMinutes.value)
+  return Number.isInteger(value) && value >= 0 && value <= 59 ? '' : 'Minuten moet tussen 0 en 59 zijn'
+}
+
+// Valideert alle deeltaak- en totale-tijd-velden, geeft `true` terug als alles geldig is.
+function validateSubtasksAndTotalTime(): boolean {
+  let valid = true
+  for (const row of subtaskRows.value) {
+    row.error = validateSubtaskTime(row)
+    if (row.error) valid = false
+  }
+  totalTimeHoursError.value = validateTotalTimeHours()
+  totalTimeMinutesError.value = validateTotalTimeMinutes()
+  if (totalTimeHoursError.value || totalTimeMinutesError.value) valid = false
+  return valid
+}
+
 const isDirty = computed(() =>
   subject.value !== '' || title.value !== '' || type.value !== '' || deadline.value !== ''
   || difficulty.value !== 'gemiddeld' || priority.value !== 'gemiddeld'
   || sessionDuration.value !== null || description.value !== ''
+  // Alleen rijen met écht ingevulde inhoud tellen als "dirty" (code review 2026-08-01) — een
+  // toegevoegde-maar-nog-lege rij (bv. per ongeluk op "+ Deeltaak toevoegen" geklikt) is geen
+  // reden om straks een weg-navigeer-waarschuwing te tonen.
+  || subtaskRows.value.some(row => row.name.trim() !== '' || !isEmptyField(row.minutes))
+  || !isEmptyField(totalTimeHours.value) || !isEmptyField(totalTimeMinutes.value)
 )
 
 // --- Validatie (UX-spec 2.1) ---
@@ -163,16 +304,48 @@ async function onSubmit() {
   errors.deadline = validateDeadline()
   errors.sessionDuration = validateSessionDuration()
   errors.description = validateDescription()
+  const subtasksValid = validateSubtasksAndTotalTime()
 
   const firstInvalid = fieldOrder.find(field => errors[field])
   if (firstInvalid) {
     fieldRefs[firstInvalid].value?.focus()
     return
   }
+  if (!subtasksValid) {
+    const firstInvalidSubtask = subtaskRows.value.find(row => row.error)
+    if (firstInvalidSubtask) {
+      subtaskTimeInputs.value[firstInvalidSubtask.key]?.focus()
+      return
+    }
+    if (totalTimeHoursError.value) {
+      totalTimeHoursInput.value?.focus()
+      return
+    }
+    if (totalTimeMinutesError.value) {
+      totalTimeMinutesInput.value?.focus()
+      return
+    }
+  }
 
   saving.value = true
   saveError.value = ''
   try {
+    // Lege-naam-rijen niet meesturen — spiegelt de server-side filtering (die ze toch zou
+    // negeren), en `totalMinutesOverride` alleen meesturen als Evelien de velden zelf heeft
+    // aangepast; anders `null`, zodat de server de deeltaken-som-of-terugval-logica toepast
+    // (server/domain/tasks/create-task.ts, code review-principe: server is gezaghebbend).
+    const trimmedSubtasks = subtaskRows.value
+      .filter(row => row.name.trim())
+      .map(row => ({ name: row.name.trim(), minutes: isEmptyField(row.minutes) ? null : Number(row.minutes) }))
+    // Beide velden leeg → altijd `null` sturen, ook als `isManualTotalTime` nog `true` staat
+    // (code review 2026-08-01): Enter indrukken om te submitten kan de `@blur`-reset
+    // overslaan, anders zou dat een expliciete override van 0 minuten opslaan.
+    const totalTimeIsEmpty = isEmptyField(totalTimeHours.value) && isEmptyField(totalTimeMinutes.value)
+    const totalMinutesOverride = isManualTotalTime.value && !totalTimeIsEmpty
+      ? (isEmptyField(totalTimeHours.value) ? 0 : Number(totalTimeHours.value)) * 60
+        + (isEmptyField(totalTimeMinutes.value) ? 0 : Number(totalTimeMinutes.value))
+      : null
+
     await $fetch<CreateTaskResponse>('/api/tasks', {
       method: 'POST',
       body: {
@@ -183,7 +356,9 @@ async function onSubmit() {
         difficulty: difficulty.value,
         priority: priority.value,
         defaultSessionDuration: sessionDuration.value,
-        description: description.value.trim() || null
+        description: description.value.trim() || null,
+        subtasks: trimmedSubtasks,
+        totalMinutesOverride
       }
     })
 
@@ -344,6 +519,104 @@ async function onSubmit() {
         </div>
       </section>
 
+      <!-- Zusje van taak-core-section/taak-extra-section/taak-action-section, niet er
+           kind van (Story 2.2's code review vond precies deze nestingsfout bij een
+           eerdere sectie-toevoeging elders — hier vooraf vermeden). -->
+      <section id="taak-scope-section" class="taak-scope-section">
+        <h2 id="taak-subtasks-heading" class="taak-subtasks-heading">Deeltaken</h2>
+
+        <div id="taak-subtasks-list" class="taak-subtasks-list">
+          <div v-for="row in subtaskRows" :key="row.key" class="taak-subtask-row">
+            <input
+              :id="`taak-subtask-name-input-${row.key}`"
+              :ref="(el) => setSubtaskNameRef(row.key, el)"
+              v-model="row.name"
+              type="text"
+              class="taak-input"
+              placeholder="Naam van deeltaak"
+              aria-label="Naam van deeltaak"
+              :disabled="saving"
+            >
+            <input
+              :id="`taak-subtask-time-input-${row.key}`"
+              :ref="(el) => setSubtaskTimeRef(row.key, el)"
+              v-model.number="row.minutes"
+              type="number"
+              class="taak-input taak-input--narrow"
+              placeholder="min (optioneel)"
+              aria-label="Tijd van deeltaak in minuten"
+              min="1"
+              :disabled="saving"
+              :aria-invalid="!!row.error"
+              @blur="row.error = validateSubtaskTime(row)"
+            >
+            <button
+              :id="`taak-subtask-remove-button-${row.key}`"
+              type="button"
+              class="taak-subtask-remove-button"
+              aria-label="Deeltaak verwijderen"
+              :disabled="saving"
+              @click="removeSubtask(row.key)"
+            >✕</button>
+            <p v-if="row.error" class="taak-error" role="alert">{{ row.error }}</p>
+          </div>
+        </div>
+
+        <button
+          id="taak-subtask-add-button"
+          type="button"
+          class="taak-subtask-add-button"
+          :disabled="saving"
+          @click="addSubtask"
+        >+ Deeltaak toevoegen</button>
+
+        <div class="taak-field taak-total-time-row">
+          <span class="taak-label">Totale benodigde tijd</span>
+          <div class="taak-total-time-inputs">
+            <input
+              id="taak-total-time-hours-input"
+              ref="totalTimeHoursInput"
+              v-model.number="totalTimeHours"
+              type="number"
+              class="taak-input taak-input--narrow"
+              placeholder="uren"
+              aria-label="Totale benodigde tijd, uren"
+              min="0"
+              :disabled="saving"
+              :aria-invalid="!!totalTimeHoursError"
+              @input="onTotalTimeInput"
+              @blur="onTotalTimeBlur"
+            >
+            <span class="taak-total-time-separator">u</span>
+            <input
+              id="taak-total-time-minutes-input"
+              ref="totalTimeMinutesInput"
+              v-model.number="totalTimeMinutes"
+              type="number"
+              class="taak-input taak-input--narrow"
+              placeholder="minuten"
+              aria-label="Totale benodigde tijd, minuten"
+              min="0"
+              max="59"
+              :disabled="saving"
+              :aria-invalid="!!totalTimeMinutesError"
+              @input="onTotalTimeInput"
+              @blur="onTotalTimeBlur"
+            >
+            <span class="taak-total-time-separator">min</span>
+          </div>
+          <p v-if="totalTimeHoursError" class="taak-error" role="alert">{{ totalTimeHoursError }}</p>
+          <p v-if="totalTimeMinutesError" class="taak-error" role="alert">{{ totalTimeMinutesError }}</p>
+        </div>
+
+        <p
+          v-if="calculatedSumMinutes > 0"
+          id="taak-total-time-calculated-hint"
+          class="taak-total-time-calculated-hint"
+          aria-live="polite"
+        >Som van deeltaken: {{ formatSumHint(calculatedSumMinutes) }}</p>
+      </section>
+
       <!-- Zusje van taak-core-section, niet er kind van (Story 2.2's code review vond
            precies deze nestingsfout bij een eerdere sectie-toevoeging elders). -->
       <section id="taak-extra-section" class="taak-extra-section">
@@ -441,12 +714,83 @@ async function onSubmit() {
 }
 
 .taak-core-section,
+.taak-scope-section,
 .taak-extra-section,
 .taak-action-section {
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.taak-subtasks-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.taak-subtasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.taak-subtask-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.taak-subtask-remove-button {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+}
+
+.taak-subtask-remove-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.taak-subtask-add-button {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.taak-subtask-add-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.taak-total-time-row {
+  margin-top: 0.5rem;
+}
+
+.taak-total-time-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.taak-total-time-separator {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.taak-total-time-calculated-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #6b7280;
 }
 
 .taak-field {

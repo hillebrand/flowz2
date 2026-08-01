@@ -141,3 +141,21 @@ export const sessions = sqliteTable('sessions', {
 
 export type Session = typeof sessions.$inferSelect
 export type NewSession = typeof sessions.$inferInsert
+
+// Task 1:N Subtask (AD-3) — telt mee als scheduling-input via `tasks.totalMinutes` (Story
+// 3.2). Geen `status`-kolom nu (Niet gestart/Uitgesteld/Afgerond, nodig voor Epic 4/Story
+// 5.3) — zelfde redenering als `sessions.actualMinutes` hierboven: niet vooruitbouwen op
+// een nog niet geanalyseerde behoefte, een latere migratie is goedkoop. `name` is altijd
+// gevuld: een rij zonder (getrimde) naam wordt vóór opslag weggefilterd (server-side, zie
+// server/api/tasks.post.ts), nooit als lege `Subtask`-rij gepersisteerd.
+export const subtasks = sqliteTable('subtasks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  name: text('name').notNull(),
+  minutes: integer('minutes'),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type Subtask = typeof subtasks.$inferSelect
+export type NewSubtask = typeof subtasks.$inferInsert
