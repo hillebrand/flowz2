@@ -10,6 +10,17 @@ export const users = sqliteTable('users', {
   googleSubjectId: text('google_subject_id').notNull().unique(),
   calendarAccessToken: text('calendar_access_token').notNull(),
   calendarRefreshToken: text('calendar_refresh_token').notNull(),
+  // Google's `colorId` (1-11), nullable — "leeg laten" betekent geen sync, Flowz blijft
+  // alleen-lezend (Story 2.3 AC #4). Bewust op `users`, niet op `availableTimePatterns`:
+  // de write-sync-service heeft dit samen met de tokens en de scope-vlag hieronder in één
+  // aanroep nodig, en die tokens staan al hier — één lookup i.p.v. een join over twee
+  // tabellen. UI-co-locatie op dezelfde instellingenpagina hoeft de DB-co-locatie niet te
+  // dicteren (Story 2.3 Dev Notes).
+  homeworkCalendarColorId: integer('homework_calendar_color_id'),
+  // SQLite kent geen echt boolean-type; integer 0/1 is dit projects eerste zo'n geval.
+  // Afgeleid uit de daadwerkelijk door Google toegekende `tokens.scope` bij login/
+  // her-consent (Story 2.3) — nooit uit wat er slechts is aangevraagd.
+  hasCalendarWriteScope: integer('has_calendar_write_scope').notNull().default(0),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

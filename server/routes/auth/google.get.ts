@@ -1,4 +1,4 @@
-import { sendRedirect } from 'h3'
+import { getQuery, sendRedirect } from 'h3'
 import { Resource } from 'sst'
 import { loginWithGoogle } from '../../domain/auth/users'
 
@@ -8,6 +8,14 @@ import { loginWithGoogle } from '../../domain/auth/users'
 const GOOGLE_OPENID_CONFIG = 'https://accounts.google.com/.well-known/openid-configuration'
 
 const LOGIN_ERROR_PATH = '/inloggen?login_error=1'
+
+// Standaard blijft lees-only (least-privilege) — alleen de expliciete upgrade-aanroep
+// (`?scope=write`, vanuit de kleur-select in Story 2.3) vraagt volledige lees-/schrijf-
+// toegang aan. `calendar` is een superset van `calendar.readonly`, dus nooit allebei
+// tegelijk aanvragen.
+const CALENDAR_READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+const CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar'
+type OAuthScopeVariant = 'readonly' | 'write'
 
 const SESSIE_COOKIE = 'nuxt-session'
 
@@ -78,17 +86,21 @@ async function startNieuweSessie(event: Parameters<typeof setUserSession>[0]) {
 //   3. hij typeert `tokens` als `any`, dus de typechecker dekte hier niets af.
 // De oidc-provider doet state- én nonce-validatie, voegt PKCE toe, handelt `query.error`
 // expliciet af, en levert een getypeerde `OidcTokens` waarin `refresh_token` terecht optioneel is.
-let _handler: ReturnType<typeof defineOAuthOidcEventHandler> | undefined
+//
+// Twee gememoïseerde varianten i.p.v. één (Story 2.3) — de scope moet nu per aanroep
+// kunnen verschillen (gewone login vs. write-scope-upgrade vanuit de kleur-select).
+const _handlers: Partial<Record<OAuthScopeVariant, ReturnType<typeof defineOAuthOidcEventHandler>>> = {}
 
-function getHandler() {
-  if (!_handler) {
+function getHandler(variant: OAuthScopeVariant) {
+  if (!_handlers[variant]) {
     // Lazy opgebouwd, net als `getDb()`: `Resource.*` gooit bij een inactieve of ontbrekende
     // SST-link, en op module-scope trok dat de héle bundel mee — inclusief `/inloggen` zelf,
     // want `nitro.inlineDynamicImports` bundelt alles samen. Nu faalt alleen de loginroute,
     // met een nette foutstate, en blijft de rest van de app overeind.
     const siteUrl = useRuntimeConfig().public.siteUrl
+    const calendarScope = variant === 'write' ? CALENDAR_WRITE_SCOPE : CALENDAR_READONLY_SCOPE
 
-    _handler = defineOAuthOidcEventHandler({
+    _handlers[variant] = defineOAuthOidcEventHandler({
       config: {
         clientSecret: Resource.GoogleOAuthClientSecret.value,
         openidConfig: GOOGLE_OPENID_CONFIG,
@@ -96,14 +108,23 @@ function getHandler() {
         // CloudFront + Lambda Function URL (zie nuxt.config.ts). Leeg op
         // localhost: dan valt nuxt-auth-utils terug op detectie, wat daar klopt.
         ...(siteUrl ? { redirectURL: `${siteUrl}/auth/google` } : {}),
-        // Calendar-scope: alleen lezen in deze story (schrijf-scope volgt in Story 2.3).
-        scope: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/calendar.readonly'],
+        scope: ['openid', 'email', 'profile', calendarScope],
         params: {
-          // access_type=offline + prompt=consent: nodig om daadwerkelijk een refresh-token
-          // terug te krijgen (Google geeft die anders alleen bij de allereerste consent).
           authorization_endpoint: {
+            // access_type=offline + prompt=consent: nodig om daadwerkelijk een refresh-token
+            // terug te krijgen (Google geeft die anders alleen bij de allereerste consent).
             access_type: 'offline',
-            prompt: 'consent'
+            prompt: 'consent',
+            // Zonder dit zou een latere, gewone readonly-login een token teruggeven dat
+            // ALLEEN de nu-aangevraagde (smallere) scope weerspiegelt — waardoor
+            // `hasCalendarWriteScope` hieronder ten onrechte terug naar false zou vallen,
+            // ook al staat de bredere toestemming nog gewoon bij Google geregistreerd.
+            // Google's eigen aanbevolen mechanisme voor incrementele autorisatie: dit
+            // voegt eerder toegekende scopes automatisch samen in de respons, dus
+            // `tokens.scope` reflecteert altijd de wérkelijke cumulatieve toestemming
+            // (code review-achtige controle vooraf, web-onderzoek juli 2026, zie
+            // Dev Notes voor de bronvermelding).
+            include_granted_scopes: 'true'
           }
         }
       },
@@ -117,10 +138,16 @@ function getHandler() {
           return sendRedirect(event, LOGIN_ERROR_PATH)
         }
 
+        // Afgeleid uit de daadwerkelijk toegekende scopes in de tokenrespons, niet uit wat
+        // er is aangevraagd — Google kan minder (of, dankzij `include_granted_scopes`,
+        // cumulatief meer) teruggeven dan gevraagd.
+        const hasCalendarWriteScope = (tokens.scope ?? '').split(' ').includes(CALENDAR_WRITE_SCOPE)
+
         const dbUser = await loginWithGoogle({
           googleSubjectId: user.sub,
           calendarAccessToken: tokens.access_token,
-          calendarRefreshToken: tokens.refresh_token
+          calendarRefreshToken: tokens.refresh_token,
+          hasCalendarWriteScope
         })
 
         await startNieuweSessie(event)
@@ -144,7 +171,7 @@ function getHandler() {
     })
   }
 
-  return _handler
+  return _handlers[variant]!
 }
 
 // Vangnet om de hele keten heen. De library laat uitzonderingen namelijk ontsnappen:
@@ -153,8 +180,16 @@ function getHandler() {
 // Hetzelfde geldt voor een mislukte userinfo-fetch en voor elke databasefout in `onSuccess`.
 // Zonder deze catch werd dat allemaal een rauwe 500 i.p.v. de foutstate die AC #2 eist.
 export default defineEventHandler(async (event) => {
+  // `?scope=write` alleen relevant op de éérste leg (het bouwen van de autorisatie-URL —
+  // de enige plek waar de oidc-handler `config.scope` daadwerkelijk gebruikt). Op de
+  // callback-leg (`?code=...`) ontbreekt deze queryparam sowieso (Google echoot 'm niet
+  // terug), maar dat is onschadelijk: state/nonce/PKCE lopen via cookies, niet via
+  // handler-instance-lokale state, dus het maakt niet uit welke van de twee
+  // gememoïseerde varianten de callback verwerkt.
+  const variant: OAuthScopeVariant = getQuery(event).scope === 'write' ? 'write' : 'readonly'
+
   try {
-    return await getHandler()(event)
+    return await getHandler(variant)(event)
   } catch (error) {
     console.error('[auth] Onverwachte fout in de Google-loginflow:', error)
     return sendRedirect(event, LOGIN_ERROR_PATH)

@@ -7,6 +7,7 @@ import type {
   WeekPatternResponse,
   Weekday
 } from '#shared/types/availability'
+import type { HomeworkCalendarColorState, UpdateHomeworkCalendarColorResponse } from '#shared/types/settings'
 import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '#shared/utils/availability'
 
 useHead({ title: 'Beschikbare tijd' })
@@ -251,6 +252,105 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
     pendingExceptionDates.value.delete(date)
   }
 }
+
+// --- Huiswerk-kleur (Story 2.3) ---
+
+// Google Calendar's 11 vaste kleuren + hun officiële hex-waarden (Colors-API), Nederlandse
+// namen per de UX-spec (4.1, sectie "Huiswerk in Agenda") — zelfde volgorde/mapping als de
+// tabel in de story's Dev Notes, hier alleen voor de swatch, de opgeslagen waarde blijft
+// gewoon het integer-`colorId`.
+interface HomeworkColorOption {
+  id: number
+  label: string
+  hex: string
+}
+
+// Hexwaarden gecorrigeerd tegen Google's officiële Colors-API (code review 2026-08-01) —
+// colorId 5/6/11 weken subtiel af (bv. `#f6c026` i.p.v. het echte `#F6BF26`).
+const HOMEWORK_COLORS: HomeworkColorOption[] = [
+  { id: 1, label: 'Lavendel', hex: '#7986cb' },
+  { id: 2, label: 'Salie', hex: '#33b679' },
+  { id: 3, label: 'Druif', hex: '#8e24aa' },
+  { id: 4, label: 'Flamingo', hex: '#e67c73' },
+  { id: 5, label: 'Banaan', hex: '#f6bf26' },
+  { id: 6, label: 'Mandarijn', hex: '#f4511e' },
+  { id: 7, label: 'Pauw', hex: '#039be5' },
+  { id: 8, label: 'Grafiet', hex: '#616161' },
+  { id: 9, label: 'Bosbes', hex: '#3f51b5' },
+  { id: 10, label: 'Basilicum', hex: '#0b8043' },
+  { id: 11, label: 'Tomaat', hex: '#d50000' }
+]
+
+// Kleur is verplicht (productbeslissing Hillebrand, 2026-08-01, keert de oorspronkelijke
+// "Verplicht: Nee" om — zie de story's Change Log). `null` betekent hier uitsluitend de
+// korte, voorbijgaande toestand vóórdat de rehydratie-fetch hieronder is teruggekomen, of
+// vóórdat een gebruiker deze pagina voor het eerst bezoekt — niet een actieve keuze.
+const homeworkColorId = ref<number | null>(null)
+const homeworkColorPending = ref(false)
+const homeworkColorError = ref<string | null>(null)
+
+// Rehydratie bij het laden (code review 2026-08-01) — zonder dit toonde de select na elke
+// paginaverversing weer de "kies een kleur"-placeholder, ook al had de gebruiker al
+// gekozen. Werd relevanter zodra kleur verplicht werd. `server: false`, zelfde reden als
+// de andere fetches op deze pagina.
+const { data: homeworkColorData, error: homeworkColorLoadError } = await useFetch<HomeworkCalendarColorState>(
+  '/api/settings/homework-calendar-color',
+  { server: false }
+)
+
+watch(homeworkColorLoadError, (waarde) => {
+  if (is401(waarde)) {
+    navigateTo('/inloggen')
+  }
+}, { immediate: true })
+
+watch(homeworkColorData, (waarde) => {
+  if (waarde) homeworkColorId.value = waarde.colorId
+}, { immediate: true })
+
+const homeworkColorSwatch = computed(() => {
+  if (homeworkColorId.value === null) return null
+  return HOMEWORK_COLORS.find(c => c.id === homeworkColorId.value)?.hex ?? null
+})
+
+async function wijzigHomeworkColor(event: Event) {
+  if (homeworkColorPending.value) return
+
+  const select = event.target as HTMLSelectElement
+  const waarde = Number(select.value)
+  homeworkColorError.value = null
+
+  homeworkColorPending.value = true
+  try {
+    const resultaat = await $fetch<UpdateHomeworkCalendarColorResponse>('/api/settings/homework-calendar-color', {
+      method: 'PATCH',
+      body: { colorId: waarde }
+    })
+    homeworkColorId.value = resultaat.colorId
+
+    if (resultaat.needsReconsent) {
+      // Volledige paginanavigatie, geen fetch — consistent met hoe dit project OAuth-
+      // redirects altijd als echte browser-navigatie behandelt (zie `login-google-button`
+      // in inloggen.vue). De kleurkeuze staat al opgeslagen: de PATCH hierboven liep eerst.
+      window.location.href = '/auth/google?scope=write'
+    }
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    // De browser heeft de <select> al native naar de aangeklikte optie gezet, vóórdat
+    // deze handler draaide — omdat `homeworkColorId` bij een mislukte PATCH niet wijzigt,
+    // forceert Vue's `:value`-binding geen terugzet (dezelfde expressie levert dezelfde
+    // waarde op). Zonder dit expliciete herstel toont de select dus een keuze die nooit
+    // is opgeslagen (code review 2026-08-01).
+    select.value = homeworkColorId.value === null ? '' : String(homeworkColorId.value)
+    homeworkColorError.value = 'Kon de kleur niet opslaan. Probeer het opnieuw.'
+    console.error('[beschikbare-tijd] Kon huiswerk-agendakleur niet opslaan:', fout)
+  } finally {
+    homeworkColorPending.value = false
+  }
+}
 </script>
 
 <template>
@@ -402,6 +502,47 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
             >+</button>
           </div>
         </div>
+      </section>
+
+      <!-- Zusje van avail-calendar-section, niet er ouder-kind mee (Story 2.2's code
+           review vond precies deze nestingsfout bij de vorige sectie-toevoeging). -->
+      <section id="avail-homework-sync-section" class="avail-homework-sync-section">
+        <h2 id="avail-homework-sync-heading" class="avail-homework-sync-heading">Huiswerk in je agenda</h2>
+        <p id="avail-homework-sync-description" class="avail-homework-sync-description">
+          Kies een kleur voor je huiswerk-afspraken. Flowz zet geplande sessies met die kleur in je Google Calendar,
+          en herkent ze dan automatisch — zodat je nooit meer een melding krijgt over een conflict dat er eigenlijk
+          geen is.
+        </p>
+
+        <div class="avail-homework-color-row">
+          <span
+            v-if="homeworkColorSwatch"
+            class="avail-homework-color-swatch"
+            :style="{ backgroundColor: homeworkColorSwatch }"
+            aria-hidden="true"
+          />
+          <label for="avail-homework-color-select" class="avail-homework-color-label">Kleur voor huiswerk</label>
+          <select
+            id="avail-homework-color-select"
+            class="avail-homework-color-select"
+            :disabled="homeworkColorPending"
+            :value="homeworkColorId === null ? '' : String(homeworkColorId)"
+            @change="wijzigHomeworkColor"
+          >
+            <!-- Kleur is verplicht (2026-08-01): geen "Geen kleur"-optie meer. Deze
+                 placeholder is disabled en dus nooit een geldige, aanklikbare keuze — hij
+                 verschijnt alleen zolang homeworkColorId nog null is (rehydratie loopt nog,
+                 of eerste bezoek ooit). -->
+            <option value="" disabled>Kies een kleur</option>
+            <option v-for="color in HOMEWORK_COLORS" :key="color.id" :value="String(color.id)">
+              {{ color.label }}
+            </option>
+          </select>
+        </div>
+
+        <p v-if="homeworkColorError" id="avail-homework-color-error" class="avail-homework-color-error" role="alert">
+          {{ homeworkColorError }}
+        </p>
       </section>
     </template>
   </main>
@@ -673,5 +814,65 @@ async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') 
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.avail-homework-sync-section {
+  padding: 1.5rem;
+}
+
+.avail-homework-sync-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.avail-homework-sync-description {
+  margin: 0 0 1rem;
+  color: #4b5563;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.avail-homework-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.avail-homework-color-swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.avail-homework-color-label {
+  font-size: 0.875rem;
+}
+
+.avail-homework-color-select {
+  margin-left: auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.avail-homework-color-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.avail-homework-color-select:focus-visible {
+  outline: 2px solid #a7f3d0;
+  outline-offset: 2px;
+}
+
+.avail-homework-color-error {
+  margin: 0.5rem 0 0;
+  color: #b45309;
+  font-size: 0.8125rem;
 }
 </style>

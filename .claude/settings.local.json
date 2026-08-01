@@ -88,7 +88,15 @@
       "Bash(node _sessiontest.mjs)",
       "Bash(awk '/export async function clearUserSession/,/^}/' node_modules/nuxt-auth-utils/dist/runtime/server/utils/session.js)",
       "Bash(awk '/^async function clearSession|^function clearSession/,/^}/' node_modules/h3/dist/index.mjs)",
-      "Bash(awk '/^function _getReqHeader/,/^}/' node_modules/h3/dist/index.mjs)"
+      "Bash(awk '/^function _getReqHeader/,/^}/' node_modules/h3/dist/index.mjs)",
+      "Bash(node -e \"console.log\\(require\\('/Users/hillebrand/IdeaProjects/flowz/node_modules/nuxt/package.json'\\).version\\)\")",
+      "Bash(node -e ' *)",
+      "WebFetch(domain:developers.google.com)",
+      "Bash(env)",
+      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *prd* -maxdepth 3)",
+      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *architecture* -maxdepth 3)",
+      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *ux* -maxdepth 3)",
+      "Bash(find /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts -iname *epic* -maxdepth 3)"
     ]
   }
 }
