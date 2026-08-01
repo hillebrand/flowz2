@@ -112,6 +112,16 @@ export const tasks = sqliteTable('tasks', {
   defaultSessionDuration: integer('default_session_duration').notNull(),
   totalMinutes: integer('total_minutes').notNull(),
   description: text('description'),
+  // Story 3.3 — JSON-array van strings, geen aparte "Need"-tabel (de architectuur se
+  // datamodel-lijst kent geen eigen entiteit hiervoor, zelfde redenering als `subject`
+  // hierboven). Eerste JSON-getypeerde kolom in dit project; Drizzle's `{ mode: 'json' }`
+  // serialiseert/deserialiseert automatisch. `.default([])` is hier — in tegenstelling tot
+  // `totalMinutes`/`defaultSessionDuration` hierboven — wél nodig: die kolommen hoorden bij
+  // de oorspronkelijke `CREATE TABLE`, deze komt via een latere `ALTER TABLE ADD COLUMN`
+  // op een tabel die al rijen kan bevatten, en SQLite staat `NOT NULL` zonder non-null
+  // `DEFAULT` daar niet voor toe (zelfde reden als `hasCalendarWriteScope`.default(0)
+  // hierboven).
+  needs: text('needs', { mode: 'json' }).$type<string[]>().notNull().default([]),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

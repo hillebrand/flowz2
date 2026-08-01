@@ -30,6 +30,8 @@ export interface CreateTaskInput {
   // aangepast (client stuurt anders bewust `null`, zodat de server zelf de
   // deeltaken-som-of-terugval-logica toepast).
   totalMinutesOverride: number | null
+  // Story 3.3 — lege array als er geen benodigdheden zijn ingevuld.
+  needs: string[]
 }
 
 export interface CreateTaskResponse {
@@ -47,4 +49,10 @@ export interface CreateTaskResponse {
 
 export interface TaskSubjectsResponse {
   subjects: string[]
+}
+
+// Story 3.3 — databron voor `taak-needs-input`'s auto-suggestie, afgeleid server-side van
+// eerdere taken voor hetzelfde vak.
+export interface NeedsSuggestionsResponse {
+  suggestions: string[]
 }

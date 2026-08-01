@@ -100,3 +100,24 @@ export async function getDistinctSubjectsForUser(userId: string): Promise<string
 
   return rows.map(row => row.subject)
 }
+
+// Voor `taak-needs-input`'s auto-suggestie (Story 3.3) — exact-match op `subject` (zelfde
+// beperking als `getDistinctSubjectsForUser` hierboven: "Wiskunde" vs. "wiskunde" leveren
+// losse, niet-overlappende resultaten op, geen fuzzy matching). Dedupliceert op de exacte,
+// getrimde string — geen case-insensitive normalisatie.
+export async function getNeedsSuggestionsForSubject(userId: string, subject: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ needs: tasks.needs })
+    .from(tasks)
+    .where(and(eq(tasks.userId, userId), eq(tasks.subject, subject)))
+
+  const seen = new Set<string>()
+  for (const row of rows) {
+    for (const need of row.needs) {
+      const trimmed = need.trim()
+      if (trimmed) seen.add(trimmed)
+    }
+  }
+
+  return [...seen]
+}

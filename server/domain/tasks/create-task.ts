@@ -24,6 +24,9 @@ export interface CreateTaskInput {
   // Story 3.2 — alleen niet-`null` als Evelien de totale-tijd-velden handmatig heeft
   // aangepast (client stuurt anders bewust `null` mee, zie shared/types/tasks.d.ts).
   totalMinutesOverride: number | null
+  // Story 3.3 — al server-side getrimd/gefilterd/gededupliceerd vóór aanroep
+  // (server/api/tasks.post.ts), dus elk element hier is een echte, opslaanbare waarde.
+  needs: string[]
 }
 
 // Vast lokaal ankertijdstip, opeenvolgend stapelen bij meerdere sessies op dezelfde dag —
@@ -79,7 +82,8 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
       priority: input.priority,
       defaultSessionDuration: input.defaultSessionDuration,
       totalMinutes,
-      description: input.description
+      description: input.description,
+      needs: input.needs
     },
     sessionDate,
     sessionAnchorHour: SESSION_ANCHOR_HOUR,

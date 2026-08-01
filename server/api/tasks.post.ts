@@ -19,6 +19,12 @@ const MAX_SUBTASK_NAME_LENGTH = 100
 // insert-batch bij misbruik van de route; 50 deeltaken is ruim boven wat een reëel huiswerk
 // ooit heeft.
 const MAX_SUBTASKS = 50
+// Silent cap, geen validatiefout (Story 3.3) — de UX-spec zegt letterlijk "Validatie: Geen
+// format-restricties" voor `taak-needs-input`, dus in tegenstelling tot de deeltaak-naam
+// hierboven (die wél 400't) kappen deze grenzen stil af i.p.v. te weigeren. Puur een
+// server-side misbruik-veiligheidsgrens, geen zichtbare UX-regel.
+const MAX_NEED_LENGTH = 100
+const MAX_NEEDS_COUNT = 30
 
 function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   setResponseStatus(event, statusCode)
@@ -136,6 +142,25 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
     return envelope(event, 400, ErrorCodes.ValidationError, 'Totale benodigde tijd moet een geldig aantal minuten zijn (0 of hoger).')
   }
 
+  // Benodigdheden (Story 3.3) — géén 400 bij een te lang item of te veel items (UX-spec:
+  // "Geen format-restricties"), alleen bij een niet-array of een niet-string-element (dat
+  // is een type-fout, geen format-fout — zelfde onderscheid als Story 3.2's `subtasks`-
+  // array-guard). Volgorde: trimmen → lengte afkappen → dedupliceren op de afgekapte
+  // waarde → aantal afkappen.
+  if (body.needs !== undefined && !Array.isArray(body.needs)) {
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige benodigdheden.')
+  }
+  const rawNeeds: unknown[] = Array.isArray(body.needs) ? body.needs : []
+  const seenNeeds = new Set<string>()
+  for (const raw of rawNeeds) {
+    if (typeof raw !== 'string') {
+      return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige benodigdheden.')
+    }
+    const trimmed = raw.trim().slice(0, MAX_NEED_LENGTH)
+    if (trimmed) seenNeeds.add(trimmed)
+  }
+  const needs = [...seenNeeds].slice(0, MAX_NEEDS_COUNT)
+
   // Server trimt zelf (code review 2026-08-01) — de client trimt ook, maar de route is de
   // gezaghebbende laag (mutatie-ownership-regel) en moet niet op clientgedrag leunen: een
   // rechtstreekse API-aanroep zou anders gepadde waarden persisteren, incl. in de
@@ -153,7 +178,8 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
       defaultSessionDuration: body.defaultSessionDuration,
       description: description || null,
       subtasks: trimmedSubtasks,
-      totalMinutesOverride: body.totalMinutesOverride ?? null
+      totalMinutesOverride: body.totalMinutesOverride ?? null,
+      needs
     })
 
     return {

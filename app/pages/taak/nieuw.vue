@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type { ComponentPublicInstance } from 'vue'
-import type { CreateTaskResponse, Difficulty, Priority, TaskSubjectsResponse, TaskType } from '#shared/types/tasks'
+import type { CreateTaskResponse, Difficulty, NeedsSuggestionsResponse, Priority, TaskSubjectsResponse, TaskType } from '#shared/types/tasks'
 import { isValidCalendarDate } from '#shared/utils/availability'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
 
@@ -183,6 +183,110 @@ function validateSubtasksAndTotalTime(): boolean {
   return valid
 }
 
+// --- Benodigdheden & auto-suggestie (Story 3.3) ---
+// Moet gelijk blijven aan server/api/tasks.post.ts's `MAX_NEEDS_COUNT` (code review
+// 2026-08-01) — anders kan de client meer tags tonen dan de server daadwerkelijk opslaat.
+const MAX_NEEDS_COUNT = 30
+const needsItems = ref<string[]>([])
+const needsInputText = ref('')
+const needsSuggestions = ref<string[]>([])
+const showNeedsSubjectChangeDialog = ref(false)
+const pendingSubjectForDialog = ref('')
+// Bewaakt tegen twee races (fresh-context-validatiepas): (1) Evelien typt zelf een item
+// terwijl de AC #1-fetch nog loopt — bij aankomst opnieuw checken dat `needsItems` nog
+// leeg is; (2) ze wijzigt het vak een tweede keer vóórdat de eerste fetch terug is — een
+// respons voor een inmiddels verlaten vak mag niet meer toegepast worden.
+let lastConfirmedSubject = ''
+let latestNeedsFetchSubject = ''
+
+function addNeedItem(raw: string) {
+  const trimmed = raw.trim()
+  if (trimmed && !needsItems.value.includes(trimmed)) {
+    needsItems.value.push(trimmed)
+  }
+  needsInputText.value = ''
+}
+function removeNeedItem(item: string) {
+  needsItems.value = needsItems.value.filter(existing => existing !== item)
+}
+function onNeedsInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    addNeedItem(needsInputText.value)
+  } else if (event.key === ',') {
+    event.preventDefault()
+    addNeedItem(needsInputText.value)
+  }
+}
+
+async function fetchNeedsSuggestions(subject: string): Promise<string[]> {
+  try {
+    const response = await $fetch<NeedsSuggestionsResponse>('/api/tasks/needs-suggestions', {
+      query: { subject }
+    })
+    return response.suggestions
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+    }
+    // Niet-kritieke verrijking (fresh-context-validatiepas): een mislukte fetch faalt stil,
+    // geen zichtbare foutmelding voor een achtergrond-suggestie.
+    return []
+  }
+}
+
+// `taak-subject-select` is een vrij tekstveld met `<datalist>` (Story 3.1), geen `<select>`
+// — `@change` is hier het "bevestigd"-moment (zelfde precedent als `taak-type-select`'s
+// `@change`, Story 3.1's code review).
+async function onSubjectConfirmed() {
+  const trimmed = subject.value.trim()
+  if (!trimmed || trimmed === lastConfirmedSubject) return
+  lastConfirmedSubject = trimmed
+
+  if (needsItems.value.length === 0) {
+    latestNeedsFetchSubject = trimmed
+    const suggestions = await fetchNeedsSuggestions(trimmed)
+    // Beide races tegelijk bewaakt (code review 2026-08-01 — voorheen werd `needsSuggestions`
+    // onvoorwaardelijk bijgewerkt, óók voor een inmiddels alweer verlaten vak; nu blijven
+    // zowel de hint-datalist als `needsItems` zelf ongemoeid als dit niet meer het actuele
+    // vak is): nog steeds hetzelfde vak, én nog steeds leeg.
+    if (latestNeedsFetchSubject === trimmed && needsItems.value.length === 0) {
+      needsSuggestions.value = suggestions
+      // Cap (code review 2026-08-01): zonder dit kan de auto-vul meer tags tonen dan de
+      // server straks daadwerkelijk opslaat (die zelf op `MAX_NEEDS_COUNT` afkapt) — het
+      // getoonde en het opgeslagen resultaat moeten overeenkomen (zelfde principe als Story
+      // 3.2's live-som-vs-opgeslagen-som-les).
+      needsItems.value = [...suggestions].slice(0, MAX_NEEDS_COUNT)
+    }
+  } else {
+    pendingSubjectForDialog.value = trimmed
+    showNeedsSubjectChangeDialog.value = true
+  }
+}
+
+async function confirmNeedsSubjectChange() {
+  const subjectForDialog = pendingSubjectForDialog.value
+  showNeedsSubjectChangeDialog.value = false
+  const suggestions = await fetchNeedsSuggestions(subjectForDialog)
+  // Zelfde race als in `onSubjectConfirmed` hierboven (code review 2026-08-01): als Evelien
+  // het vak nogmaals wijzigde terwijl deze fetch liep, is `subjectForDialog` niet meer het
+  // actuele vak — pas de respons dan niet meer toe.
+  if (subjectForDialog !== lastConfirmedSubject) return
+  needsSuggestions.value = suggestions
+  for (const suggestion of suggestions) {
+    if (!needsItems.value.includes(suggestion)) {
+      needsItems.value.push(suggestion)
+    }
+  }
+  needsItems.value = needsItems.value.slice(0, MAX_NEEDS_COUNT)
+}
+function dismissNeedsSubjectChange() {
+  showNeedsSubjectChangeDialog.value = false
+  // De hint-datalist hoort bij het vorige vak (code review 2026-08-01) — anders blijven
+  // suggesties voor een al verlaten vak zichtbaar tijdens het typen.
+  needsSuggestions.value = []
+}
+
 const isDirty = computed(() =>
   subject.value !== '' || title.value !== '' || type.value !== '' || deadline.value !== ''
   || difficulty.value !== 'gemiddeld' || priority.value !== 'gemiddeld'
@@ -192,6 +296,7 @@ const isDirty = computed(() =>
   // reden om straks een weg-navigeer-waarschuwing te tonen.
   || subtaskRows.value.some(row => row.name.trim() !== '' || !isEmptyField(row.minutes))
   || !isEmptyField(totalTimeHours.value) || !isEmptyField(totalTimeMinutes.value)
+  || needsItems.value.length > 0
 )
 
 // --- Validatie (UX-spec 2.1) ---
@@ -275,6 +380,9 @@ function requestLeave() {
   // Annuleren wegnavigeren terwijl de POST nog onderweg is, en landt de respons op een
   // pagina die de gebruiker al verlaten heeft.
   if (saving.value) return
+  // Genegeerd terwijl de vak-wijziging-dialoog open staat (code review 2026-08-01) —
+  // anders kunnen twee volledige-schermbrede bevestigingsoverlays tegelijk renderen.
+  if (showNeedsSubjectChangeDialog.value) return
 
   if (isDirty.value) {
     showLeaveConfirm.value = true
@@ -358,7 +466,8 @@ async function onSubmit() {
         defaultSessionDuration: sessionDuration.value,
         description: description.value.trim() || null,
         subtasks: trimmedSubtasks,
-        totalMinutesOverride
+        totalMinutesOverride,
+        needs: needsItems.value
       }
     })
 
@@ -410,6 +519,7 @@ async function onSubmit() {
             :disabled="saving"
             :aria-invalid="!!errors.subject"
             @blur="errors.subject = validateSubject()"
+            @change="onSubjectConfirmed"
           >
           <datalist id="taak-subject-options">
             <option v-for="s in subjectSuggestions" :key="s" :value="s" />
@@ -635,6 +745,36 @@ async function onSubmit() {
           />
           <p v-if="errors.description" class="taak-error" role="alert">{{ errors.description }}</p>
         </div>
+
+        <div class="taak-field">
+          <label for="taak-needs-input" class="taak-label">Benodigdheden</label>
+          <div id="taak-needs-tags" class="taak-needs-tags">
+            <span v-for="item in needsItems" :key="item" class="taak-needs-tag">
+              {{ item }}
+              <button
+                type="button"
+                class="taak-needs-item-remove-button"
+                aria-label="Benodigdheid verwijderen"
+                :disabled="saving"
+                @click="removeNeedItem(item)"
+              >✕</button>
+            </span>
+            <input
+              id="taak-needs-input"
+              v-model="needsInputText"
+              type="text"
+              class="taak-input taak-needs-text-input"
+              list="taak-needs-options"
+              placeholder="Voeg iets toe..."
+              :disabled="saving"
+              @keydown="onNeedsInputKeydown"
+              @change="addNeedItem(needsInputText)"
+            >
+          </div>
+          <datalist id="taak-needs-options">
+            <option v-for="s in needsSuggestions" :key="s" :value="s" />
+          </datalist>
+        </div>
       </section>
 
       <section id="taak-action-section" class="taak-action-section">
@@ -662,6 +802,16 @@ async function onSubmit() {
         </div>
       </section>
     </form>
+
+    <div v-if="showNeedsSubjectChangeDialog" id="taak-needs-subject-change-dialog" class="taak-confirm-overlay" role="alertdialog" aria-modal="true">
+      <div class="taak-confirm-dialog">
+        <p>Vak gewijzigd naar {{ pendingSubjectForDialog }} — suggesties bijwerken?</p>
+        <div class="taak-confirm-actions">
+          <button type="button" class="taak-confirm-cancel" @click="dismissNeedsSubjectChange">Nee, laat mijn lijst staan</button>
+          <button type="button" class="taak-confirm-confirm" @click="confirmNeedsSubjectChange">Ja, suggesties toevoegen</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="showLeaveConfirm" class="taak-confirm-overlay" role="alertdialog" aria-modal="true">
       <div class="taak-confirm-dialog">
@@ -978,5 +1128,63 @@ async function onSubmit() {
   background: #b91c1c;
   border-color: #b91c1c;
   color: #fff;
+}
+
+.taak-confirm-confirm {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.taak-needs-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+}
+
+.taak-needs-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.875rem;
+}
+
+.taak-needs-item-remove-button {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.taak-needs-item-remove-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.taak-needs-text-input {
+  flex: 1;
+  min-width: 8rem;
+  border: none;
+  padding: 0.25rem;
+}
+
+.taak-needs-text-input:focus {
+  outline: none;
 }
 </style>

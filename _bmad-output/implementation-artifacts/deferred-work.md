@@ -1,5 +1,12 @@
 # Deferred Work
 
+## Deferred from: code review of 3-3-benodigdheden-met-auto-suggestie-per-vak (2026-08-01)
+
+- **Geen vroege bovengrens op de ruwe `needs`-array-lengte vóór de per-item-validatielus in `POST /api/tasks`** — elk element wordt getrimd/afgekapt/aan een `Set` toegevoegd vóórdat de array pas aan het eind op `MAX_NEEDS_COUNT` (30) wordt afgekapt, dus een zeer grote array (bv. duizenden elementen) kost onnodig werk vóórdat het effect zichtbaar wordt. **Reden voor doorschuiven:** het endpoint vereist al authenticatie (beperkt het misbruikbereik), en het verwerken van korte strings is per request goedkoop — geen acuut DoS-risico, wel een inconsistentie met `MAX_SUBTASKS`'s eigen vroege-`length`-check (Story 3.2).
+- **Nieuwe `taak-needs-subject-change-dialog` hergebruikt het bestaande `taak-confirm-overlay`-patroon, dat geen focus-management heeft** (geen `aria-labelledby`, geen focus-verplaatsing bij openen, geen Escape-toets-afhandeling). **Reden voor doorschuiven:** dit is een bestaand gat, al aanwezig in de originele leave-confirm-dialog sinds Story 3.1 — verdient een eigen toegankelijkheidspas voor alle `taak-confirm-overlay`-instanties tegelijk, niet een losse patch op één van de twee.
+- **`lastConfirmedSubject` wordt ook bijgewerkt als de vak-wijziging-dialoog verschijnt en Evelien "Nee, laat mijn lijst staan" kiest** — exact dezelfde vak-tekst daarna nogmaals bevestigen (zonder tussentijdse wijziging) wordt dan een stille no-op: geen nieuwe auto-vul, geen nieuwe dialoog. **Reden voor doorschuiven:** vereist het opnieuw kiezen van identieke tekst zonder wijziging ertussen om te raken — zeer lage waarschijnlijkheid, lage impact (de gebruiker kan het vak-veld altijd nog handmatig legen en opnieuw invullen om alsnog een nieuwe trigger te krijgen).
+- **Een komma-gescheiden string in `taak-needs-input` plakken produceert één tag met letterlijke komma's erin, geen losse tags per item** — het comma-splitsen gebeurt alleen op het `keydown`-event van de komma-toets zelf, wat een plak-actie (die geen los `keydown` per teken genereert) niet raakt. **Reden voor doorschuiven:** UX-verfijning, geen AC-eis; de basisfunctionaliteit (typen + Enter/komma voegt toe) werkt zoals gespecificeerd.
+
 ## Deferred from: code review of 3-2-deeltaken-automatische-tijdsom (2026-08-01)
 
 - **Zero geautomatiseerde tests voor deze story** — projectbreed al herhaaldelijk gevonden en getrackt, niet uniek aan deze story; zie de eerdere entries hieronder voor dezelfde, nog steeds openstaande reden (geen testframework in het project).
