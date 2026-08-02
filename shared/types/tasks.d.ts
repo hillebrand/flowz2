@@ -94,3 +94,15 @@ export interface HomePlanResponse {
   }[] | null
   sessionTimeCheck: SessionTimeCheck | null
 }
+
+// Story 4.3 — databron voor 1.2-sessie-tussenscherm's terugvalpad (GET /api/tasks/[id]),
+// wanneer de useState-doorgifte vanuit 1.1 ontbreekt (refresh/deep link). Zelfde velden
+// als HomePlanResponse['nextTask'], bewust niet hergebruikt als alias: dit is een eigen
+// endpoint met een eigen levenscyclus, geen gedeelde brontype-afhankelijkheid nodig.
+export interface TaskPrepResponse {
+  id: string
+  subject: string
+  title: string
+  plannedMinutes: number
+  needs: string[]
+}

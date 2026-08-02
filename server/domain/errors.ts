@@ -4,7 +4,8 @@
 export const ErrorCodes = {
   InternalError: 'internal_error',
   ValidationError: 'validation_error',
-  Unauthorized: 'unauthorized'
+  Unauthorized: 'unauthorized',
+  NotFound: 'not_found'
 } as const
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes]

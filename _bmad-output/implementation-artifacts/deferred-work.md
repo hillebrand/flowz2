@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 4-3-sessie-tussenscherm-benodigdheden-bekijken (2026-08-02)
+
+- **`TaskPrepResponse` en `HomePlanResponse['nextTask']` hebben identieke velden zonder gedeeld brontype** — puur een codecomment die de parallel bewaakt, geen typesysteem-afdwinging. Een toekomstige wijziging aan één van beide zou stil kunnen driften. **Reden voor doorschuiven:** bewuste keuze in de story zelf (twee endpoints met een eigen levenscyclus); een gedeeld basistype is een redelijke toekomstige refactor, geen huidige correctheidsfout.
+- **Geen rate limiting/logging op herhaalde ownership-mismatches** (`GET /api/tasks/[id]` met een niet-eigen taak-id) — de anti-enumeratie-bescherming (404 i.p.v. 403) heeft geen detectie erachter als iemand actief taak-id's raadt. **Reden voor doorschuiven:** geen bestaand rate-limiting-patroon ergens in dit project om op aan te sluiten; verdient een projectbrede aanpak, geen losse patch op één route.
+
 ## Deferred from: code review of 4-2-hoofdscherm-waarschuwing-banner-later-vandaag-calendar-rij (2026-08-02)
 
 - **Overlappende kalenderblokken in `home-calendar-dayview` krijgen geen lane/offset-lay-out** — twee of meer elkaar overlappende Calendar-afspraken worden gewoon over elkaar heen getekend (volle breedte, geen zij-aan-zij-verdeling), zichtbaar geworden tijdens live-verificatie met drie kort-na-elkaar geplande testtaken. **Reden voor doorschuiven:** de UX-spec eist geen specifieke overlap-lay-out; een echte lane-toewijzingsalgoritme is een aparte, niet-triviale uitbreiding die niet bij déze story's kernscope hoort.
