@@ -5,6 +5,8 @@ import { sortByVolgorde } from '../../domain/scheduling/ordering'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import type { HomePlanResponse } from '../../../shared/types/tasks'
+import { getTodayEvents } from '../../domain/calendar-sync/day-events'
+import { determineSessionTimeCheck } from '../../domain/calendar-sync/session-time-check'
 
 // Eerste inhoud van server/api/home/ (Story 4.1) — de eerste écht consument van Story 3.4's
 // `sortByVolgorde` en Story 3.5's `getTasksWithSessionOnDate`, beide tot nu toe alleen
@@ -26,8 +28,11 @@ export default defineEventHandler(async (event): Promise<HomePlanResponse | Erro
   const today = todayInAmsterdam()
 
   try {
-    const items = await getTasksWithSessionOnDate(userId, today)
-    const avgDailyMinutes = await averageDailyAvailableMinutes(userId)
+    const [items, avgDailyMinutes, calendarDayEvents] = await Promise.all([
+      getTasksWithSessionOnDate(userId, today),
+      averageDailyAvailableMinutes(userId),
+      getTodayEvents(userId, today)
+    ])
     const sorted = sortByVolgorde(items, today, avgDailyMinutes)
 
     // "Openstaand" = simpelweg "heeft een sessie vandaag" (Story 4.1 Dev Notes) — er bestaat
@@ -47,7 +52,34 @@ export default defineEventHandler(async (event): Promise<HomePlanResponse | Erro
         }
       : null
 
-    return { nextTask, remainingMinutesToday }
+    // Story 4.2 — home-later-list: alle overige taken van vandaag, hergebruikt de
+    // al-gesorteerde array (geen nieuwe query).
+    const laterTasks: HomePlanResponse['laterTasks'] = sorted.slice(1).map(item => ({
+      id: item.task.id,
+      subject: item.task.subject,
+      title: item.task.title,
+      plannedMinutes: item.session.plannedMinutes
+    }))
+
+    // sessionTimeCheck: null zonder nextTask (niets om te checken) of bij een mislukte
+    // Calendar-aanroep (fail-safe, AC #1 — geen ongefundeerde waarschuwing).
+    // Live-verificatiebevinding (2026-08-02): de sessie's eigen huiswerk-Calendar-event
+    // (googleEventId, indien aanwezig) overlapt per definitie zichzelf — zonder uitsluiting
+    // zou elke gebruiker met write-scope altijd "unavailable" krijgen voor de eigen sessie.
+    let sessionTimeCheck: HomePlanResponse['sessionTimeCheck'] = null
+    if (first && calendarDayEvents) {
+      const sessionEndsAt = new Date(new Date(first.session.startsAt).getTime() + first.session.plannedMinutes * 60_000).toISOString()
+      const otherEvents = calendarDayEvents.filter(dayEvent => dayEvent.id !== first.session.googleEventId)
+      sessionTimeCheck = determineSessionTimeCheck({ startsAt: first.session.startsAt, endsAt: sessionEndsAt }, otherEvents)
+    }
+
+    // Review-patch: Google's interne event-id is alleen nodig voor de self-overlap-filter
+    // hierboven, geen client-behoefte — niet meesturen in de respons.
+    const calendarDayEventsForClient: HomePlanResponse['calendarDayEvents'] = calendarDayEvents
+      ? calendarDayEvents.map(({ title, startsAt, endsAt }) => ({ title, startsAt, endsAt }))
+      : null
+
+    return { nextTask, remainingMinutesToday, laterTasks, calendarDayEvents: calendarDayEventsForClient, sessionTimeCheck }
   } catch {
     return envelope(event, 500, ErrorCodes.InternalError, 'Kon dagplanning niet ophalen.')
   }

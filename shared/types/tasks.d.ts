@@ -62,6 +62,11 @@ export interface NeedsSuggestionsResponse {
 // `totalMinutes` (de bufferformule's eigen invoer). `needs` wordt meegegeven ook al toont
 // déze story ze nergens — al beschikbaar uit de toch al opgehaalde taak, en dient FR2's
 // "geen nieuwe fetch bij navigatie naar 1.2" zodra Story 4.3 dat scherm bouwt.
+// Story 4.2 — `session_time_check`'s drie states (UX-spec's `home-warning-banner`).
+// `null` betekent "geen banner tonen": geen `nextTask` om te checken, of de Calendar-
+// aanroep zelf faalde (fail-safe, AC #1).
+export type SessionTimeCheck = 'ok' | 'tight' | 'unavailable'
+
 export interface HomePlanResponse {
   nextTask: {
     id: string
@@ -71,4 +76,21 @@ export interface HomePlanResponse {
     needs: string[]
   } | null
   remainingMinutesToday: number
+  // Story 4.2 — alle overige taken van vandaag (home-later-list), geen `needs`: pas
+  // relevant zodra Evelien er daadwerkelijk op klikt (1.2 haalt dat dan zelf op via
+  // dezelfde useState-doorgifte als de primaire taak).
+  laterTasks: {
+    id: string
+    subject: string
+    title: string
+    plannedMinutes: number
+  }[]
+  // Story 4.2 — `null` = Calendar-aanroep mislukt (home-calendar-dayview toont dan
+  // "Kan agenda niet laden", fail-safe: geen banner).
+  calendarDayEvents: {
+    title: string
+    startsAt: string
+    endsAt: string
+  }[] | null
+  sessionTimeCheck: SessionTimeCheck | null
 }
