@@ -112,6 +112,9 @@ export interface TaskPrepResponse {
     name: string
     minutes: number | null
   }[]
+  // Story 4.5 — de Session-rij se eigen id (niet het taak-id), nodig voor
+  // POST /api/sessions/{sessionId}/stop|heartbeat.
+  sessionId: string
 }
 
 // Story 4.4 — de vorm die `sessie/starten.vue`'s "Start"-knop doorgeeft aan 1.3 via

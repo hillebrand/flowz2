@@ -152,6 +152,13 @@ export const sessions = sqliteTable('sessions', {
   // bestaande sessies vóór deze migratie, en sessies aangemaakt zonder actieve Calendar-
   // write-scope/kleur, hebben 'm simpelweg niet.
   googleEventId: text('google_event_id'),
+  // Story 4.5 — server-side bewijs-van-activiteit voor de wegnavigeer-bescherming. Nullable,
+  // zelfde reden als `googleEventId` hierboven: geen DB-default nodig, bestaande sessies
+  // hebben 'm simpelweg niet. `lastHeartbeatAt` wordt periodiek bijgewerkt zolang de sessie
+  // actief (niet gepauzeerd) is; `stoppedAt` wordt precies één keer gezet bij een expliciet
+  // stop-signaal (Stop-knop, leave-confirm-modal, of `beforeunload`/`sendBeacon`).
+  lastHeartbeatAt: text('last_heartbeat_at'),
+  stoppedAt: text('stopped_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

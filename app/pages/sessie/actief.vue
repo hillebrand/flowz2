@@ -33,9 +33,6 @@ let intervalId: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   intervalId = setInterval(() => { nowTick.value = Date.now() }, 1000)
 })
-onUnmounted(() => {
-  if (intervalId) clearInterval(intervalId)
-})
 
 // Review-patch (Edge Case Hunter): `Math.max(0, ...)` — een teruggezette systeemklok zou
 // anders een negatieve verstreken tijd (en dus een onzinnige timer-string) kunnen opleveren.
@@ -120,6 +117,11 @@ interface SessieOverzichtLog {
 }
 const sessieOverzichtLog = useState<SessieOverzichtLog | null>('sessie-overzicht-log', () => null)
 
+// Story 4.5 — vlag die de wegnavigeer-guard hieronder laat weten dat déze navigatie al
+// bewust bevestigd is (via de Stop-knop zelf, of via de leave-confirm-modal's "Ja, stop"),
+// zodat de guard zichzelf niet blokkeert.
+const isIntentionalLeave = ref(false)
+
 function stopSessie() {
   if (!taak.value) return
   sessieOverzichtLog.value = {
@@ -134,13 +136,84 @@ function stopSessie() {
     }))
   }
   const id = taak.value.id
+  // Fire-and-forget (AD-7 is een server-side eis, dit is een client-side keuze om de
+  // navigatie niet te laten wachten op een logging-aanroep) — een gemiste stop-registratie
+  // is niet kritiek, de heartbeat/beforeunload-paden hieronder vangen dat soort gaten al op.
+  // Review-patch (Blind Hunter): console.error i.p.v. volledig stil falen — geen zichtbare
+  // UI-verandering (AC's eis blijft intact), maar wél een spoor bij het debuggen.
+  $fetch(`/api/sessions/${encodeURIComponent(taak.value.sessionId)}/stop`, { method: 'POST' })
+    .catch(fout => console.error('[sessie] Kon stop-signaal niet versturen:', fout))
   // Review-patch (Edge Case Hunter): leegmaken vóór het navigeren — anders zou een
   // browser-terug-navigatie deze pagina met een reset timer/wachtrij kunnen heropenen voor
   // een sessie die al gestopt is (de `taak`-computed valt dan terug op "geen data",
   // navigeert alsnog netjes terug naar 1.2 i.p.v. een misleidende "verse" 1.3 te tonen).
   sessieActiefTaak.value = null
+  isIntentionalLeave.value = true
   navigateTo(`/sessie/overzicht?taak=${encodeURIComponent(id)}`)
 }
+
+// Story 4.5, AC #1 — `active-leave-confirm-modal`. Vue Router's `onBeforeRouteLeave` vangt
+// elke in-app-navigatiepoging af (incl. de browser-terugknop, een SPA-interne route-wissel
+// — géén volledige page-reload). Het hamburgermenu bestaat nog niet als navigatiedoel
+// (Story 4.1's review-patch maakte 'm decoratief), maar deze guard vangt architecturaal al
+// élke toekomstige in-app-trigger af, niet alleen de terugknop — zie de story's "Belangrijk".
+const showLeaveConfirm = ref(false)
+onBeforeRouteLeave(() => {
+  if (isIntentionalLeave.value || isPaused.value) return true
+  showLeaveConfirm.value = true
+  return false
+})
+
+function bevestigVerlaten() {
+  showLeaveConfirm.value = false
+  // Review-patch (Edge Case Hunter): `taak.value` zou in theorie al leeg kunnen zijn
+  // (bv. een race met een elders lopende reset) — zonder deze guard zou `stopSessie()`'s
+  // eigen vroege return de modal wel sluiten maar de geblokkeerde navigatie nooit alsnog
+  // laten plaatsvinden, met een gebruiker die "vast" op de pagina blijft.
+  if (!taak.value) {
+    navigateTo('/')
+    return
+  }
+  stopSessie()
+}
+function blijfHier() {
+  showLeaveConfirm.value = false
+}
+
+// Story 4.5, AC #2 — `beforeunload`/`sendBeacon`: geen zichtbare bevestiging (AC's
+// letterlijke eis), puur fire-and-forget. `sendBeacon` stuurt cookies automatisch mee
+// (same-origin), dus `requireUserSession` werkt server-side zonder extra auth-plumbing.
+// Review-patch (Blind Hunter): bewust ook bij een gepauzeerde sessie versturen — zonder dit
+// zou pauzeren-en-daarna-het-tabblad-sluiten `stoppedAt` voor altijd `null` laten (de
+// heartbeat stopt bij pauzeren, dus er is dan ook geen ander bewijs-van-afsluiten meer).
+// Geen payload nodig: geen van beide routes leest de body.
+function stuurStopBeacon() {
+  if (!taak.value) return
+  navigator.sendBeacon(`/api/sessions/${encodeURIComponent(taak.value.sessionId)}/stop`)
+}
+
+// Story 4.5, AC #3 — periodieke heartbeat, los van de timer-tick hierboven. UX-spec se
+// eigen Open Question #6 laat het exacte interval open; 30s is een beargumenteerde keuze
+// (zie de story's Open Questions). Alleen actief zolang niet gepauzeerd — een gepauzeerde
+// sessie heeft toch geen actief bewijs-van-bezig-zijn nodig.
+const HEARTBEAT_INTERVAL_MS = 30_000
+let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null
+
+function stuurHeartbeat() {
+  if (!taak.value || isPaused.value) return
+  $fetch(`/api/sessions/${encodeURIComponent(taak.value.sessionId)}/heartbeat`, { method: 'POST' })
+    .catch(fout => console.error('[sessie] Kon heartbeat niet versturen:', fout))
+}
+
+onMounted(() => {
+  window.addEventListener('beforeunload', stuurStopBeacon)
+  heartbeatIntervalId = setInterval(stuurHeartbeat, HEARTBEAT_INTERVAL_MS)
+})
+onUnmounted(() => {
+  if (intervalId) clearInterval(intervalId)
+  if (heartbeatIntervalId) clearInterval(heartbeatIntervalId)
+  window.removeEventListener('beforeunload', stuurStopBeacon)
+})
 </script>
 
 <template>
@@ -194,6 +267,16 @@ function stopSessie() {
         >Later</button>
       </div>
     </section>
+
+    <div v-if="showLeaveConfirm" id="active-leave-confirm-modal" class="active-leave-confirm-modal">
+      <div class="active-leave-confirm-dialog">
+        <p>Wil je de sessie stoppen?</p>
+        <div class="active-leave-confirm-actions">
+          <button type="button" class="active-leave-confirm-yes" @click="bevestigVerlaten">Ja, stop</button>
+          <button type="button" class="active-leave-confirm-no" @click="blijfHier">Nee, blijf hier</button>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -305,6 +388,50 @@ function stopSessie() {
 
 .active-subtask-later-button {
   padding: 0.625rem 1.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.active-leave-confirm-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.4);
+  padding: 1rem;
+}
+
+.active-leave-confirm-dialog {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  max-width: 22rem;
+  width: 100%;
+  text-align: center;
+}
+
+.active-leave-confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.active-leave-confirm-yes {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.active-leave-confirm-no {
+  padding: 0.625rem 1.25rem;
   border: 1px solid #d1d5db;
   border-radius: 999px;
   background: #fff;

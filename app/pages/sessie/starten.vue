@@ -59,11 +59,11 @@ const isLoading = computed(() => !heeftBruikbareData.value && !!taakId.value && 
 const taakNietGevonden = computed(() => !heeftBruikbareData.value && (!taakId.value || is404(fetchError.value)))
 const heeftOnbekendeFout = computed(() => !heeftBruikbareData.value && !!fetchError.value && !is401(fetchError.value) && !is404(fetchError.value))
 
-// `fetchedTaak` (bevat de gegarandeerd-actuele `needs`/`subtasks`) heeft voorrang zodra
-// 'ie binnen is; tot die tijd `sessieStartTaak` voor instant vak/taaknaam (die heeft nooit
-// `subtasks` — 1.2 toont die toch niet, alleen 1.3 heeft ze straks nodig, zie
-// `startSessieActief`'s eigen afdwinging hieronder).
-const taak = computed<Omit<PrepTaak, 'subtasks'> | null>(() => {
+// `fetchedTaak` (bevat de gegarandeerd-actuele `needs`/`subtasks`/`sessionId`) heeft
+// voorrang zodra 'ie binnen is; tot die tijd `sessieStartTaak` voor instant vak/taaknaam
+// (die heeft nooit `subtasks`/`sessionId` — 1.2 toont/gebruikt die toch niet, alleen 1.3
+// heeft ze straks nodig, zie `startSessieActief`'s eigen afdwinging hieronder).
+const taak = computed<Omit<PrepTaak, 'subtasks' | 'sessionId'> | null>(() => {
   if (fetchedTaak.value) return fetchedTaak.value
   return heeftDirecteData.value ? sessieStartTaak.value : null
 })

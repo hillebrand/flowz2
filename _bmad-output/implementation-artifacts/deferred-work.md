@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review of 4-5-sessie-actief-wegnavigeer-bescherming (2026-08-02)
+
+- **`active-leave-confirm-modal` heeft geen `role="dialog"`, geen focus-trap, geen Escape-handler** — puur visueel/muis-georiënteerd, geen toetsenbord-/screenreader-toegankelijkheid. **Reden voor doorschuiven:** geen enkele AC noemt toetsenbord-/screenreader-navigatie voor dit element, en dit project heeft nog geen bestaand modal-component (`taak-confirm-overlay` bestaat wel maar met een ander specifiek doel/tekst) om op aan te sluiten — verdient een eigen ontwerppas, net als de eerdere uitgestelde a11y-punten in dit project.
+
 ## Deferred from: code review of 4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen (2026-08-02)
 
 - **Timer-weergave kan tijdelijk bevriezen in een achtergrondtab** — browsers kunnen `setInterval` in een niet-actieve tab throttlen/pauzeren; de onderliggende wandklok-berekening (`elapsedMs`) blijft correct, maar de zichtbare `active-timer`-tekst en `overGeplandeTijd`-signaal updaten pas weer bij de eerstvolgende tick, niet direct bij het terugkeren naar het tabblad. **Reden voor doorschuiven:** vereist een `visibilitychange`-listener die de weergave forceert te verversen bij focus-terugkeer — een kleine, losstaande verbetering, geen correctheidsfout in de onderliggende berekening zelf.

@@ -52,7 +52,8 @@ export default defineEventHandler(async (event): Promise<TaskPrepResponse | Erro
       title: task.title,
       plannedMinutes: taskSession.plannedMinutes,
       needs: task.needs,
-      subtasks: taskSubtasks.map(subtask => ({ id: subtask.id, name: subtask.name, minutes: subtask.minutes }))
+      subtasks: taskSubtasks.map(subtask => ({ id: subtask.id, name: subtask.name, minutes: subtask.minutes })),
+      sessionId: taskSession.id
     }
   } catch (fout) {
     console.error('[tasks] Kon taak niet ophalen:', fout)

@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from './db'
 import { sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type Task } from './schema'
 import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
@@ -176,6 +176,33 @@ export async function getSessionForTask(taskId: string): Promise<Session | null>
 // (AC #1: "Subtaak {huidig} van {totaal}") hangt daar direct van af.
 export async function getSubtasksForTask(taskId: string): Promise<Subtask[]> {
   return getDb().select().from(subtasks).where(eq(subtasks.taskId, taskId)).orderBy(subtasks.createdAt)
+}
+
+// Story 4.5 — nodig voor de ownership-check in server/api/sessions/[sessionId]/* (de
+// sessie draagt zelf geen userId, dus de aanroeper haalt via `session.taskId` de
+// bijbehorende taak op om de eigenaar te verifiëren).
+export async function getSessionById(sessionId: string): Promise<Session | null> {
+  const [session] = await getDb().select().from(sessions).where(eq(sessions.id, sessionId))
+  return session ?? null
+}
+
+// Story 4.5 — server-side bewijs-van-activiteit voor de wegnavigeer-bescherming.
+// Review-patch (Blind Hunter + Edge Case Hunter): `stoppedAt IS NULL` — zonder deze guard
+// zou een heartbeat die ná een stop-signaal aankomt (race tussen de Stop-knop se
+// fire-and-forget-aanroep en een net daarvoor al onderweg zijnde heartbeat) `lastHeartbeatAt`
+// voorbij `stoppedAt` kunnen laten lopen, waardoor een gestopte sessie er weer actief uitziet.
+export async function markSessionHeartbeat(sessionId: string): Promise<void> {
+  await getDb()
+    .update(sessions)
+    .set({ lastHeartbeatAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(and(eq(sessions.id, sessionId), isNull(sessions.stoppedAt)))
+}
+
+export async function markSessionStopped(sessionId: string): Promise<void> {
+  await getDb()
+    .update(sessions)
+    .set({ stoppedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(eq(sessions.id, sessionId))
 }
 
 // Voor `recalculateTaskPlanning` (Story 3.5) — één `UPDATE` op de bestaande sessierij,
