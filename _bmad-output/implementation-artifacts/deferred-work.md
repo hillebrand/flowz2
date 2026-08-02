@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: code review of 3-5-idempotente-herberekening-bij-wijzigingen (2026-08-02)
+
+- **Geen vroegtijdige no-op-detectie in `recalculateTaskPlanning`** — elke aanroep doet onvoorwaardelijk een DB-write + Calendar-aanroep, ook als de herberekende plaatsing identiek is aan de huidige. **Reden voor doorschuiven:** reële optimalisatie, geen huidige aanroeper (Epic 4/5/6 nog `backlog`), en de self-healing-tak zou sowieso altijd moeten blijven controleren op een ontbrekende `googleEventId`.
+- **`updateHomeworkEvent` onderscheidt geen echte 404 (een blijvend verwijderd event) van Story 2.3's al-geteste tombstone/200-scenario** (handmatig verwijderd via de Google-UI) — bij een echte 404 zou `recalculateTaskPlanning`'s Calendar-sync gewoon falen i.p.v. self-healing te triggeren. **Reden voor doorschuiven:** zeer zeldzaam randgeval; Story 2.3's live-testen dekten alleen het realistische pad (handmatige verwijdering via de UI geeft altijd een tombstone/200, geen 404).
+- **Geen gebruikerszichtbaar signaal als een sessie met een `googleEventId` stil "verweest" raakt** doordat write-scope/kleur na het aanmaken van dat event wordt ingetrokken — `updateHomeworkEvent` no-opt dan stil (bestaand Story 2.3-gedrag), en het event blijft stale tot write-scope ooit hersteld wordt én een herberekening toevallig loopt. **Reden voor doorschuiven:** bestaand, al-gereviewd gedrag van `updateHomeworkEvent` zelf; déze story maakt het pad alleen vaker bereikbaar (via herberekening) zonder het zelf te veroorzaken.
+
 ## Deferred from: code review of 3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken (2026-08-02)
 
 - **Het join+`substr(startsAt,1,10)`-datumfilterpatroon staat drie keer onafhankelijk in `server/data/tasks.ts`** (`createTaskAndSession`, `sumPlannedMinutesForUserOnDate`, `getTasksWithSessionOnDate`) — een gedeelde helper zou de "16:00 Amsterdam-anker kruist nooit UTC-middernacht"-aanname op één plek houden i.p.v. drie onafhankelijke plekken die elk apart vertrouwd moeten worden. **Reden voor doorschuiven:** zou de twee bestaande, al-gereviewde functies aanraken voor een bescheiden DRY-winst — buiten scope voor de story die de derde kopie toevoegde.

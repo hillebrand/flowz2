@@ -80,12 +80,21 @@ export async function deleteTaskAndSession(taskId: string, sessionId: string): P
 // `startsAt` is een volledige UTC-datetime; de vergelijking op de eerste 10 tekens
 // (YYYY-MM-DD) is veilig omdat het vaste 16:00 Europe/Amsterdam-anker nooit dicht genoeg
 // bij middernacht UTC ligt om de datumgrens te kunnen overschrijden.
-export async function sumPlannedMinutesForUserOnDate(userId: string, date: string): Promise<number> {
+//
+// `excludeTaskId` (Story 3.5, optioneel — bestaande aanroepers ongewijzigd): sluit de
+// sessie(s) van déze taak uit van de som. Nodig zodra een taak's eigen, nog-niet-verplaatste
+// sessie herberekend wordt — anders telt haar huidige plek dubbel mee als "al bezet" en kan
+// ze nooit terug op haar eigen dag geplaatst worden.
+export async function sumPlannedMinutesForUserOnDate(userId: string, date: string, excludeTaskId?: string): Promise<number> {
   const rows = await getDb()
     .select({ plannedMinutes: sessions.plannedMinutes })
     .from(sessions)
     .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-    .where(and(eq(tasks.userId, userId), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
+    .where(and(
+      eq(tasks.userId, userId),
+      sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
+      excludeTaskId ? sql`${tasks.id} != ${excludeTaskId}` : undefined
+    ))
 
   return rows.reduce((sum, row) => sum + row.plannedMinutes, 0)
 }
@@ -134,4 +143,49 @@ export async function getTasksWithSessionOnDate(userId: string, date: string): P
     .where(and(eq(tasks.userId, userId), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
 
   return rows
+}
+
+// Voor `recalculateTaskPlanning` (Story 3.5) — `null` bij een niet-bestaande taak, geen
+// `throw`: in tegenstelling tot `getUserById` (waar een onbekende user altijd een
+// programmeerfout is) is "deze taak bestaat niet (meer)" hier een legitiem, door de
+// aanroeper af te handelen scenario.
+export async function getTaskById(taskId: string): Promise<Task | null> {
+  const [task] = await getDb().select().from(tasks).where(eq(tasks.id, taskId))
+  return task ?? null
+}
+
+// Voor `recalculateTaskPlanning` (Story 3.5) — huidige architectuur (AD-3, Story 3.1/3.2)
+// kent precies 1 sessie per taak.
+export async function getSessionForTask(taskId: string): Promise<Session | null> {
+  const rows = await getDb().select().from(sessions).where(eq(sessions.taskId, taskId))
+  // Bewaakt de "precies 1 sessie per taak"-aanname expliciet (code review 2026-08-02) —
+  // stilzwijgend een willekeurige rij teruggeven zou een toekomstige datacorruptie (bv. een
+  // bug die per ongeluk een tweede sessie aan een bestaande taak toevoegt) verbergen i.p.v.
+  // signaleren, zelfde discipline als Story 2.3's "stil zwijgen kan een integratiebug
+  // verbergen"-les.
+  if (rows.length > 1) {
+    throw new Error(`Taak ${taskId} heeft ${rows.length} sessies, verwacht precies 1.`)
+  }
+  return rows[0] ?? null
+}
+
+// Voor `recalculateTaskPlanning` (Story 3.5) — één `UPDATE` op de bestaande sessierij,
+// geen delete+insert: houdt `id`/`createdAt` stabiel (belangrijk zodra `googleEventId` er
+// al aan hangt) en is letterlijker idempotent (twee keer dezelfde waarde schrijven is een
+// no-op-in-effect; twee keer verwijderen+aanmaken zou telkens een nieuwe `id` genereren).
+export async function updateSessionPlacement(
+  sessionId: string,
+  input: { startsAt: string, plannedMinutes: number, googleEventId: string | null }
+): Promise<Session> {
+  const [session] = await getDb()
+    .update(sessions)
+    .set({ ...input, updatedAt: new Date().toISOString() })
+    .where(eq(sessions.id, sessionId))
+    .returning()
+
+  if (!session) {
+    throw new Error(`Sessie ${sessionId} bestaat niet.`)
+  }
+
+  return session
 }

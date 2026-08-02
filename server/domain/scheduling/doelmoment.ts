@@ -10,6 +10,19 @@ import { weekdayFromDate } from '../../../shared/utils/availability'
 // realistisch doelmoment nooit voortijdig af te kappen.
 const MAX_SEARCH_DAYS = 90
 
+// Vast lokaal ankertijdstip, opeenvolgend stapelen bij meerdere sessies op dezelfde dag —
+// afgestemd met Hillebrand (2026-08-01, zie Story 3.1's Dev Notes "Sessie-tijdstip"). Geen
+// UI-veld, geen "wanneer op de dag werkt Evelien"-modellering; puur een placeholder zodat
+// de Calendar-sync-aanroep (AC #2) een concreet start-/eindtijdstip heeft.
+//
+// Hier ondergebracht i.p.v. in `server/domain/tasks/create-task.ts` (waar 'ie oorspronkelijk
+// stond, code review 2026-08-02): `server/domain/scheduling/recalculate.ts` had 'm ook
+// nodig, en `scheduling/` importeren vanuit `tasks/` zou de bestaande, eenrichtings-
+// afhankelijkheidsrichting (`tasks/` → `scheduling/`, zie `create-task.ts`'s eigen import
+// van `calculateDoelmoment`) omkeren — zelfde categorie fix als Story 3.1's
+// `shared/utils/scheduling.ts` voor een vergelijkbaar layering-probleem.
+export const SESSION_ANCHOR_HOUR = 16
+
 // Eerste echte inhoud van deze map (Story 3.1) — de Structural Seed reserveerde 'm al
 // sinds Story 1.1.
 //
@@ -85,11 +98,15 @@ export function calculateDoelmoment(
 // oorspronkelijk berekende doelmoment. Een écht tekort oplossen is expliciet Epic 6's taak
 // (tijdgebrek-detectie/escalatie), niet deze story's — hier wordt bewust geen
 // escalatielogica gebouwd.
+// `excludeTaskId` (Story 3.5, optioneel — bestaande aanroepers ongewijzigd): doorgegeven
+// aan `sumPlannedMinutesForUserOnDate` zodat een taak die herberekend wordt niet tegen haar
+// eigen, nog-niet-verplaatste sessie botst (die zou anders dubbel meetellen als "al bezet").
 export async function findSessionDate(
   userId: string,
   doelmoment: string,
   requiredMinutes: number,
-  today: string
+  today: string,
+  excludeTaskId?: string
 ): Promise<string> {
   const pattern = await getOrCreateWeekPattern(userId)
 
@@ -99,7 +116,7 @@ export async function findSessionDate(
     const exceptionMinutes = await getExceptionForDate(userId, candidate)
     const weekdayMinutes = pattern[weekdayFromDate(candidate)]
     const availableMinutes = exceptionMinutes !== null ? exceptionMinutes : weekdayMinutes
-    const alreadyPlannedMinutes = await sumPlannedMinutesForUserOnDate(userId, candidate)
+    const alreadyPlannedMinutes = await sumPlannedMinutesForUserOnDate(userId, candidate, excludeTaskId)
 
     if (availableMinutes - alreadyPlannedMinutes >= requiredMinutes) {
       return candidate

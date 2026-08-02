@@ -60,12 +60,12 @@ development_status:
   2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done
   3-2-deeltaken-automatische-tijdsom: done
   3-3-benodigdheden-met-auto-suggestie-per-vak: done
   3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done
-  3-5-idempotente-herberekening-bij-wijzigingen: backlog
+  3-5-idempotente-herberekening-bij-wijzigingen: done
   epic-3-retrospective: optional
 
   epic-4: backlog

@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `google_event_id` text;

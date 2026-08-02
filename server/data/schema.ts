@@ -145,6 +145,13 @@ export const sessions = sqliteTable('sessions', {
   // "Sessie-tijdstip", afgestemd met Hillebrand 2026-08-01).
   startsAt: text('starts_at').notNull(),
   plannedMinutes: integer('planned_minutes').notNull(),
+  // Story 3.5 — Google's event-ID, nodig om een bestaand Calendar-event via
+  // `updateHomeworkEvent` bij te werken i.p.v. bij elke herberekening een duplicaat aan te
+  // maken. Nullable, geen DB-default nodig (een `ALTER TABLE ADD COLUMN` zonder `NOT NULL`
+  // stelt geen non-null-default-eis, in tegenstelling tot Story 3.3's `needs`-kolom):
+  // bestaande sessies vóór deze migratie, en sessies aangemaakt zonder actieve Calendar-
+  // write-scope/kleur, hebben 'm simpelweg niet.
+  googleEventId: text('google_event_id'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
