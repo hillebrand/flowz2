@@ -105,4 +105,18 @@ export interface TaskPrepResponse {
   title: string
   plannedMinutes: number
   needs: string[]
+  // Story 4.4 — nodig voor 1.3-sessie-actief's subtaak-wachtrij. `minutes` is per subtaak
+  // optioneel (Story 3.2), net als op de Subtask-rij zelf.
+  subtasks: {
+    id: string
+    name: string
+    minutes: number | null
+  }[]
+}
+
+// Story 4.4 — de vorm die `sessie/starten.vue`'s "Start"-knop doorgeeft aan 1.3 via
+// `useState('sessie-actief-taak', ...)`. Gedeeld i.p.v. lokaal gedefinieerd (Story 4.2's
+// DRY-les — voorheen een lokale `SessieActiefTaak`-interface in starten.vue).
+export interface SessionActiveTaak extends TaskPrepResponse {
+  starttijdstip: string
 }

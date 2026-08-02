@@ -1,5 +1,5 @@
 import { getRouterParam } from 'h3'
-import { getSessionForTask, getTaskById } from '../../data/tasks'
+import { getSessionForTask, getSubtasksForTask, getTaskById } from '../../data/tasks'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import type { TaskPrepResponse } from '../../../shared/types/tasks'
 
@@ -43,12 +43,16 @@ export default defineEventHandler(async (event): Promise<TaskPrepResponse | Erro
       return envelope(event, 500, ErrorCodes.InternalError, 'Kon taak niet ophalen.')
     }
 
+    // Story 4.4 — nodig voor 1.3-sessie-actief's subtaak-wachtrij.
+    const taskSubtasks = await getSubtasksForTask(taskId)
+
     return {
       id: task.id,
       subject: task.subject,
       title: task.title,
       plannedMinutes: taskSession.plannedMinutes,
-      needs: task.needs
+      needs: task.needs,
+      subtasks: taskSubtasks.map(subtask => ({ id: subtask.id, name: subtask.name, minutes: subtask.minutes }))
     }
   } catch (fout) {
     console.error('[tasks] Kon taak niet ophalen:', fout)

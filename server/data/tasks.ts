@@ -169,6 +169,15 @@ export async function getSessionForTask(taskId: string): Promise<Session | null>
   return rows[0] ?? null
 }
 
+// Story 4.4 — eerste leesfunctie voor subtaken (bestonden al sinds Story 3.2, maar tot nu
+// toe alleen geschreven, nooit teruggelezen). Lege array is een normaal, geen taken hebben
+// per definitie subtaken. Review-patch (drie reviewers onafhankelijk): expliciete
+// `orderBy` — zonder deze is de rijvolgorde niet gegarandeerd, en 1.3's subtaak-wachtrij
+// (AC #1: "Subtaak {huidig} van {totaal}") hangt daar direct van af.
+export async function getSubtasksForTask(taskId: string): Promise<Subtask[]> {
+  return getDb().select().from(subtasks).where(eq(subtasks.taskId, taskId)).orderBy(subtasks.createdAt)
+}
+
 // Voor `recalculateTaskPlanning` (Story 3.5) — één `UPDATE` op de bestaande sessierij,
 // geen delete+insert: houdt `id`/`createdAt` stabiel (belangrijk zodra `googleEventId` er
 // al aan hangt) en is letterlijker idempotent (twee keer dezelfde waarde schrijven is een

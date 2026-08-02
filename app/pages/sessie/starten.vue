@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
-import type { HomePlanResponse, TaskPrepResponse } from '#shared/types/tasks'
+import type { HomePlanResponse, SessionActiveTaak, TaskPrepResponse } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
@@ -59,9 +59,11 @@ const isLoading = computed(() => !heeftBruikbareData.value && !!taakId.value && 
 const taakNietGevonden = computed(() => !heeftBruikbareData.value && (!taakId.value || is404(fetchError.value)))
 const heeftOnbekendeFout = computed(() => !heeftBruikbareData.value && !!fetchError.value && !is401(fetchError.value) && !is404(fetchError.value))
 
-// `fetchedTaak` (bevat de gegarandeerd-actuele `needs`) heeft voorrang zodra 'ie binnen is;
-// tot die tijd `sessieStartTaak` voor instant vak/taaknaam (`needs` daar mogelijk `[]`/stale).
-const taak = computed<PrepTaak | null>(() => {
+// `fetchedTaak` (bevat de gegarandeerd-actuele `needs`/`subtasks`) heeft voorrang zodra
+// 'ie binnen is; tot die tijd `sessieStartTaak` voor instant vak/taaknaam (die heeft nooit
+// `subtasks` — 1.2 toont die toch niet, alleen 1.3 heeft ze straks nodig, zie
+// `startSessieActief`'s eigen afdwinging hieronder).
+const taak = computed<Omit<PrepTaak, 'subtasks'> | null>(() => {
   if (fetchedTaak.value) return fetchedTaak.value
   return heeftDirecteData.value ? sessieStartTaak.value : null
 })
@@ -74,15 +76,36 @@ function terugNaarHome() {
 // dat blijft 1.1's eigen doorgeefkanaal), met een vers starttijdstip voor Story 4.4's
 // timer. Route/veldnamen: zie de story's Open Question #4 (nog niet bevestigd door 1.3's
 // eigen detailanalyse).
-interface SessieActiefTaak extends PrepTaak {
-  starttijdstip: string
-}
-const sessieActiefTaak = useState<SessieActiefTaak | null>('sessie-actief-taak', () => null)
+const sessieActiefTaak = useState<SessionActiveTaak | null>('sessie-actief-taak', () => null)
 
-function startSessieActief() {
-  if (!taak.value) return
-  sessieActiefTaak.value = { ...taak.value, starttijdstip: new Date().toISOString() }
-  navigateTo(`/sessie/actief?taak=${encodeURIComponent(taak.value.id)}`)
+// Story 4.4, Task 2 — race-conditie-hardening: `taak` kan op dit moment nog de subtaak-loze
+// `sessieStartTaak`-fallback zijn (de achtergrond-fetch loopt mogelijk nog). 1.3 heeft de
+// gegarandeerd-volledige (incl. subtaken) data nodig, dus wacht hier alsnog de fetch af als
+// die nog niet is afgerond — nooit blindelings een mogelijk subtaak-loze `taak.value` doorgeven.
+// Review-patch (Blind Hunter): `isStarting`-guard tegen een dubbele klik die twee
+// gelijktijdige fetch/navigatie-pogingen zou starten.
+const isStarting = ref(false)
+async function startSessieActief() {
+  if (isStarting.value) return
+  isStarting.value = true
+  try {
+    if (!fetchedTaak.value && taakId.value && (fetchStatus.value === 'pending' || fetchStatus.value === 'idle')) {
+      // Review-patch (Edge Case Hunter): try/catch als extra bescherming — `useFetch`'s
+      // `execute()` vangt fouten normaliter zelf af in `fetchError`, maar een onverwachte
+      // throw mag hier nooit onafgevangen naar boven lekken.
+      await fetchTaak().catch(() => {})
+    }
+    // Review-patch (Acceptance Auditor + Blind Hunter): zónder gefetchte, subtaak-volledige
+    // data niet navigeren — anders zou een mislukte achtergrond-fetch stilzwijgend
+    // "geen subtaken" (AC #4's fallback-weergave) tonen op 1.3 voor een taak die er wél
+    // heeft. De al-zichtbare fout-/laadstaat op déze pagina (`heeftOnbekendeFout`) blijft
+    // dan gewoon staan i.p.v. door te navigeren met verzonnen lege data.
+    if (!fetchedTaak.value) return
+    sessieActiefTaak.value = { ...fetchedTaak.value, starttijdstip: new Date().toISOString() }
+    navigateTo(`/sessie/actief?taak=${encodeURIComponent(fetchedTaak.value.id)}`)
+  } finally {
+    isStarting.value = false
+  }
 }
 </script>
 
@@ -127,6 +150,7 @@ function startSessieActief() {
         type="button"
         class="prep-start-button"
         aria-label="Start"
+        :disabled="isStarting"
         @click="startSessieActief"
       >Start</button>
     </section>

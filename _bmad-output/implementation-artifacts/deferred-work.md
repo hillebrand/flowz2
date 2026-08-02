@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: code review of 4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen (2026-08-02)
+
+- **Timer-weergave kan tijdelijk bevriezen in een achtergrondtab** — browsers kunnen `setInterval` in een niet-actieve tab throttlen/pauzeren; de onderliggende wandklok-berekening (`elapsedMs`) blijft correct, maar de zichtbare `active-timer`-tekst en `overGeplandeTijd`-signaal updaten pas weer bij de eerstvolgende tick, niet direct bij het terugkeren naar het tabblad. **Reden voor doorschuiven:** vereist een `visibilitychange`-listener die de weergave forceert te verversen bij focus-terugkeer — een kleine, losstaande verbetering, geen correctheidsfout in de onderliggende berekening zelf.
+- **Kleur-only signaal voor "over de geplande tijd"** (`active-timer--over`) — geen tekst/icoon/`aria-*`-alternatief voor kleurenblinde gebruikers of screenreaders. **Reden voor doorschuiven:** UX-spec eist expliciet "subtiel, geen alarm"; een toegankelijk alternatief verdient een eigen ontwerppas (net als eerdere uitgestelde a11y-punten in dit project), geen losse patch tijdens déze review.
+- **Geen click-guard tegen een zeer snelle dubbele klik op "Klaar"/"Later"** — kan in theorie twee subtaken in één fysieke actie verwerken (de knoppen worden niet gedisabled tijdens verwerking). **Reden voor doorschuiven:** lage kans, lage impact (herstelbaar door simpelweg door te werken), en de synchrone state-update maakt dit al lastig te raken in de praktijk.
+
 ## Deferred from: code review of 4-3-sessie-tussenscherm-benodigdheden-bekijken (2026-08-02)
 
 - **`TaskPrepResponse` en `HomePlanResponse['nextTask']` hebben identieke velden zonder gedeeld brontype** — puur een codecomment die de parallel bewaakt, geen typesysteem-afdwinging. Een toekomstige wijziging aan één van beide zou stil kunnen driften. **Reden voor doorschuiven:** bewuste keuze in de story zelf (twee endpoints met een eigen levenscyclus); een gedeeld basistype is een redelijke toekomstige refactor, geen huidige correctheidsfout.
