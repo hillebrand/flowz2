@@ -121,3 +121,17 @@ export async function getNeedsSuggestionsForSubject(userId: string, subject: str
 
   return [...seen]
 }
+
+// Voor `server/domain/scheduling/ordering.ts`'s `sortByVolgorde` (Story 3.4) — welke
+// Task+Session-paren van deze user landen op déze datum. Zelfde datumvergelijkingstechniek
+// als `sumPlannedMinutesForUserOnDate`/`createTaskAndSession` hierboven (substr op de
+// eerste 10 tekens van `startsAt`, veilig door het vaste 16:00 Europe/Amsterdam-anker).
+export async function getTasksWithSessionOnDate(userId: string, date: string): Promise<{ task: Task, session: Session }[]> {
+  const rows = await getDb()
+    .select({ task: tasks, session: sessions })
+    .from(sessions)
+    .innerJoin(tasks, eq(sessions.taskId, tasks.id))
+    .where(and(eq(tasks.userId, userId), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
+
+  return rows
+}

@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review of 3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken (2026-08-02)
+
+- **Het join+`substr(startsAt,1,10)`-datumfilterpatroon staat drie keer onafhankelijk in `server/data/tasks.ts`** (`createTaskAndSession`, `sumPlannedMinutesForUserOnDate`, `getTasksWithSessionOnDate`) — een gedeelde helper zou de "16:00 Amsterdam-anker kruist nooit UTC-middernacht"-aanname op één plek houden i.p.v. drie onafhankelijke plekken die elk apart vertrouwd moeten worden. **Reden voor doorschuiven:** zou de twee bestaande, al-gereviewde functies aanraken voor een bescheiden DRY-winst — buiten scope voor de story die de derde kopie toevoegde.
+
 ## Deferred from: code review of 3-3-benodigdheden-met-auto-suggestie-per-vak (2026-08-01)
 
 - **Geen vroege bovengrens op de ruwe `needs`-array-lengte vóór de per-item-validatielus in `POST /api/tasks`** — elk element wordt getrimd/afgekapt/aan een `Set` toegevoegd vóórdat de array pas aan het eind op `MAX_NEEDS_COUNT` (30) wordt afgekapt, dus een zeer grote array (bv. duizenden elementen) kost onnodig werk vóórdat het effect zichtbaar wordt. **Reden voor doorschuiven:** het endpoint vereist al authenticatie (beperkt het misbruikbereik), en het verwerken van korte strings is per request goedkoop — geen acuut DoS-risico, wel een inconsistentie met `MAX_SUBTASKS`'s eigen vroege-`length`-check (Story 3.2).
