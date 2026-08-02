@@ -56,3 +56,19 @@ export interface TaskSubjectsResponse {
 export interface NeedsSuggestionsResponse {
   suggestions: string[]
 }
+
+// Story 4.1 — databron voor 1.1-Home. `nextTask` is `null` bij de Leeg-state (AC #2).
+// `plannedMinutes` is de sessieduur voor déze zitting (`Session.plannedMinutes`), niet
+// `totalMinutes` (de bufferformule's eigen invoer). `needs` wordt meegegeven ook al toont
+// déze story ze nergens — al beschikbaar uit de toch al opgehaalde taak, en dient FR2's
+// "geen nieuwe fetch bij navigatie naar 1.2" zodra Story 4.3 dat scherm bouwt.
+export interface HomePlanResponse {
+  nextTask: {
+    id: string
+    subject: string
+    title: string
+    plannedMinutes: number
+    needs: string[]
+  } | null
+  remainingMinutesToday: number
+}

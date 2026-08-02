@@ -1,5 +1,10 @@
 # Deferred Work
 
+## Deferred from: code review of 4-1-hoofdscherm-dagplanning-eerstvolgende-taak (2026-08-02)
+
+- **Geen responsive/mobile CSS voor het hoofdscherm** — `app/pages/index.vue` gebruikt vaste desktop-breedtes (`max-width: 32rem`, geen media queries), terwijl Flowz primair op een telefoon/tablet gebruikt wordt (UX-context: Evelien plant huiswerk, geen deskop-only-workflow). **Reden voor doorschuiven:** eerste échte hoofdscherm-story, geen bestaand responsive-patroon in dit project om op aan te sluiten; verdient een eigen, doordachte pas over alle Epic-4-schermen tegelijk i.p.v. een losse patch op één pagina.
+- **Derde onafhankelijke kopie van de `envelope()`-helper** — nu in `plan.get.ts`, naast de twee al-bestaande kopieën elders (bv. `tasks.post.ts`). Elke route herdefinieert dezelfde 4-argument-vorm. **Reden voor doorschuiven:** bescheiden DRY-winst, geen functioneel risico (de vorm is overal identiek); verdient een gedeelde `server/utils/`-helper i.p.v. een ad-hoc-extractie tijdens déze story se review.
+
 ## Deferred from: code review of 3-5-idempotente-herberekening-bij-wijzigingen (2026-08-02)
 
 - **Geen vroegtijdige no-op-detectie in `recalculateTaskPlanning`** — elke aanroep doet onvoorwaardelijk een DB-write + Calendar-aanroep, ook als de herberekende plaatsing identiek is aan de huidige. **Reden voor doorschuiven:** reële optimalisatie, geen huidige aanroeper (Epic 4/5/6 nog `backlog`), en de self-healing-tak zou sowieso altijd moeten blijven controleren op een ontbrekende `googleEventId`.

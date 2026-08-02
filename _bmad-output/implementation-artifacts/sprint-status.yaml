@@ -68,8 +68,8 @@ development_status:
   3-5-idempotente-herberekening-bij-wijzigingen: done
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-hoofdscherm-dagplanning-eerstvolgende-taak: backlog
+  epic-4: in-progress
+  4-1-hoofdscherm-dagplanning-eerstvolgende-taak: done
   4-2-hoofdscherm-waarschuwing-banner-later-vandaag-calendar-rij: backlog
   4-3-sessie-tussenscherm-benodigdheden-bekijken: backlog
   4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen: backlog
