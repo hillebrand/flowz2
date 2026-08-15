@@ -1,0 +1,1 @@
+ALTER TABLE `subtasks` ADD `status` text DEFAULT 'niet-gestart' NOT NULL;

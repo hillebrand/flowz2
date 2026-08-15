@@ -161,3 +161,20 @@ export interface ReplanSessionResponse {
   ok: true
   completed: boolean
 }
+
+// Story 5.1 — databron voor 6.1-takenoverzicht (`GET /api/tasks?status=open`). Al gesorteerd
+// op deadline (server-side, `getOpenTasksWithProgress`) — client groepeert alleen nog op
+// week ("Deze week"/"Volgende week"/"Later"), geen herordening nodig.
+export interface OpenTaskItem {
+  id: string
+  subject: string
+  title: string
+  type: TaskType
+  deadline: string
+  totalSubtasks: number
+  doneSubtasks: number
+}
+
+export interface OpenTasksResponse {
+  tasks: OpenTaskItem[]
+}

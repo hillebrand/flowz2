@@ -93,14 +93,23 @@ const alleSubtakenKlaar = computed(() => (taak.value?.subtasks.length ?? 0) > 0 
 const huidigNummer = computed(() => Math.min(doneIds.size + 1, totaalSubtaken.value))
 const totaalSubtaken = computed(() => taak.value?.subtasks.length ?? 0)
 
+// Story 5.1 — fire-and-forget-persistentie van de subtaakstatus (zelfde `.catch`-precedent
+// als de bestaande /stop-/heartbeat-aanroepen), náást de lokale `doneIds`/`laterIds`-state
+// hierboven, die blijft ongewijzigd de bron voor de live-sessie-UI zelf.
 function subtaakKlaar() {
   const id = queue.value.shift()
-  if (id) doneIds.add(id)
+  if (id) {
+    doneIds.add(id)
+    $fetch(`/api/subtasks/${encodeURIComponent(id)}/done`, { method: 'POST' })
+      .catch(fout => console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout))
+  }
 }
 function subtaakLater() {
   const id = queue.value.shift()
   if (id) {
     laterIds.add(id)
+    $fetch(`/api/subtasks/${encodeURIComponent(id)}/later`, { method: 'POST' })
+      .catch(fout => console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout))
     queue.value.push(id)
   }
 }

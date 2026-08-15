@@ -1,0 +1,103 @@
+<script setup lang="ts">
+// Story 5.1 — eerste gedeelde component in dit project (`app/components/` bestond nog
+// niet). Vervangt `index.vue`'s decoratieve hamburger-`<span>` (Story 4.1) door een echte,
+// uitklapbare menu-knop. Items zijn een simpele interne array — voor déze story precies 1
+// bestemming (Takenoverzicht); een toekomstige tweede bestemming (weekoverzicht, Epic 6)
+// kan er zonder herstructurering aan toegevoegd worden.
+const ITEMS: { label: string, to: string }[] = [
+  { label: 'Takenoverzicht', to: '/taken' }
+]
+
+const open = ref(false)
+const rootRef = ref<HTMLElement>()
+
+function toggle() {
+  open.value = !open.value
+}
+function close() {
+  open.value = false
+}
+
+function onDocumentClick(event: MouseEvent) {
+  if (rootRef.value && !rootRef.value.contains(event.target as Node)) close()
+}
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') close()
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  document.addEventListener('keydown', onKeydown)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
+</script>
+
+<template>
+  <div ref="rootRef" class="hamburger-menu">
+    <button
+      id="home-header-hamburger"
+      type="button"
+      class="hamburger-menu-button"
+      aria-label="Menu"
+      aria-haspopup="menu"
+      :aria-expanded="open"
+      aria-controls="hamburger-menu-panel"
+      @click="toggle"
+    >☰</button>
+    <ul v-if="open" id="hamburger-menu-panel" class="hamburger-menu-panel" role="menu">
+      <li v-for="item in ITEMS" :key="item.to" role="none">
+        <NuxtLink :to="item.to" role="menuitem" class="hamburger-menu-item" @click="close">{{ item.label }}</NuxtLink>
+      </li>
+    </ul>
+  </div>
+</template>
+
+<style scoped>
+.hamburger-menu {
+  position: relative;
+}
+
+.hamburger-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+}
+
+.hamburger-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+  min-width: 10rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.hamburger-menu-item {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  color: #111827;
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.hamburger-menu-item:hover,
+.hamburger-menu-item:focus-visible {
+  background: #f3f4f6;
+}
+</style>

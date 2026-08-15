@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from './db'
-import { sessionLogs, sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type Task } from './schema'
+import { sessionLogs, sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type SubtaskStatus, type Task } from './schema'
 import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
 
 export interface CreateTaskAndSessionInput {
@@ -149,6 +149,30 @@ export async function getTasksWithSessionOnDate(userId: string, date: string): P
   return rows
 }
 
+// Story 5.1 — voor 6.1-takenoverzicht (`GET /api/tasks?status=open`). Alle openstaande
+// taken van `userId`, gesorteerd op deadline, met per taak het totale en afgeronde-aantal
+// subtaken via een `LEFT JOIN` + `GROUP BY` (één query i.p.v. N+1 per taak). `LEFT JOIN`
+// (niet `INNER`) — een taak zonder subtaken moet ook meetellen, met `totalSubtasks: 0`.
+export async function getOpenTasksWithProgress(userId: string): Promise<{ task: Task, totalSubtasks: number, doneSubtasks: number }[]> {
+  // Review-patch: `DONE_STATUS: SubtaskStatus` i.p.v. een losse letterlijke string in de
+  // SQL — een toekomstige hernoeming van de status-waarde geeft nu een compile-fout i.p.v.
+  // stil een verkeerde telling op te leveren.
+  const DONE_STATUS: SubtaskStatus = 'afgerond'
+  const rows = await getDb()
+    .select({
+      task: tasks,
+      totalSubtasks: sql<number>`count(${subtasks.id})`,
+      doneSubtasks: sql<number>`count(case when ${subtasks.status} = ${DONE_STATUS} then 1 end)`
+    })
+    .from(tasks)
+    .leftJoin(subtasks, eq(subtasks.taskId, tasks.id))
+    .where(and(eq(tasks.userId, userId), isNull(tasks.completedAt)))
+    .groupBy(tasks.id)
+    .orderBy(tasks.deadline)
+
+  return rows.map(row => ({ task: row.task, totalSubtasks: Number(row.totalSubtasks), doneSubtasks: Number(row.doneSubtasks) }))
+}
+
 // Voor `recalculateTaskPlanning` (Story 3.5) — `null` bij een niet-bestaande taak, geen
 // `throw`: in tegenstelling tot `getUserById` (waar een onbekende user altijd een
 // programmeerfout is) is "deze taak bestaat niet (meer)" hier een legitiem, door de
@@ -180,6 +204,21 @@ export async function getSessionForTask(taskId: string): Promise<Session | null>
 // (AC #1: "Subtaak {huidig} van {totaal}") hangt daar direct van af.
 export async function getSubtasksForTask(taskId: string): Promise<Subtask[]> {
   return getDb().select().from(subtasks).where(eq(subtasks.taskId, taskId)).orderBy(subtasks.createdAt)
+}
+
+// Story 5.1 — nodig voor de ownership-check in server/api/subtasks/[id]/done|later.post.ts
+// (de deeltaak draagt zelf geen userId, dus de aanroeper haalt via `subtask.taskId` de
+// bijbehorende taak op om de eigenaar te verifiëren — zelfde precedent als `getSessionById`).
+export async function getSubtaskById(subtaskId: string): Promise<Subtask | null> {
+  const [subtask] = await getDb().select().from(subtasks).where(eq(subtasks.id, subtaskId))
+  return subtask ?? null
+}
+
+export async function updateSubtaskStatus(subtaskId: string, status: SubtaskStatus): Promise<void> {
+  await getDb()
+    .update(subtasks)
+    .set({ status, updatedAt: new Date().toISOString() })
+    .where(eq(subtasks.id, subtaskId))
 }
 
 // Story 4.5 — nodig voor de ownership-check in server/api/sessions/[sessionId]/* (de

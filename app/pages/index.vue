@@ -151,7 +151,7 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
 <template>
   <main v-if="loggedIn" class="home-page">
     <header id="home-header" class="home-header">
-      <span id="home-header-hamburger" class="home-header-hamburger" aria-hidden="true">☰</span>
+      <HamburgerMenu />
       <span id="home-header-logo" class="home-header-logo">Flowz</span>
       <span
         v-if="!isLoading && plan"
@@ -260,17 +260,6 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   display: flex;
   align-items: center;
   padding: 1.5rem 1rem;
-}
-
-.home-header-hamburger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
 }
 
 .home-header-logo {

@@ -1,9 +1,9 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { Weekday } from '../../shared/types/availability'
-import type { Difficulty, Priority, TaskType } from '../../shared/types/tasks'
+import type { Difficulty, Priority, SubtaskStatus, TaskType } from '../../shared/types/tasks'
 
 export type { Weekday }
-export type { Difficulty, Priority, TaskType }
+export type { Difficulty, Priority, SubtaskStatus, TaskType }
 
 // Geen wachtwoordveld (AD-2) — User is 1:1 aan een Google-account gekoppeld
 // via de OAuth-subject-id, dat is de enige identiteit.
@@ -201,6 +201,12 @@ export const subtasks = sqliteTable('subtasks', {
   taskId: text('task_id').notNull().references(() => tasks.id),
   name: text('name').notNull(),
   minutes: integer('minutes'),
+  // Story 5.1 — al aangekondigd in dit tabel-commentaar sinds Story 3.2 ("nodig voor Epic
+  // 4/Story 5.3"), nu vervroegd nodig voor 5.1's takenoverzicht-voortgangsbalkje (koude
+  // paginalaad, geen actieve sessie om uit te lezen). `.default('niet-gestart')` nodig
+  // (zelfde reden als `needs`/`hasCalendarWriteScope`): bestaande rijen vóór deze migratie
+  // moeten alsnog een geldige waarde krijgen.
+  status: text('status').$type<SubtaskStatus>().notNull().default('niet-gestart'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

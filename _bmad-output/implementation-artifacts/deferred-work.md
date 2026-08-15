@@ -1,5 +1,12 @@
 # Deferred Work
 
+## Deferred from: code review of 5-1-takenoverzicht-lijst-per-week (2026-08-15)
+
+- **Race condition: onbeveiligde, niet-`await`-ede `/done`/`/later`-aanroepen kunnen in theorie in de verkeerde volgorde aankomen** — `subtaakLater()` zet een deeltaak terug in de wachtrij; wordt-ie later alsnog met "Klaar" afgerond, vuurt dat een tweede, ongerelateerde fire-and-forget-aanroep af. Bij netwerk-reordering zou de laatste server-aankomst kunnen winnen i.p.v. de laatste gebruikersactie. **Reden voor doorschuiven:** laag risico (normale HTTP-verzoeken naar dezelfde origin komen in de praktijk vrijwel altijd in volgorde aan), en een echte oplossing (sequentieel wachten, of een versiestempel per aanroep) staat op gespannen voet met de bewust snelle, niet-blokkerende lokale sessie-UX.
+- **`HamburgerMenu` heeft geen volledige focus-management** (openen verplaatst focus niet naar het paneel, sluiten niet terug naar de knop) — puur muis-/klikgeoriënteerd. **Reden voor doorschuiven:** matcht een al meerdere keren eerder geaccepteerd patroon in dit project (leave-confirm-modal, Story 3.3/4.5) — verdient een eigen toegankelijkheidspas over alle soortgelijke elementen tegelijk, geen losse patch op één nieuwe component.
+- **Geen index op `subtasks.task_id`** voor de nieuwe join+aggregatie-query (`getOpenTasksWithProgress`) — scant momenteel de volledige `subtasks`-tabel per aanroep. **Reden voor doorschuiven:** premature optimalisatie op de huidige (hobby-)schaal, consistent met dit project se "geen vroegtijdige optimalisatie"-houding elders.
+- **Geen geautomatiseerde tests voor de nieuwe routes/pagina** (`GET /api/tasks`, `POST /api/subtasks/{id}/done|later`, `app/pages/taken/index.vue`) — projectbreed al herhaaldelijk gevonden en getrackt, niet uniek aan deze story.
+
 ## Deferred from: code review of 4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten (2026-08-15)
 
 - **Geen rollback bij een falende `deleteHomeworkEvent`-aanroep in `replanAfterSession`'s "taak klaar"-tak** — als de Calendar-verwijdering faalt (netwerk, 5xx, verlopen refresh-token) nadat `actualMinutes` al is opgeslagen, blijft de taak "niet afgerond" met een verweesd Calendar-event. **Reden voor doorschuiven:** matcht `recalculateTaskPlanning`'s eigen, al-gereviewde en geaccepteerde "geen rollback"-precedent voor exact dit type gedeeltelijke storing (DB-write vóór een externe Calendar-aanroep) — geen nieuw risico, consistent met een bestaand, bewust geaccepteerd patroon.
