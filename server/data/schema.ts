@@ -122,6 +122,12 @@ export const tasks = sqliteTable('tasks', {
   // `DEFAULT` daar niet voor toe (zelfde reden als `hasCalendarWriteScope`.default(0)
   // hierboven).
   needs: text('needs', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  // Story 4.7 — nullable ISO-timestamp, `null` = nog openstaand, gezet = definitief klaar
+  // (resterende tijd 0 op 1.4-sessie-afronden). Taak/sessie/deeltaken blijven daarna gewoon
+  // bestaan als historisch record (gepland-vs-besteed, met het oog op een toekomstige
+  // adaptieve-tijdschatting-functie, architectuur se Deferred-sectie) — dit veld is puur een
+  // filter, geen verwijdering. Zelfde vorm/precedent als `sessions.stoppedAt`.
+  completedAt: text('completed_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
@@ -130,11 +136,12 @@ export type Task = typeof tasks.$inferSelect
 export type NewTask = typeof tasks.$inferInsert
 
 // Task 1:N Session (AD-3) — de planning zelf blijft een berekende weergave, deze tabel is
-// alleen de opgeslagen geplande sessie, geen losse "planning"-tabel. Geen `actualMinutes`/
-// status-kolom nu: Epic 4's sessie-runner voegt die later toe via een eigen migratie —
-// schrijfpaden voor gepland (scheduler, hier) vs. werkelijk (sessie-runner) blijven zo
-// vanaf het begin gescheiden (Consistency Conventions), niet vooruitbouwen op een nog
-// niet geanalyseerde Epic-4-behoefte.
+// alleen de opgeslagen geplande sessie, geen losse "planning"-tabel. Deze rij wordt bij
+// elke herberekening hergebruikt/verplaatst (Story 3.5's `updateSessionPlacement`), nooit
+// verwijderd-en-opnieuw-aangemaakt — daarom staat de "werkelijk bestede tijd" NIET hier
+// (zou bij elke volgende sessie op déze taak overschreven worden), maar in `sessionLogs`
+// hieronder (Story 4.7, review-patch: één rij per échte werksessie i.p.v. één overschreven
+// kolom).
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   taskId: text('task_id').notNull().references(() => tasks.id),
@@ -166,10 +173,27 @@ export const sessions = sqliteTable('sessions', {
 export type Session = typeof sessions.$inferSelect
 export type NewSession = typeof sessions.$inferInsert
 
+// Story 4.7 (review-patch) — één rij per échte werksessie, onafhankelijk van `sessions`'
+// "precies 1 sessie-rij per taak, hergebruikt bij elke herberekening"-model. Voorkomt dat
+// een taak die meer dan één werksessie nodig heeft de `actualMinutes` van eerdere sessies
+// stilzwijgend verliest — nodig voor een toekomstige adaptieve-tijdschatting-functie
+// (architectuur se Deferred-sectie), precies de reden waarom afgeronde taken niet
+// verwijderd worden (zie `tasks.completedAt`). Puur een logtabel, geen mutatie-doel voor
+// scheduling zelf (AD-1) — `recalculateTaskPlanning` leest hier nooit uit.
+export const sessionLogs = sqliteTable('session_logs', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  actualMinutes: integer('actual_minutes').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type SessionLog = typeof sessionLogs.$inferSelect
+export type NewSessionLog = typeof sessionLogs.$inferInsert
+
 // Task 1:N Subtask (AD-3) — telt mee als scheduling-input via `tasks.totalMinutes` (Story
 // 3.2). Geen `status`-kolom nu (Niet gestart/Uitgesteld/Afgerond, nodig voor Epic 4/Story
-// 5.3) — zelfde redenering als `sessions.actualMinutes` hierboven: niet vooruitbouwen op
-// een nog niet geanalyseerde behoefte, een latere migratie is goedkoop. `name` is altijd
+// 5.3) — zelfde redenering als hierboven: niet vooruitbouwen op een nog niet geanalyseerde
+// behoefte, een latere migratie is goedkoop. `name` is altijd
 // gevuld: een rij zonder (getrimde) naam wordt vóór opslag weggefilterd (server-side, zie
 // server/api/tasks.post.ts), nooit als lege `Subtask`-rij gepersisteerd.
 export const subtasks = sqliteTable('subtasks', {

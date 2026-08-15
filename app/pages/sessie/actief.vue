@@ -119,6 +119,7 @@ function stopSessie() {
   if (!taak.value) return
   sessieOverzichtLog.value = {
     taskId: taak.value.id,
+    sessionId: taak.value.sessionId,
     subject: taak.value.subject,
     title: taak.value.title,
     plannedMinutes: taak.value.plannedMinutes,

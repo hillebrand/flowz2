@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SessieOverzichtLog, SubtaskStatus } from '#shared/types/tasks'
+import type { ReplanSessionInput, SessieOverzichtLog, SubtaskStatus } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
@@ -113,6 +113,17 @@ function terugNaarHome() {
   remainingHoursError.value = validateRemainingHours()
   remainingMinutesError.value = validateRemainingMinutes()
   if (remainingHoursError.value || remainingMinutesError.value) return
+  if (log.value) {
+    const payload: ReplanSessionInput = {
+      actualMinutes: Math.round(log.value.spentSeconds / 60),
+      remainingHours: isEmptyField(remainingHours.value) ? null : Number(remainingHours.value),
+      remainingMinutes: isEmptyField(remainingMinutes.value) ? null : Number(remainingMinutes.value)
+    }
+    // Fire-and-forget (UX-spec: client wacht niet op de response) — `.catch` i.p.v. stil
+    // falen, zelfde precedent als Story 4.5/4.6's andere fire-and-forget-aanroepen.
+    $fetch(`/api/sessions/${encodeURIComponent(log.value.sessionId)}/replan`, { method: 'POST', body: payload })
+      .catch(fout => console.error('[sessie] Kon herplan-verzoek niet versturen:', fout))
+  }
   // Review-patch (Edge Case Hunter): leegmaken vóór het navigeren — zelfde precedent als
   // `sessie/actief.vue`'s `stopSessie()` — voorkomt dat een browser-terug-navigatie deze
   // pagina heropent op een verouderd (maar niet per se incorrect) log-object.

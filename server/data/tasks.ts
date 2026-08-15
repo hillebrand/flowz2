@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from './db'
-import { sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type Task } from './schema'
+import { sessionLogs, sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type Task } from './schema'
 import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
 
 export interface CreateTaskAndSessionInput {
@@ -135,12 +135,16 @@ export async function getNeedsSuggestionsForSubject(userId: string, subject: str
 // Task+Session-paren van deze user landen op déze datum. Zelfde datumvergelijkingstechniek
 // als `sumPlannedMinutesForUserOnDate`/`createTaskAndSession` hierboven (substr op de
 // eerste 10 tekens van `startsAt`, veilig door het vaste 16:00 Europe/Amsterdam-anker).
+// Story 4.7 — `isNull(tasks.completedAt)` toegevoegd: zonder deze filter zou een zojuist
+// afgeronde taak (resterende tijd 0 op 1.4-sessie-afronden) op déze datum blijven staan, want
+// haar sessie se `startsAt` verandert niet — de taak zou dan na een refresh gewoon weer op
+// 1.1-Home verschijnen alsof-ie nog gepland is.
 export async function getTasksWithSessionOnDate(userId: string, date: string): Promise<{ task: Task, session: Session }[]> {
   const rows = await getDb()
     .select({ task: tasks, session: sessions })
     .from(sessions)
     .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-    .where(and(eq(tasks.userId, userId), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
+    .where(and(eq(tasks.userId, userId), isNull(tasks.completedAt), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
 
   return rows
 }
@@ -202,6 +206,49 @@ export async function markSessionStopped(sessionId: string): Promise<void> {
   await getDb()
     .update(sessions)
     .set({ stoppedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(eq(sessions.id, sessionId))
+}
+
+// Story 4.7 (review-patch) — schrijft de daadwerkelijk bestede sessietijd weg (Consistency
+// Conventions) als een NIEUWE rij, ongeacht of de taak daarna klaar is of nog een vervolg
+// krijgt. Bewust een `INSERT` in een aparte logtabel i.p.v. een `UPDATE` op `sessions` —
+// die rij wordt bij elke herberekening hergebruikt (Story 3.5), dus een `UPDATE` daar zou
+// de bestede tijd van een eerdere werksessie op déze taak overschrijven zodra een taak meer
+// dan één sessie nodig heeft.
+export async function insertSessionLog(taskId: string, actualMinutes: number): Promise<void> {
+  await getDb().insert(sessionLogs).values({ taskId, actualMinutes })
+}
+
+// Story 4.7 (review-patch) — logt de bestede sessietijd en markeert de taak als definitief
+// klaar (resterende tijd 0) atomair in één transactie (zelfde precedent als
+// `createTaskAndSession`/`deleteTaskAndSession`) — voorkomt dat een crash tussen de twee
+// writes de sessielog wel, maar de afronding niet (of omgekeerd) laat landen. Taak/sessie/
+// deeltaken blijven bestaan als historisch record — dit is puur een filter-veld, geen
+// verwijdering (zie `getTasksWithSessionOnDate` hierboven).
+export async function logSessionAndCompleteTask(taskId: string, actualMinutes: number): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    await tx.insert(sessionLogs).values({ taskId, actualMinutes })
+    await tx.update(tasks).set({ completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+  })
+}
+
+// Story 4.7 (review-patch) — logt de bestede sessietijd en werkt `task.totalMinutes` bij
+// (hergebruikt als "resterende benodigde tijd", Story 4.7's kernbeslissing) atomair in één
+// transactie, zelfde reden als `logSessionAndCompleteTask` hierboven.
+export async function logSessionAndUpdateRemaining(taskId: string, actualMinutes: number, totalMinutes: number): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    await tx.insert(sessionLogs).values({ taskId, actualMinutes })
+    await tx.update(tasks).set({ totalMinutes, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+  })
+}
+
+// Story 4.7 (review-patch) — na het verwijderen van het Calendar-event bij "taak klaar"
+// (`replanAfterSession`) blijft `googleEventId` anders op de sessierij staan en verwijst
+// dan naar een niet meer bestaand event — leeg maken houdt de rij intern consistent.
+export async function clearSessionGoogleEventId(sessionId: string): Promise<void> {
+  await getDb()
+    .update(sessions)
+    .set({ googleEventId: null, updatedAt: new Date().toISOString() })
     .where(eq(sessions.id, sessionId))
 }
 

@@ -71,6 +71,20 @@
       "when": 1785695340073,
       "tag": "0009_classy_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786812855815,
+      "tag": "0010_worried_zarek",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786821458760,
+      "tag": "0011_sour_deadpool",
+      "breakpoints": true
     }
   ]
 }

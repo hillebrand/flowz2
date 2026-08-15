@@ -138,9 +138,26 @@ export interface SessieOverzichtLog {
   // bij de huidige taak hoort (zelfde "verifieer het id vóór je de state vertrouwt"-patroon
   // als `sessie/starten.vue`'s `heeftDirecteData`/`sessie/actief.vue`'s `taak`-computed).
   taskId: string
+  // Story 4.7 — nodig voor de `/replan`-aanroep (`POST /api/sessions/{sessionId}/replan`,
+  // zelfde bron als de bestaande `/stop`-aanroep in `stopSessie()`).
+  sessionId: string
   subject: string
   title: string
   plannedMinutes: number
   spentSeconds: number
   subtasks: { id: string, name: string, status: SubtaskStatus }[]
+}
+
+// Story 4.7 — body van `POST /api/sessions/{sessionId}/replan`. `remainingHours`/
+// `remainingMinutes` zijn `null` als Evelien de velden leeg liet ("oorspronkelijke
+// schatting blijft gelden", zelfde betekenis als op 1.4 zelf).
+export interface ReplanSessionInput {
+  actualMinutes: number
+  remainingHours: number | null
+  remainingMinutes: number | null
+}
+
+export interface ReplanSessionResponse {
+  ok: true
+  completed: boolean
 }
