@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SessionActiveTaak } from '#shared/types/tasks'
+import type { SessieOverzichtLog, SessionActiveTaak } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
@@ -105,16 +105,9 @@ function subtaakLater() {
   }
 }
 
-// "Stoppen" (UX-spec's enige exit-point; géén AC in déze story, zie Dev Notes) — puur
-// client-side: verzamelt de sessie-log en navigeert naar 1.4 (bestaat nog niet, Story 4.6
-// — verwachte 404). Geen API-aanroep: het loggen/stoppen-endpoint is Story 4.5's scope.
-interface SessieOverzichtLog {
-  subject: string
-  title: string
-  plannedMinutes: number
-  spentSeconds: number
-  subtasks: { id: string, name: string, status: 'afgerond' | 'uitgesteld' | 'niet-gestart' }[]
-}
+// "Stoppen" — verzamelt de sessie-log en navigeert naar 1.4 (Story 4.6, leest déze state
+// zonder nieuwe fetch). `SessieOverzichtLog` leeft in shared/types/tasks.d.ts (Story 4.6 —
+// eerste tweede-consument naast dit bestand).
 const sessieOverzichtLog = useState<SessieOverzichtLog | null>('sessie-overzicht-log', () => null)
 
 // Story 4.5 — vlag die de wegnavigeer-guard hieronder laat weten dat déze navigatie al
@@ -125,6 +118,7 @@ const isIntentionalLeave = ref(false)
 function stopSessie() {
   if (!taak.value) return
   sessieOverzichtLog.value = {
+    taskId: taak.value.id,
     subject: taak.value.subject,
     title: taak.value.title,
     plannedMinutes: taak.value.plannedMinutes,

@@ -1,5 +1,12 @@
 # Deferred Work
 
+## Deferred from: code review of 4-6-sessie-afronden-overzicht-resterende-tijd-aanpassen (2026-08-15)
+
+- **`sessieOverzichtLog.value = null` vóór een niet-`await`-ed `navigateTo('/')` (mogelijke blanke-flash)** — het `main`-element unmount't (via `v-if="loggedIn && log"`) zodra de log-state genuld wordt, terwijl `navigateTo` nog niet is afgerond, wat theoretisch een korte blanke flits kan geven vóór de daadwerkelijke navigatie. **Reden voor doorschuiven:** exact hetzelfde patroon zit al live in `app/pages/sessie/actief.vue:144`'s `stopSessie()` (Story 4.4/4.5, al done) — geen nieuw geïntroduceerd risico, consistent met een al geaccepteerd projectpatroon.
+- **Geen testdekking voor `overzicht.vue` of de afwijkingsheuristiek** — projectbreed al herhaaldelijk gevonden en getrackt (zie eerdere entries), niet uniek aan deze story.
+- **Hardcoded hex-kleuren i.p.v. design tokens in `overzicht.vue`** — identiek patroon als al aanwezig in `actief.vue`. **Reden voor doorschuiven:** projectbreed patroon, geen design-token-systeem in dit project; verdient een eigen pas over alle schermen tegelijk.
+- **Geen focus management bij de details-toggle (`wrap-subtask-list`)** — het uitklappen van de subtakenlijst verplaatst focus niet naar de onthulde inhoud. **Reden voor doorschuiven:** geen AC-eis, geen bestaand focus-trap-precedent in dit project (zelfde reden als eerdere uitgestelde a11y-punten).
+
 ## Deferred from: code review of 4-5-sessie-actief-wegnavigeer-bescherming (2026-08-02)
 
 - **`active-leave-confirm-modal` heeft geen `role="dialog"`, geen focus-trap, geen Escape-handler** — puur visueel/muis-georiënteerd, geen toetsenbord-/screenreader-toegankelijkheid. **Reden voor doorschuiven:** geen enkele AC noemt toetsenbord-/screenreader-navigatie voor dit element, en dit project heeft nog geen bestaand modal-component (`taak-confirm-overlay` bestaat wel maar met een ander specifiek doel/tekst) om op aan te sluiten — verdient een eigen ontwerppas, net als de eerdere uitgestelde a11y-punten in dit project.

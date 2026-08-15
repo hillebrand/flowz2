@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-08-02
+last_updated: 2026-08-15
 project: Flowz
 project_key: NOKEY
 tracking_system: file-system
@@ -74,7 +74,7 @@ development_status:
   4-3-sessie-tussenscherm-benodigdheden-bekijken: done
   4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen: done
   4-5-sessie-actief-wegnavigeer-bescherming: done
-  4-6-sessie-afronden-overzicht-resterende-tijd-aanpassen: backlog
+  4-6-sessie-afronden-overzicht-resterende-tijd-aanpassen: done
   4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten: backlog
   epic-4-retrospective: optional
 

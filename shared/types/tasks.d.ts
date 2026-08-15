@@ -123,3 +123,24 @@ export interface TaskPrepResponse {
 export interface SessionActiveTaak extends TaskPrepResponse {
   starttijdstip: string
 }
+
+// Story 4.6 review-patch — was inline gedupliceerd in `SessieOverzichtLog.subtasks` en in
+// `overzicht.vue`'s `statusLabels`-map; hier één keer gedefinieerd zodat een toekomstige
+// vierde status niet op twee plekken tegelijk bijgewerkt hoeft te worden.
+export type SubtaskStatus = 'afgerond' | 'uitgesteld' | 'niet-gestart'
+
+// Story 4.4/4.5 — opgebouwd door `sessie/actief.vue`'s `stopSessie()` via
+// `useState('sessie-overzicht-log', ...)`, gelezen door 1.4-sessie-afronden (Story 4.6)
+// zonder nieuwe fetch. Verplaatst hierheen (was lokaal in actief.vue) zodra een tweede
+// bestand 'm nodig heeft — zelfde precedent als `SessionActiveTaak` hierboven.
+export interface SessieOverzichtLog {
+  // Story 4.6 — nodig om op de `?taak={id}`-route te verifiëren dat déze log daadwerkelijk
+  // bij de huidige taak hoort (zelfde "verifieer het id vóór je de state vertrouwt"-patroon
+  // als `sessie/starten.vue`'s `heeftDirecteData`/`sessie/actief.vue`'s `taak`-computed).
+  taskId: string
+  subject: string
+  title: string
+  plannedMinutes: number
+  spentSeconds: number
+  subtasks: { id: string, name: string, status: SubtaskStatus }[]
+}

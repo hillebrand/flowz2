@@ -130,6 +130,16 @@ function onTotalTimeInput() {
   isManualTotalTime.value = true
 }
 
+// Blokkeert niet-cijfertoetsen vóór ze het veld bereiken (bv. ".", "-", "e") — de
+// blur-validatie ving decimalen al af met een foutmelding, maar met een apart
+// uren-/minutenveld heeft een gebroken uur sowieso geen zin (code review 2026-08-15,
+// zelfde patroon toegepast als sessie/overzicht.vue).
+function blockNonDigitKey(event: KeyboardEvent) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter'].includes(event.key)) return
+  if (!/^[0-9]$/.test(event.key)) event.preventDefault()
+}
+
 // Reset-gebaar (AC #3, letterlijk — code review-beslissing 2026-08-01): "herstelt het
 // automatische gedrag" gebeurt alléén als alle drie de voorwaarden tegelijk gelden — beide
 // velden leeg, focus verloren, én de berekende som > 0. Bij een som van 0 op dat moment
@@ -148,7 +158,7 @@ function onTotalTimeBlur() {
 function formatSumHint(minutes: number): string {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
-  return hours > 0 ? `${hours}u ${mins}min` : `${mins} min`
+  return hours > 0 ? `${hours} uur ${mins} min` : `${mins} min`
 }
 
 function validateSubtaskTime(row: SubtaskRow): string {
@@ -688,12 +698,15 @@ async function onSubmit() {
               ref="totalTimeHoursInput"
               v-model.number="totalTimeHours"
               type="number"
+              inputmode="numeric"
+              step="1"
               class="taak-input taak-input--narrow"
               placeholder="uren"
               aria-label="Totale benodigde tijd, uren"
               min="0"
               :disabled="saving"
               :aria-invalid="!!totalTimeHoursError"
+              @keydown="blockNonDigitKey"
               @input="onTotalTimeInput"
               @blur="onTotalTimeBlur"
             >
@@ -703,6 +716,8 @@ async function onSubmit() {
               ref="totalTimeMinutesInput"
               v-model.number="totalTimeMinutes"
               type="number"
+              inputmode="numeric"
+              step="1"
               class="taak-input taak-input--narrow"
               placeholder="minuten"
               aria-label="Totale benodigde tijd, minuten"
@@ -710,6 +725,7 @@ async function onSubmit() {
               max="59"
               :disabled="saving"
               :aria-invalid="!!totalTimeMinutesError"
+              @keydown="blockNonDigitKey"
               @input="onTotalTimeInput"
               @blur="onTotalTimeBlur"
             >
