@@ -173,6 +173,27 @@ export async function getOpenTasksWithProgress(userId: string): Promise<{ task: 
   return rows.map(row => ({ task: row.task, totalSubtasks: Number(row.totalSubtasks), doneSubtasks: Number(row.doneSubtasks) }))
 }
 
+// Story 5.2 — terugvalpad voor 6.2-taakdetail (refresh/deep-link, geen `useState`-
+// doorgifte vanuit 6.1). Zelfde aggregatie-aanpak als `getOpenTasksWithProgress`
+// hierboven, maar voor één taak — geen `completedAt`-filter: een afgeronde taak mag nog
+// steeds bekeken worden (alleen `/taken`'s lijst filtert die eruit, déze functie niet).
+export async function getTaskWithProgress(taskId: string): Promise<{ task: Task, totalSubtasks: number, doneSubtasks: number } | null> {
+  const DONE_STATUS: SubtaskStatus = 'afgerond'
+  const [row] = await getDb()
+    .select({
+      task: tasks,
+      totalSubtasks: sql<number>`count(${subtasks.id})`,
+      doneSubtasks: sql<number>`count(case when ${subtasks.status} = ${DONE_STATUS} then 1 end)`
+    })
+    .from(tasks)
+    .leftJoin(subtasks, eq(subtasks.taskId, tasks.id))
+    .where(eq(tasks.id, taskId))
+    .groupBy(tasks.id)
+
+  if (!row) return null
+  return { task: row.task, totalSubtasks: Number(row.totalSubtasks), doneSubtasks: Number(row.doneSubtasks) }
+}
+
 // Voor `recalculateTaskPlanning` (Story 3.5) — `null` bij een niet-bestaande taak, geen
 // `throw`: in tegenstelling tot `getUserById` (waar een onbekende user altijd een
 // programmeerfout is) is "deze taak bestaat niet (meer)" hier een legitiem, door de

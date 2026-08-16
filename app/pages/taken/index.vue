@@ -80,9 +80,29 @@ const groups = computed(() => {
 
 const isEmpty = computed(() => (data.value?.tasks.length ?? 0) === 0)
 
-function openTaak(id: string) {
-  navigateTo(`/taken/${encodeURIComponent(id)}`)
+// Story 5.2 — geeft de geklikte taak mee aan 6.2-taakdetail (zelfde `useState`-
+// doorgifte-patroon als `sessie-actief-taak`/`sessie-overzicht-log`), zodat die pagina geen
+// nieuwe fetch nodig heeft op het golden path.
+const taakDetail = useState<OpenTaskItem | null>('taak-detail', () => null)
+function openTaak(task: OpenTaskItem) {
+  taakDetail.value = task
+  navigateTo(`/taken/${encodeURIComponent(task.id)}`)
 }
+
+// Story 5.2 — cross-pagina flash-bevestiging (bv. na een verwijdering op 6.2-taakdetail).
+// Eenmalig: leegmaken zodra gelezen, zodat een latere paginalaad 'm niet opnieuw toont.
+// Vaste timeout (3-4 sec, Hillebrand 2026-08-16) i.p.v. "tot volgende interactie" — geen
+// bestaand cross-pagina-toastprecedent in dit project, wel `taak/nieuw.vue`'s (zelfde-
+// pagina) bevestigingspatroon.
+const flashMessageState = useState<string | null>('flash-message', () => null)
+const flashMessage = ref<string | null>(null)
+onMounted(() => {
+  if (flashMessageState.value) {
+    flashMessage.value = flashMessageState.value
+    flashMessageState.value = null
+    setTimeout(() => { flashMessage.value = null }, 3500)
+  }
+})
 </script>
 
 <template>
@@ -91,6 +111,8 @@ function openTaak(id: string) {
       <button id="tasks-back-link" type="button" class="tasks-back-link" aria-label="Terug" @click="router.back()">← Terug</button>
       <NuxtLink id="tasks-new-button" to="/taak/nieuw" class="tasks-new-button" aria-label="Nieuwe taak aanmaken">+ Nieuwe taak</NuxtLink>
     </header>
+
+    <p v-if="flashMessage" id="tasks-flash-message" class="tasks-flash-message" role="status">{{ flashMessage }}</p>
 
     <div v-if="isLoading" id="tasks-skeleton" class="tasks-skeleton" aria-hidden="true">
       <div class="tasks-skeleton-block tasks-skeleton-block--title" />
@@ -117,7 +139,7 @@ function openTaak(id: string) {
             type="button"
             class="tasks-item"
             :aria-label="`${task.subject}: ${task.title} — ${task.totalSubtasks > 0 ? `${task.doneSubtasks} van ${task.totalSubtasks} subtaken` : 'geen subtaken'}`"
-            @click="openTaak(task.id)"
+            @click="openTaak(task)"
           >
             <p class="tasks-item-subject">{{ task.subject.toUpperCase() }} · {{ TYPE_LABELS[task.type] }}</p>
             <p class="tasks-item-title">{{ task.title }}</p>
@@ -213,6 +235,15 @@ function openTaak(id: string) {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+.tasks-flash-message {
+  margin: 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.875rem;
 }
 
 .tasks-empty-state {
