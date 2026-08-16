@@ -23,7 +23,11 @@ export interface CreateTaskInput {
   difficulty: Difficulty
   priority: Priority
   defaultSessionDuration: number
-  description?: string | null
+  // Story 5.3 — niet langer optioneel: elke aanroeper (create-task.ts/update-task.ts) zet
+  // 'm altijd expliciet op `string | null`, nooit `undefined` — voorkomt een bekende TS-
+  // eigenaardigheid rond het spreaden van optionele velden (object-spread maakt een
+  // optioneel veld "aanwezig maar mogelijk `undefined`", incompatibel met `string | null`).
+  description: string | null
   // Story 3.2 — lege array als er geen deeltaken zijn ingevuld.
   subtasks: SubtaskInput[]
   // Story 3.2 — alleen niet-`null` als Evelien de totale-tijd-velden handmatig heeft
@@ -177,4 +181,41 @@ export interface OpenTaskItem {
 
 export interface OpenTasksResponse {
   tasks: OpenTaskItem[]
+}
+
+// Story 5.3 — databron voor 6.3-bewerkformulier (`GET /api/tasks/{id}/edit`). Geen
+// bestaande fetch/state (Story 5.1/5.2's `OpenTaskItem`/`useState`) bevat genoeg velden
+// voor bewerken (moeilijkheid, prioriteit, sessieduur, omschrijving, benodigdheden,
+// deeltaak-tijden/-status) — vandaar een eigen, volledige vorm.
+export interface TaskEditSubtask {
+  id: string
+  name: string
+  minutes: number | null
+  status: SubtaskStatus
+}
+
+export interface TaskEditData {
+  id: string
+  subject: string
+  title: string
+  type: TaskType
+  deadline: string
+  difficulty: Difficulty
+  priority: Priority
+  defaultSessionDuration: number
+  description: string | null
+  totalMinutes: number
+  subtasks: TaskEditSubtask[]
+  needs: string[]
+}
+
+// Story 5.3 — body van `PUT /api/tasks/{id}`. Zelfde vorm als `CreateTaskInput`, maar elke
+// deeltaak draagt optioneel een bestaand `id` (ontbrekend = nieuwe rij) — nodig voor de
+// server-side reconciliatie in `server/domain/tasks/update-task.ts`.
+export interface UpdateTaskInput extends Omit<CreateTaskInput, 'subtasks'> {
+  // `status` (review-patch) — alleen relevant voor een bestaande rij met `id`; laat de
+  // server een expliciete "Heropenen" (client zet 'm terug naar `'niet-gestart'`)
+  // onderscheiden van een reconciliatie-aanroep die een `'afgerond'`-rij ongemoeid moet
+  // laten. Ontbrekend/`undefined` betekent "geen wijziging bedoeld".
+  subtasks: (SubtaskInput & { id?: string, status?: SubtaskStatus })[]
 }

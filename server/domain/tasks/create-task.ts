@@ -34,7 +34,9 @@ export interface CreateTaskInput {
 // `totalMinutesOverride` wint altijd; anders de som van ingevulde deeltaaktijden; anders
 // (geen deeltaken, geen override) Story 3.1's oorspronkelijke terugval op
 // `defaultSessionDuration`.
-function computeTotalMinutes(input: CreateTaskInput): number {
+// Story 5.3 — geëxporteerd, hergebruikt door `update-task.ts` (zelfde "server is
+// gezaghebbend"-berekening geldt ook bij bewerken).
+export function computeTotalMinutes(input: CreateTaskInput): number {
   if (input.totalMinutesOverride !== null) {
     return input.totalMinutesOverride
   }

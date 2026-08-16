@@ -1,6 +1,20 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { getDb } from './db'
-import { sessionLogs, sessions, subtasks, tasks, type NewSubtask, type NewTask, type Session, type Subtask, type SubtaskStatus, type Task } from './schema'
+import {
+  sessionLogs,
+  sessions,
+  subtasks,
+  tasks,
+  type Difficulty,
+  type NewSubtask,
+  type NewTask,
+  type Priority,
+  type Session,
+  type Subtask,
+  type SubtaskStatus,
+  type Task,
+  type TaskType
+} from './schema'
 import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
 
 export interface CreateTaskAndSessionInput {
@@ -331,4 +345,69 @@ export async function updateSessionPlacement(
   }
 
   return session
+}
+
+export interface UpdateTaskAndSubtasksInput {
+  task: {
+    subject: string
+    title: string
+    type: TaskType
+    deadline: string
+    difficulty: Difficulty
+    priority: Priority
+    defaultSessionDuration: number
+    description: string | null
+    totalMinutes: number
+    needs: string[]
+  }
+  subtasks: { id?: string, name: string, minutes: number | null, status?: SubtaskStatus }[]
+}
+
+// Story 5.3 — atomair: taak-rij bijwerken + deeltaken reconciliëren (update bestaande,
+// invoegen nieuwe, verwijderen weggelaten rijen) in één transactie, zelfde precedent als
+// `createTaskAndSession`. **Beschermt `'afgerond'`-deeltaken tegen stilzwijgende
+// wijziging**, ongeacht wat de client voor naam/tijd stuurt — "server is gezaghebbend,
+// niet de client" (Story 3.2's les) — maar staat de éne expliciete uitzondering toe: een
+// submitted `status: 'niet-gestart'` op een momenteel `'afgerond'`-rij ("Heropenen",
+// review-patch) mag wél door, inclusief de bijbehorende naam/tijd-wijziging op datzelfde
+// verzoek. Zonder deze uitzondering zou "Heropenen" nooit persisteren (code review
+// 2026-08-16: bevestigd als een echte bug — de UI liet de rij bewerkbaar lijken, maar de
+// server negeerde de wijziging stilzwijgend).
+export async function updateTaskAndSubtasks(taskId: string, input: UpdateTaskAndSubtasksInput): Promise<void> {
+  const submittedIds = new Set(input.subtasks.filter(s => s.id).map(s => s.id!))
+
+  await getDb().transaction(async (tx) => {
+    // Binnen de transactie gelezen (review-patch) — een lezing vóór `transaction()` liet
+    // een TOCTOU-venster open waarin een deeltaak tussen de lezing en de writes alsnog
+    // `'afgerond'` kon worden (bv. via de live sessie-flow), waarna de reconciliatie op de
+    // inmiddels verouderde status zou handelen.
+    const existingSubtasks = await tx.select().from(subtasks).where(eq(subtasks.taskId, taskId))
+    const existingById = new Map(existingSubtasks.map(s => [s.id, s]))
+
+    await tx.update(tasks).set({ ...input.task, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+
+    for (const sub of input.subtasks) {
+      const existing = sub.id ? existingById.get(sub.id) : undefined
+      if (existing) {
+        const isExplicitReopen = existing.status === 'afgerond' && sub.status === 'niet-gestart'
+        if (existing.status === 'afgerond' && !isExplicitReopen) continue
+        await tx.update(subtasks)
+          .set({
+            name: sub.name,
+            minutes: sub.minutes,
+            ...(isExplicitReopen ? { status: 'niet-gestart' as SubtaskStatus } : {}),
+            updatedAt: new Date().toISOString()
+          })
+          .where(eq(subtasks.id, existing.id))
+      } else {
+        await tx.insert(subtasks).values({ taskId, name: sub.name, minutes: sub.minutes })
+      }
+    }
+    for (const existing of existingSubtasks) {
+      if (existing.status === 'afgerond') continue
+      if (!submittedIds.has(existing.id)) {
+        await tx.delete(subtasks).where(eq(subtasks.id, existing.id))
+      }
+    }
+  })
 }
