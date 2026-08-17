@@ -1,17 +1,32 @@
 import { readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import { detectAnyShortfall, detectShortfallForDate, generateShortfallRecommendations } from '../../domain/scheduling/shortfall'
+import { setExceptionForDate } from '../../data/availability'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
-import { isValidCalendarDate } from '../../../shared/utils/availability'
+import { isValidCalendarDate, MAX_MINUTES_PER_DAY } from '../../../shared/utils/availability'
 import type { ShortfallRequestInput, ShortfallResponse } from '../../../shared/types/shortfall'
 
 // Story 6.2 — eerste tekort + aanbevelingen voor 3.2-tekort-oplossen. Hergebruikt Story
 // 6.1's escalatie-service ongewijzigd (`detectShortfallForDate`/`detectAnyShortfall` +
 // `generateShortfallRecommendations`). Story 6.2 bouwt deze route zelf (Open Question #1)
-// zodat 3.2 standalone laadbaar/testbaar is; Story 6.3 wordt later de tweede aanroeper
-// (met een expliciete datum + evt. handmatige beschikbare-tijd-override, nog niet hier).
+// zodat 3.2 standalone laadbaar/testbaar is.
+// Story 6.3 — tweede aanroeper (3.1-reden-kiezen): `availableMinutesOverride` persisteert
+// eerst als `AvailableTimeException` (`setExceptionForDate`, Open Question #1's uitkomst)
+// vóórdat het tekort berekend wordt, zodat toekomstige herberekeningen ook van de
+// bijgestelde waarde uitgaan — niet alleen een eenmalige invoer voor déze aanroep.
 function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   return { error: { code, message } }
+}
+
+// Review-patch: zelfde grenzen als de UX-spec se `ERR_AVAILABLE_HOURS_INVALID`/
+// `ERR_AVAILABLE_MINUTES_INVALID` (`reason-time-hours-input`/`reason-time-minutes-input`,
+// 3.1-reden-kiezen) — nu server-side los afdwingbaar omdat de velden niet meer vooraf tot
+// één totaal versmolten zijn.
+function isValidHoursOverride(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+function isValidMinutesOverride(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 59
 }
 
 export default defineEventHandler(async (event): Promise<ShortfallResponse | ErrorEnvelope> => {
@@ -26,16 +41,43 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
     setResponseStatus(event, 400)
     return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
+  // Beide velden moeten samen aanwezig zijn (of geen van beide) — een override is altijd
+  // een volledige uren+minuten-invoer, geen losse halve waarde.
+  const hasOverride = body?.availableHoursOverride !== undefined || body?.availableMinutesOverride !== undefined
+  if (hasOverride) {
+    if (!isValidHoursOverride(body?.availableHoursOverride)) {
+      setResponseStatus(event, 400)
+      return envelope(400, ErrorCodes.ValidationError, 'Vul een geldig aantal uren in (0 of hoger).')
+    }
+    if (!isValidMinutesOverride(body?.availableMinutesOverride)) {
+      setResponseStatus(event, 400)
+      return envelope(400, ErrorCodes.ValidationError, 'Vul minuten in tussen 0 en 59.')
+    }
+  }
+  // Som pas ná losse validatie berekend, en geclamped op `MAX_MINUTES_PER_DAY` (zelfde
+  // bovengrens als `setExceptionForDate`/`updateExceptionForDate`) — een geldige uren-
+  // /minutenpaar kan in theorie nog altijd boven het etmaal uitkomen (bv. 30u 0m).
+  const overrideTotalMinutes = hasOverride
+    ? Math.min(MAX_MINUTES_PER_DAY, body!.availableHoursOverride! * 60 + body!.availableMinutesOverride!)
+    : null
 
   try {
-    const shortfall = body?.date
-      ? await detectShortfallForDate(session.user.id, body.date)
+    const targetDate = body?.date ?? todayInAmsterdam()
+    if (overrideTotalMinutes !== null) {
+      await setExceptionForDate(session.user.id, targetDate, overrideTotalMinutes)
+    }
+
+    const shortfall = body?.date || overrideTotalMinutes !== null
+      ? await detectShortfallForDate(session.user.id, targetDate)
       : await detectAnyShortfall(session.user.id)
 
     if (!shortfall) {
       // Geen tekort (meer) — legitiem, geen foutstate: de client navigeert dan terug naar
       // 1.1-Home (zelfde "niets op te lossen"-uitkomst als AC #2's "Tekort opgelost!"-pad).
-      return { date: body?.date ?? todayInAmsterdam(), shortfallMinutes: 0, recommendations: [] }
+      // Review-patch: `targetDate` hergebruikt i.p.v. `todayInAmsterdam()` opnieuw aan te
+      // roepen — voorkomt een (zeer smalle) inconsistentie als deze request toevallig
+      // precies rond middernacht Europe/Amsterdam binnenkomt.
+      return { date: targetDate, shortfallMinutes: 0, recommendations: [] }
     }
 
     const recommendations = await generateShortfallRecommendations(session.user.id, shortfall)

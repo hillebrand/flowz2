@@ -178,6 +178,48 @@ export async function updateExceptionForDate(
   })
 }
 
+// Story 6.3 — spiegelt `updateExceptionForDate` hierboven (zelfde transactie-/clamp-/
+// auto-verwijder-gedrag), maar met een expliciete doelwaarde i.p.v. een `DELTA_MINUTES`-
+// stap: 3.1-reden-kiezen laat Evelien een absoluut aantal uren/minuten invullen ("ik heb
+// vandaag nog maar 1u30"), geen stapsgewijze aanpassing zoals de exceptie-kalender.
+export async function setExceptionForDate(userId: string, date: string, minutes: number): Promise<UpdateExceptionResult> {
+  const weekday = weekdayFromDate(date)
+  const clamped = Math.min(MAX_MINUTES_PER_DAY, Math.max(0, minutes))
+
+  return getDb().transaction(async (tx) => {
+    const [pattern] = await tx
+      .select()
+      .from(availableTimePatterns)
+      .where(eq(availableTimePatterns.userId, userId))
+    const weekPatternMinutes = pattern ? pattern[weekday] : 0
+
+    const [existing] = await tx
+      .select()
+      .from(availableTimeExceptions)
+      .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
+
+    // Zelfde AC #2-precedent als `updateExceptionForDate`: de exceptie verdwijnt
+    // automatisch zodra de waarde toevallig gelijk is aan het weekpatroon voor die dag.
+    if (clamped === weekPatternMinutes) {
+      if (existing) {
+        await tx.delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
+      }
+      return { date, minutes: clamped, active: false }
+    }
+
+    if (existing) {
+      await tx
+        .update(availableTimeExceptions)
+        .set({ minutes: clamped, updatedAt: new Date().toISOString() })
+        .where(eq(availableTimeExceptions.id, existing.id))
+    } else {
+      await tx.insert(availableTimeExceptions).values({ userId, date, minutes: clamped })
+    }
+
+    return { date, minutes: clamped, active: true }
+  })
+}
+
 // Gerichte per-datum-lookup (Story 3.1) — `getExceptionsForMonth` hierboven is maand-breed,
 // de scheduling-engine's dag-plaatsing heeft per kandidaatdag maar één datum nodig. `null`
 // betekent "geen exceptie voor deze datum" (de aanroeper valt dan terug op het weekpatroon),

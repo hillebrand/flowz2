@@ -15,11 +15,19 @@ export interface ShortfallRecommendationDto {
 }
 
 // Body van `POST /api/day/shortfall`. `date` optioneel — ontbrekend/leeg laat de server
-// zelf de eerstvolgende dag met een tekort opzoeken (`detectAnyShortfall`, Story 6.1);
-// Story 6.3 zal hier later een expliciete datum (vandaag) + eventueel een handmatige
-// beschikbare-tijd-override aan toevoegen (nog niet in scope van déze story).
+// zelf de eerstvolgende dag met een tekort opzoeken (`detectAnyShortfall`, Story 6.1).
+// `availableHoursOverride`/`availableMinutesOverride` (Story 6.3) — 3.1-reden-kiezen's
+// handmatig ingevulde beschikbare tijd voor `date`, als losse uren/minuten-velden (review-
+// patch: eerder één vooraf-opgetelde `availableMinutesOverride`-totaal — schond de story se
+// eigen "Belangrijk" punt 5: "de client stuurt de ruwe uren/minuten; de server... rekent
+// zelf de som", en liet de server "minuten 0-59"/"uren ≥ 0" niet los kunnen valideren
+// zodra beide al tot één getal versmolten waren). Wanneer aanwezig, persisteert de server
+// de som eerst als `AvailableTimeException` (`setExceptionForDate`) vóórdat het tekort
+// berekend wordt, zodat toekomstige herberekeningen ook van de bijgestelde waarde uitgaan.
 export interface ShortfallRequestInput {
   date?: string
+  availableHoursOverride?: number
+  availableMinutesOverride?: number
 }
 
 export interface ShortfallResponse {
