@@ -116,6 +116,9 @@ export async function sumPlannedMinutesForUserOnDate(userId: string, date: strin
     .where(and(
       eq(tasks.userId, userId),
       isNull(tasks.completedAt),
+      // Story 6.2 — zelfde reden als `getTasksWithSessionOnDate`: een laten-vervallen
+      // taak se sessie mag niet blijven meetellen als "al bezette" capaciteit.
+      isNull(tasks.droppedAt),
       sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
       excludeTaskId ? sql`${tasks.id} != ${excludeTaskId}` : undefined
     ))
@@ -163,12 +166,19 @@ export async function getNeedsSuggestionsForSubject(userId: string, subject: str
 // afgeronde taak (resterende tijd 0 op 1.4-sessie-afronden) op déze datum blijven staan, want
 // haar sessie se `startsAt` verandert niet — de taak zou dan na een refresh gewoon weer op
 // 1.1-Home verschijnen alsof-ie nog gepland is.
+// Story 6.2 — `isNull(tasks.droppedAt)` toegevoegd: een via de tekort-escalatieketen
+// laten-vervallen taak is net zo "niet meer open" als een afgeronde taak, zelfde reden.
 export async function getTasksWithSessionOnDate(userId: string, date: string): Promise<{ task: Task, session: Session }[]> {
   const rows = await getDb()
     .select({ task: tasks, session: sessions })
     .from(sessions)
     .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-    .where(and(eq(tasks.userId, userId), isNull(tasks.completedAt), sql`substr(${sessions.startsAt}, 1, 10) = ${date}`))
+    .where(and(
+      eq(tasks.userId, userId),
+      isNull(tasks.completedAt),
+      isNull(tasks.droppedAt),
+      sql`substr(${sessions.startsAt}, 1, 10) = ${date}`
+    ))
 
   return rows
 }
@@ -190,7 +200,9 @@ export async function getOpenTasksWithProgress(userId: string): Promise<{ task: 
     })
     .from(tasks)
     .leftJoin(subtasks, eq(subtasks.taskId, tasks.id))
-    .where(and(eq(tasks.userId, userId), isNull(tasks.completedAt)))
+    // Story 6.2 — `isNull(tasks.droppedAt)` toegevoegd, zelfde reden als `completedAt`
+    // hiernaast: een laten-vervallen taak hoort niet meer in het takenoverzicht.
+    .where(and(eq(tasks.userId, userId), isNull(tasks.completedAt), isNull(tasks.droppedAt)))
     .groupBy(tasks.id)
     .orderBy(tasks.deadline)
 
@@ -314,6 +326,17 @@ export async function logSessionAndCompleteTask(taskId: string, actualMinutes: n
     await tx.insert(sessionLogs).values({ taskId, actualMinutes })
     await tx.update(tasks).set({ completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
   })
+}
+
+// Story 6.2 — niveau 4 "laten vervallen" (tekort-escalatieketen). Géén `sessionLogs`-rij
+// (in tegenstelling tot `logSessionAndCompleteTask` hierboven): er is geen bestede tijd om
+// te loggen, de taak is nooit uitgevoerd. Zet uitsluitend `droppedAt` — zie schema.ts's
+// commentaar bij `tasks.droppedAt` voor het onderscheid met `completedAt`.
+export async function dropTask(taskId: string): Promise<void> {
+  await getDb()
+    .update(tasks)
+    .set({ droppedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(eq(tasks.id, taskId))
 }
 
 // Story 4.7 (review-patch) — logt de bestede sessietijd en werkt `task.totalMinutes` bij

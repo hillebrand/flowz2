@@ -208,6 +208,12 @@ export interface ShortfallRecommendation {
   tier: RecommendationTier
   description: string
   gainMinutes: number
+  // Story 6.2 — intern veld, alleen voor `tier === 'herplannen'`, nooit naar de client
+  // gestuurd (`shared/types/shortfall.d.ts`'s `ShortfallRecommendationDto` bevat 'm bewust
+  // niet). De aanbeveling se `id` draagt alleen het bron-`taskId`, geen doeldatum — de
+  // accept-route heeft de al-gevonden alternatieve dag nodig om de sessie daadwerkelijk te
+  // verplaatsen zonder de zoektocht (`findAlternativeDate`) te moeten herhalen.
+  targetDate?: string
 }
 
 // Escalerend samenstellen (AC #2): niveau 2 pas zodra niveau 1 het tekort niet dekt,
@@ -244,7 +250,8 @@ export async function generateShortfallRecommendations(userId: string, shortfall
       id: `herplannen:${task.id}`,
       tier: 'herplannen',
       description: `${task.subject} — ${task.title} verplaatst naar ${formatDayLabel(targetDate)}`,
-      gainMinutes: session.plannedMinutes
+      gainMinutes: session.plannedMinutes,
+      targetDate
     })
     remaining -= session.plannedMinutes
     relocated.add(task.id)

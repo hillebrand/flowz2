@@ -128,6 +128,14 @@ export const tasks = sqliteTable('tasks', {
   // adaptieve-tijdschatting-functie, architectuur se Deferred-sectie) — dit veld is puur een
   // filter, geen verwijdering. Zelfde vorm/precedent als `sessions.stoppedAt`.
   completedAt: text('completed_at'),
+  // Story 6.2 — nullable ISO-timestamp, `null` = niet vervallen, gezet = bewust laten
+  // vervallen via de tekort-escalatieketen (niveau 4, "Belangrijk"-sectie/Dev Notes
+  // "Vervallen-model"). Semantisch strikt gescheiden van `completedAt`: "vervallen" is
+  // nooit uitgevoerd (geen bestede tijd, geen `sessionLogs`-rij), "afgerond" is succesvol
+  // gedaan — een toekomstige adaptieve-tijdschatting-functie mag vervallen taken niet als
+  // betrouwbare gepland-vs-besteed-data meetellen. Zelfde "geen verwijdering, puur een
+  // filter-veld"-precedent als `completedAt` zelf.
+  droppedAt: text('dropped_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
