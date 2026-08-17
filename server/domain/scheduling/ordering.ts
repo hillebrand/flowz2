@@ -13,9 +13,15 @@ import type { Difficulty, Priority, Session, Task } from '../../data/schema'
 
 // Bewust lokaal, apart van doelmoment.ts's `DIFFICULTY_ADJUSTMENT`/`PRIORITY_ADJUSTMENT`
 // (signed buffer-percentage-aanpassingen, ander doel/schaal) — dit zijn simpele ordinale
-// gewichten voor "kans op uitloop" resp. "prioriteit".
-const DIFFICULTY_WEIGHT: Record<Difficulty, number> = { laag: 1, gemiddeld: 2, hoog: 3 }
-const PRIORITY_WEIGHT: Record<Priority, number> = { laag: 1, gemiddeld: 2, hoog: 3 }
+// gewichten voor "kans op uitloop" resp. "prioriteit". Geëxporteerd (Story 6.1) —
+// `shortfall.ts`'s studiedruk-score hergebruikt `DIFFICULTY_WEIGHT` voor dezelfde
+// "moeilijke/langdurige taken wegen zwaarder"-gedachte, i.p.v. een eigen, mogelijk
+// afwijkende kopie te definiëren.
+export const DIFFICULTY_WEIGHT: Record<Difficulty, number> = { laag: 1, gemiddeld: 2, hoog: 3 }
+// Geëxporteerd (Story 6.1) — zelfde reden als `DIFFICULTY_WEIGHT` hierboven:
+// `shortfall.ts`'s escalatie-niveau 3/4 hebben AC #2's letterlijke "laagste prioriteit
+// eerst" nodig als primair sorteercriterium, niet als tiebreaker zoals hier.
+export const PRIORITY_WEIGHT: Record<Priority, number> = { laag: 1, gemiddeld: 2, hoog: 3 }
 
 // YYYY-MM-DD-strings via `Date.UTC` als neutrale rekenmotor — zelfde aanpak als
 // `doelmoment.ts`'s `addDays`, hier het aantal dagen tussen twee datums i.p.v. een datum
@@ -24,7 +30,9 @@ function toUtcTimestamp(date: string): number {
   const [year, month, day] = date.split('-').map(Number)
   return Date.UTC(year!, month! - 1, day!)
 }
-function daysBetween(from: string, to: string): number {
+// Geëxporteerd (Story 6.1) — `shortfall.ts`'s studiedruk-score heeft dezelfde
+// "dagen tussen twee datums"-berekening nodig voor haar deadline-nabijheid-factor.
+export function daysBetween(from: string, to: string): number {
   return Math.round((toUtcTimestamp(to) - toUtcTimestamp(from)) / (24 * 60 * 60 * 1000))
 }
 

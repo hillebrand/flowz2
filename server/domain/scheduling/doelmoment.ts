@@ -1,6 +1,6 @@
 import { getExceptionForDate, getOrCreateWeekPattern } from '../../data/availability'
 import { sumPlannedMinutesForUserOnDate } from '../../data/tasks'
-import type { Difficulty, Priority } from '../../data/schema'
+import type { AvailableTimePattern, Difficulty, Priority } from '../../data/schema'
 import { weekdayFromDate } from '../../../shared/utils/availability'
 
 // Bovengrens op de terugwaartse zoeklus (code review 2026-08-01) — zonder dit kan een
@@ -48,14 +48,30 @@ export function calculateBufferPercentage(difficulty: Difficulty, priority: Prio
 // geen tijdzone-conversie hier nodig (dat gebeurt pas in session-time.ts voor het
 // daadwerkelijke sessie-tijdstip), dit is puur datum-in-datum-uit-rekenwerk, zelfde aanpak
 // als `beschikbare-tijd.vue`'s maand-rekenkunde (Story 2.2).
-function addDays(date: string, delta: number): string {
+// Geëxporteerd (Story 6.1) — de tekort-detectie-horizon-scan heeft dezelfde
+// kalenderdag-rekenkunde nodig als de dag-plaatsing hieronder.
+export function addDays(date: string, delta: number): string {
   const [year, month, day] = date.split('-').map(Number)
   return new Date(Date.UTC(year!, month! - 1, day! + delta)).toISOString().slice(0, 10)
 }
 
-// ISO YYYY-MM-DD-strings vergelijken correct lexicografisch.
-function isBefore(a: string, b: string): boolean {
+// ISO YYYY-MM-DD-strings vergelijken correct lexicografisch. Geëxporteerd (Story 6.1) —
+// zelfde reden als `addDays` hierboven.
+export function isBefore(a: string, b: string): boolean {
   return a < b
+}
+
+// Beschikbare tijd voor één specifieke dag: exceptie wint, anders het weekpatroon
+// (Story 6.1, geëxtraheerd uit `findSessionDate`'s lus hieronder — die logica stond eerst
+// alleen inline daar; nu ook nodig voor de tekort-detectie, vandaar geëxporteerd i.p.v.
+// gedupliceerd). `pattern` optioneel doorgeven laat een aanroeper die al een weekpatroon
+// heeft (bv. een lus over meerdere dagen) een herhaalde `getOrCreateWeekPattern`-lookup
+// per dag besparen.
+export async function availableMinutesForDate(userId: string, date: string, pattern?: AvailableTimePattern): Promise<number> {
+  const exceptionMinutes = await getExceptionForDate(userId, date)
+  if (exceptionMinutes !== null) return exceptionMinutes
+  const resolvedPattern = pattern ?? await getOrCreateWeekPattern(userId)
+  return resolvedPattern[weekdayFromDate(date)]
 }
 
 // Doelmoment: laatste geplande sessie vóór de deadline, met een buffer (FR24). De buffer
@@ -113,9 +129,7 @@ export async function findSessionDate(
   let candidate = doelmoment
   let daysChecked = 0
   while (!isBefore(candidate, today) && daysChecked < MAX_SEARCH_DAYS) {
-    const exceptionMinutes = await getExceptionForDate(userId, candidate)
-    const weekdayMinutes = pattern[weekdayFromDate(candidate)]
-    const availableMinutes = exceptionMinutes !== null ? exceptionMinutes : weekdayMinutes
+    const availableMinutes = await availableMinutesForDate(userId, candidate, pattern)
     const alreadyPlannedMinutes = await sumPlannedMinutesForUserOnDate(userId, candidate, excludeTaskId)
 
     if (availableMinutes - alreadyPlannedMinutes >= requiredMinutes) {

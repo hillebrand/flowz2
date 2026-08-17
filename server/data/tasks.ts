@@ -99,6 +99,15 @@ export async function deleteTaskAndSession(taskId: string, sessionId: string): P
 // sessie(s) van déze taak uit van de som. Nodig zodra een taak's eigen, nog-niet-verplaatste
 // sessie herberekend wordt — anders telt haar huidige plek dubbel mee als "al bezet" en kan
 // ze nooit terug op haar eigen dag geplaatst worden.
+// Review-patch (Story 6.1, code review): `isNull(tasks.completedAt)` toegevoegd — zelfde
+// fix als `getTasksWithSessionOnDate` hieronder al kreeg (Story 4.7), maar die deze functie
+// destijds miste. Een afgeronde taak se sessie-rij blijft historisch bestaan (Story 4.7's
+// "resterende tijd 0" laat de rij staan, verwijdert 'm niet), dus zonder deze filter bleef
+// die dag voor altijd "bezet" tellen in élke capaciteitscheck die deze functie gebruikt
+// (`findSessionDate`, `createTaskAndSession`, en Story 6.1's eigen tekort-detectie) — de
+// laatste is waar dit voor het eerst een echt correctheidsprobleem opleverde: de tekort-
+// detectie kon een tekort zien terwijl de escalatie-service (die wél al filterde) minder of
+// geen kandidaat-taken had om aan te bevelen.
 export async function sumPlannedMinutesForUserOnDate(userId: string, date: string, excludeTaskId?: string): Promise<number> {
   const rows = await getDb()
     .select({ plannedMinutes: sessions.plannedMinutes })
@@ -106,6 +115,7 @@ export async function sumPlannedMinutesForUserOnDate(userId: string, date: strin
     .innerJoin(tasks, eq(sessions.taskId, tasks.id))
     .where(and(
       eq(tasks.userId, userId),
+      isNull(tasks.completedAt),
       sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
       excludeTaskId ? sql`${tasks.id} != ${excludeTaskId}` : undefined
     ))
