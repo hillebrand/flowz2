@@ -525,6 +525,13 @@ function cancelLeaveConfirm() {
 const saving = ref(false)
 const saveError = ref('')
 const savedConfirmation = ref(false)
+// Story 1.3 (deferred-punt opgepakt) — bij een verlopen sessie tijdens het opslaan blijft de
+// ingevulde data nu zichtbaar i.p.v. stilzwijgend weg te navigeren (AC #1's "onopgeslagen
+// data"-clausule, destijds niet-van-toepassing verklaard toen er nog geen formulieren
+// bestonden). `sessionExpired` onderdrukt zowel de automatische redirect van het globale
+// `sessie-verval`-plugin (via `skipSessieVervalRedirect`) als toont een handmatige link.
+const sessionExpired = ref(false)
+const skipSessieVervalRedirect = useState<boolean>('skip-sessie-verval-redirect', () => false)
 
 async function onSubmit() {
   errors.subject = validateSubject()
@@ -558,6 +565,8 @@ async function onSubmit() {
 
   saving.value = true
   saveError.value = ''
+  sessionExpired.value = false
+  skipSessieVervalRedirect.value = true
   try {
     // Lege-naam-rijen niet meesturen — spiegelt de server-side filtering (die ze toch zou
     // negeren). `id` (Story 5.3) reist mee voor bestaande rijen zodat de server kan
@@ -612,12 +621,19 @@ async function onSubmit() {
     setTimeout(goBack, 800)
   } catch (fout) {
     if (is401(fout)) {
-      await navigateTo('/inloggen')
+      // Bewust geen `navigateTo` hier — de ingevulde data blijft zo zichtbaar op het scherm
+      // i.p.v. stilzwijgend te verdwijnen (AC #1's "onopgeslagen data"-clausule). Evelien
+      // navigeert zelf via de link in `taak-save-error` zodra ze klaar is.
+      sessionExpired.value = true
+      saveError.value = 'Je sessie is verlopen. Log opnieuw in en probeer het daarna nogmaals op te slaan.'
+      saving.value = false
       return
     }
     saveError.value = props.mode === 'bewerken' ? 'Kon de taak niet bijwerken. Probeer het opnieuw.' : 'Kon de taak niet opslaan. Probeer het opnieuw.'
     console.error('[taak-formulier] Kon taak niet opslaan:', fout)
     saving.value = false
+  } finally {
+    skipSessieVervalRedirect.value = false
   }
 }
 </script>
@@ -925,7 +941,10 @@ async function onSubmit() {
       </section>
 
       <section id="taak-action-section" class="taak-action-section">
-        <p v-if="saveError" class="taak-save-error" role="alert">{{ saveError }}</p>
+        <p v-if="saveError" class="taak-save-error" role="alert">
+          {{ saveError }}
+          <NuxtLink v-if="sessionExpired" id="taak-save-error-login-link" to="/inloggen">Naar het inlogscherm</NuxtLink>
+        </p>
         <p v-if="savedConfirmation" id="taak-save-confirmation" class="taak-save-confirmation" role="status">Taak opgeslagen!</p>
 
         <div class="taak-action-row">

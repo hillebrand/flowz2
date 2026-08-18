@@ -13,6 +13,12 @@ export interface DayEvent {
   title: string
   startsAt: string
   endsAt: string
+  // Google's `colorId` (zelfde 1-11-schaal als `users.homeworkCalendarColorId`, maar hier
+  // als string — Google's Events-API retourneert 'm zo, zie `homework-events.ts`'s
+  // `colorId: String(colorId)`-schrijfpatroon). Ontbreekt op events zonder expliciete kleur
+  // (Google's default). Story 6.7 — eerder (Story 6.6) bewust nog niet opgehaald, zie
+  // `actual-availability.ts`.
+  colorId?: string
 }
 
 interface GoogleEventsListResponse {
@@ -21,6 +27,7 @@ interface GoogleEventsListResponse {
     summary?: string
     start?: { dateTime?: string, date?: string }
     end?: { dateTime?: string, date?: string }
+    colorId?: string
   }[]
 }
 
@@ -64,7 +71,8 @@ export async function getTodayEvents(userId: string, date: string): Promise<DayE
       id: event.id ?? '',
       title: event.summary ?? '(Geen titel)',
       startsAt: event.start?.dateTime ?? event.start?.date ?? timeMin,
-      endsAt: event.end?.dateTime ?? event.end?.date ?? timeMax
+      endsAt: event.end?.dateTime ?? event.end?.date ?? timeMax,
+      colorId: event.colorId
     }))
   } catch {
     return null

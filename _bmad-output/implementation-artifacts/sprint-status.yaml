@@ -41,7 +41,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-08-16
+last_updated: 2026-08-17
+
 project: Flowz
 project_key: NOKEY
 tracking_system: file-system
@@ -54,7 +55,7 @@ development_status:
   1-3-sessieverval-opnieuw-inloggen: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-weekpatroon-instellen: done
   2-2-dag-specifieke-afwijkingen-instellen: done
   2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: done
@@ -78,18 +79,18 @@ development_status:
   4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-takenoverzicht-lijst-per-week: done
   5-2-taakdetail-bekijken-verwijderen: done
   5-3-taak-bewerken-hergebruik-taak-formulier: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-tijdgebrek-detectie-escalatie-service: done
   6-2-tekort-oplossen-scherm: done
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
-  6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: backlog
-  6-5-weekoverzicht-met-knelpunt-signalering: backlog
-  6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: backlog
-  6-7-agendaconflict-detectie-bij-opstarten: backlog
+  6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
+  6-5-weekoverzicht-met-knelpunt-signalering: done
+  6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: done
+  6-7-agendaconflict-detectie-bij-opstarten: done
   epic-6-retrospective: optional

@@ -59,8 +59,13 @@ De escalatieketen lost het tekort automatisch op; het aangepaste plan wordt geac
 
 ## Shortest Path (Q8)
 
+**Pad A — Te weinig tijd:**
 1. **Reden kiezen** — kiest "te weinig tijd", geeft aan hoeveel tijd er vandaag daadwerkelijk beschikbaar is
 2. **Tekort & oplossingen** — ziet het tekort in tijd, accepteert losse aanbevelingen (herplannen → tijd verruimen → inkorten op prioriteit) tot het tekort is opgelost ✓
+
+**Pad B — Te weinig energie** *(toegevoegd 2026-08-17, was aanvankelijk bewust buiten scope)*:
+1. **Reden kiezen** — kiest "te weinig energie" (geen verdere invoer nodig, in tegenstelling tot Pad A)
+2. **Voorstel & resultaat** — ziet wat Flowz wil aanpassen (moeilijke taken verschoven, makkelijke naar voren gehaald, eventueel ingekort — of expliciet niets ingekort, met uitleg waarom), bevestigt, ziet daarna het resultaat ✓
 
 *De hoofdscherm-knop zelf hoort bij scenario 01 (generieke startpagina); dit scenario begint bij de reden-keuze.*
 
@@ -82,8 +87,10 @@ De escalatieketen lost het tekort automatisch op; het aangepaste plan wordt geac
 
 | Step | Folder | Purpose | Exit Action |
 |------|--------|---------|-------------|
-| 3.1 | `3.1-reden-kiezen/` | Reden voor tegenvaller aangeven (te weinig tijd) en beschikbare tijd invullen | Bevestigt — gaat naar 3.2 |
+| 3.1 | `3.1-reden-kiezen/` | Reden voor tegenvaller aangeven (te weinig tijd of te weinig energie) | Kiest "te weinig tijd" → 3.2, kiest "te weinig energie" → 3.3 |
 | 3.2 | `3.2-tekort-oplossen/` | Tekort zien en escalerende voorstellen accepteren tot opgelost | Laatste voorstel geaccepteerd — scenario succes ✓ |
+| 3.3 | `3.3-energie-voorstel/` | Voorstel tonen (welke taken verschoven/ingekort worden), Evelien bevestigt, daarna resultaat tonen | Bevestigt voorstel — scenario succes ✓ |
 
 **First step** (3.1) includes full entry context (Q3 + Q4 + Q5 + Q6).
+**Step 3.3** is één scherm met twee opeenvolgende states (voorstel → bevestigd/resultaat), analoog aan hoe 3.2 evolueert van "openstaand tekort" naar "opgelost"-state — geen aparte route voor het resultaat.
 **On-step interactions** (that don't leave the step) are documented as storyboard items within each page spec.

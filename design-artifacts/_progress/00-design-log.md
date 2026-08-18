@@ -79,6 +79,8 @@
 | 07-evelien-bekijkt-de-weekplanning | 7.1 | weekoverzicht | specified | 2026-07-26 |
 | 08-evelien-lost-een-agendaconflict-op | 8.1 | conflictmelding | specified | 2026-07-26 |
 | 08-evelien-lost-een-agendaconflict-op | 8.2 | beschikbare-tijd-aanpassen | specified | 2026-07-26 |
+| 03-eveliens-schuldvrije-herstel | 3.3 | energie-voorstel | outlined | 2026-08-17 |
+| 03-eveliens-schuldvrije-herstel | 3.3 | energie-voorstel | specified | 2026-08-17 |
 
 **Status values:** `discussed` → `wireframed` → `specified` → `explored` → `building` → `built` → `approved` | `removed`
 
@@ -477,6 +479,44 @@ Status na fixes: **READY**. Report: `_bmad-output/planning-artifacts/implementat
 1. Check of `www.flowz.fyi` inmiddels resolvet (`dig A www.flowz.fyi @8.8.8.8`, dan `curl -sI https://www.flowz.fyi/`) — als het na een paar uur nog niet werkt, verder uitzoeken (niet zomaar opnieuw deployen, config was al correct)
 2. Skill `code-review` draaien op Story 1.1 (bij voorkeur ander model dan de implementatie)
 3. Daarna skill `bmad-create-story` voor **Story 1.2 (Google OAuth Login met Calendar-consent)**
+
+---
+
+### 2026-08-17 — Scenario 03 Uitgebreid met Energie-pad (Pad B, Stap 3.3)
+
+**Agent:** Saga (UX Scenario Facilitator), skill `wds-3-scenarios`
+
+Bij het voorbereiden van Story 6.4 ("Vandaag niet als gepland — te weinig energie-pad") bleek dit — anders dan elke andere Epic 6-story — geen WDS-ontwerpbasis te hebben: de energie-route was tijdens 3.1's specificatie (2026-07-26) bewust buiten scope gelaten en navigeert nu naar een placeholder (`energie-binnenkort.vue`). Hillebrand koos expliciet voor een UX-ontwerp-pas vóór het schrijven van de story, en binnen WDS voor een lichte scenario-uitbreiding (niet de volledige step-02/04-machinerie, niet een heel nieuw scenario) — scenario 03 blijft de canonieke plek, energie wordt Pad B naast het bestaande Pad A (tijd).
+
+**Ontwerpbeslissingen van Hillebrand:**
+- **Wél een bevestigingsstap** — Flowz past het energie-voorstel niet volledig automatisch toe; Evelien ziet eerst wat er voorgesteld wordt (taken verschoven/ingekort) en moet bevestigen. Afwijking van het aanvankelijke voorstel ("volledig automatisch, alleen resultaat tonen").
+- **Eén kort tussenschermpje** voor het resultaat na bevestiging (wat is aangepast), analoog aan 3.2's "Tekort opgelost!"-patroon — geen banner op Home.
+- Voorstel- en resultaat-state zijn **één pagina-stap (3.3) met twee states**, geen twee aparte routes — zelfde structuurkeuze als 3.2 (dat ook evolueert van "openstaand tekort" naar "opgelost").
+
+**Output:**
+- `C-UX-Scenarios/03-eveliens-schuldvrije-herstel/03-eveliens-schuldvrije-herstel.md` — Shortest Path (Q8) gesplitst in Pad A (tijd, ongewijzigd) en Pad B (energie, nieuw); Scenario Steps-tabel uitgebreid met stap 3.3 (`3.3-energie-voorstel/`)
+
+**Next:** Pagina-niveau specificatie van 3.3-energie-voorstel via `wds-4-ux-design` (Freya) — daarna terug naar `bmad-create-story` voor Story 6.4, nu gegrond in een WDS-ontwerpartefact zoals elke andere Epic 6-story.
+
+---
+
+### 2026-08-17 — Phase 4: 3.3-Energie-Voorstel Specified (Suggest-mode)
+
+**Agent:** Freya (Suggest, `[P] Specify`), skill `wds-4-ux-design`
+
+**Pagina:** 3.3-energie-voorstel (scenario 03, Pad B, route `/herstel/energie-voorstel`) — volledige specificatie doorlopen. Scenario 03 is hiermee weer volledig `specified` (nu 3/3 pagina's i.p.v. 2/2).
+
+**Ontwerp:** Eén pagina met vier states (Laden → Voorstel → Bezig → Resultaat), geen aparte route voor het resultaat. Wijzigingen getoond als drie mogelijke groepen ("Verschoven naar een andere dag", "Naar voren gehaald", "Ingekort") plus een conditioneel "Niet ingekort"-blok met uitleg, conform FR23's eis dat er altijd een melding komt — ook als bewust niets is ingekort. Bewust **geen** per-item accepteren/afwijzen zoals 3.2 (één bundel-voorstel, één "Bevestigen"-knop) — sluit aan bij Story 6.4's eigen "so that ik geen moeilijke keuzes hoef te maken". Bewust **wél** een terug-route (`energy-back-link`), anders dan 3.2's "geen ontsnappingsroute" — hier verandert er niets bij weigeren, in tegenstelling tot 3.2's groeiende tekort.
+
+**Retroactieve wijziging aan 3.1-reden-kiezen:** `reason-card-energy` navigeerde naar een placeholder; nu bijgewerkt om naar 3.3 te navigeren. Open Question 5 op 3.1 (🔴 Open sinds 2026-07-26) is hiermee 🟢 Resolved.
+
+**Output:**
+- `03-eveliens-schuldvrije-herstel/3.3-energie-voorstel/3.3-energie-voorstel.md` — volledige specificatie (4 secties, ~10 componenten, states, data/API, responsive, accessibility, 4 open vragen)
+- `03-eveliens-schuldvrije-herstel/3.1-reden-kiezen/3.1-reden-kiezen.md` — bijgewerkt (exit point, behavior, technical notes, open question 5 resolved)
+
+**Open vragen** (zie spec): leeg voorstel (geen taken om te verschuiven), fout bij het ophalen van het voorstel, exacte pauze-duur vóór auto-navigatie, precieze "te hoge studiedruk"-drempel voor de inkort-veiligheidscheck — de laatste is een architectuur/implementatie-vraag, te bevestigen bij het schrijven van Story 6.4 zelf.
+
+**Next:** Terug naar `bmad-create-story` voor **Story 6.4** ("Vandaag niet als gepland — te weinig energie-pad"), nu gegrond in een volwaardig WDS-ontwerpartefact.
 
 ---
 

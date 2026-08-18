@@ -1,6 +1,7 @@
 import { getRouterParam } from 'h3'
 import { getSessionForTask, getSubtasksForTask, getTaskById } from '../../data/tasks'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
+import { finalizeStaleSessionIfNeeded } from '../../domain/scheduling/session-heartbeat-fallback'
 import type { TaskPrepResponse } from '../../../shared/types/tasks'
 
 // Story 4.3 — terugvalpad voor 1.2-sessie-tussenscherm wanneer de useState-doorgifte
@@ -35,12 +36,27 @@ export default defineEventHandler(async (event): Promise<TaskPrepResponse | Erro
       return envelope(event, 404, ErrorCodes.NotFound, 'Taak niet gevonden.')
     }
 
-    const taskSession = await getSessionForTask(taskId)
+    let taskSession = await getSessionForTask(taskId)
     if (!taskSession) {
       // AD-1: elke taak heeft precies 1 sessie — dit is een data-integriteitsschending,
       // geen legitiem client-scenario zoals de ontbrekende-taak-case hierboven.
       console.error(`[tasks] Taak ${taskId} bestaat maar heeft geen sessie (AD-1-schending).`)
       return envelope(event, 500, ErrorCodes.InternalError, 'Kon taak niet ophalen.')
+    }
+
+    // Story 4.5's AC #3 (opgepakt 2026-08-17) — vóórdat Evelien een (nieuwe of hervatte)
+    // sessie start, eerst controleren of de huidige sessierij bewijs draagt van een eerder
+    // afgebroken poging (heartbeat zonder net stop-signaal). Zo ja: die stil afronden
+    // (loggen als bestede tijd) en de rij resetten vóórdat de prep-data teruggaat — anders
+    // ziet Evelien een verouderde `plannedMinutes` als de herberekening de sessie verplaatst.
+    const wasFinalized = await finalizeStaleSessionIfNeeded(taskSession)
+    if (wasFinalized) {
+      const refreshedSession = await getSessionForTask(taskId)
+      if (!refreshedSession) {
+        console.error(`[tasks] Taak ${taskId} heeft geen sessie meer na het afronden van een verweesde sessie.`)
+        return envelope(event, 500, ErrorCodes.InternalError, 'Kon taak niet ophalen.')
+      }
+      taskSession = refreshedSession
     }
 
     // Story 4.4 — nodig voor 1.3-sessie-actief's subtaak-wachtrij.

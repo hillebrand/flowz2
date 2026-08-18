@@ -101,7 +101,31 @@
       "Bash(grep *)",
       "Bash(npx tsx *)",
       "Bash(echo \"started with PID $!\")",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Read(//dev/**)",
+      "mcp__idea__get_all_open_file_paths",
+      "Bash(awk '/^## Epic 3/,/^## Epic 4/' /Users/hillebrand/IdeaProjects/flowz/_bmad-output/planning-artifacts/epics.md)",
+      "Bash(echo \"TYPECHECK EXIT:$?\")",
+      "Bash(echo \"BUILD EXIT:$?\")",
+      "Bash(plannedMinutes)",
+      "Bash(uvx --version)",
+      "Bash(git diff *)",
+      "Bash(cat /tmp/diff_tracked.txt /tmp/diff_new.txt)",
+      "Bash(aws configure *)",
+      "Bash(cat /tmp/diff47_tracked.txt /tmp/diff47_new1.txt /tmp/diff47_new2.txt)",
+      "Bash(TURSO_DATABASE_URL=libsql://flowz-hillebrand.aws-eu-west-1.turso.io TURSO_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODU0MjE3ODEsImlkIjoiMDE5ZmIzNTYtZDEwMS03MWJjLWE4MjYtMjI3ZTEyMTYzMjAxIiwia2lkIjoiazVzTGdlUWk1QXhkd3RDQ2tpOF9TVGVab1hWQzA2bU1NS05fdkdQQTdJQSIsInJpZCI6IjJlOTM2ZjYyLTlmNWEtNDlkYS1hMmI5LWEyZTMyMzgwYmRiOSJ9.ChE2AUc2izrMPfygKBu5j3LnRj_9o6P5Gl57a1IVAIOYp0Wf4UNPBC8iqed89kCH2kPEgbbug14TEXK6sEHuDg\" node /private/tmp/claude-501/-Users-hillebrand-IdeaProjects-flowz/66435ba0-bf8d-4ed2-8515-23db9e789b1f/scratchpad/query.mjs)",
+      "Bash(TURSO_DATABASE_URL=libsql://flowz-hillebrand.aws-eu-west-1.turso.io TURSO_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODU0MjE3ODEsImlkIjoiMDE5ZmIzNTYtZDEwMS03MWJjLWE4MjYtMjI3ZTEyMTYzMjAxIiwia2lkIjoiazVzTGdlUWk1QXhkd3RDQ2tpOF9TVGVab1hWQzA2bU1NS05fdkdQQTdJQSIsInJpZCI6IjJlOTM2ZjYyLTlmNWEtNDlkYS1hMmI5LWEyZTMyMzgwYmRiOSJ9.ChE2AUc2izrMPfygKBu5j3LnRj_9o6P5Gl57a1IVAIOYp0Wf4UNPBC8iqed89kCH2kPEgbbug14TEXK6sEHuDg\" node scratch-query.mjs)",
+      "Bash(TURSO_DATABASE_URL=libsql://flowz-hillebrand.aws-eu-west-1.turso.io TURSO_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODU0MjE3ODEsImlkIjoiMDE5ZmIzNTYtZDEwMS03MWJjLWE4MjYtMjI3ZTEyMTYzMjAxIiwia2lkIjoiazVzTGdlUWk1QXhkd3RDQ2tpOF9TVGVab1hWQzA2bU1NS05fdkdQQTdJQSIsInJpZCI6IjJlOTM2ZjYyLTlmNWEtNDlkYS1hMmI5LWEyZTMyMzgwYmRiOSJ9.ChE2AUc2izrMPfygKBu5j3LnRj_9o6P5Gl57a1IVAIOYp0Wf4UNPBC8iqed89kCH2kPEgbbug14TEXK6sEHuDg node -e ' *)",
+      "Bash(/Users/hillebrand/.local/bin/aws --version)",
+      "Bash(TURSO_DATABASE_URL=libsql://flowz-hillebrand.aws-eu-west-1.turso.io TURSO_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODU0MjE3ODEsImlkIjoiMDE5ZmIzNTYtZDEwMS03MWJjLWE4MjYtMjI3ZTEyMTYzMjAxIiwia2lkIjoiazVzTGdlUWk1QXhkd3RDQ2tpOF9TVGVab1hWQzA2bU1NS05fdkdQQTdJQSIsInJpZCI6IjJlOTM2ZjYyLTlmNWEtNDlkYS1hMmI5LWEyZTMyMzgwYmRiOSJ9.ChE2AUc2izrMPfygKBu5j3LnRj_9o6P5Gl57a1IVAIOYp0Wf4UNPBC8iqed89kCH2kPEgbbug14TEXK6sEHuDg\" node *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(TURSO_TOKEN=__CMDSUB_OUTPUT__ node -e ' *)",
+      "Bash(echo \"EXIT: $?\")",
+      "mcp__claude_ai_Google_Calendar__create_event",
+      "mcp__claude_ai_Google_Calendar__delete_event",
+      "mcp__claude_ai_Google_Calendar__list_events",
+      "WebFetch(domain:docs.turso.tech)",
+      "Bash(aws lambda list-functions *)"
     ]
   }
 }

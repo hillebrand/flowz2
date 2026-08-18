@@ -221,3 +221,89 @@ export const subtasks = sqliteTable('subtasks', {
 
 export type Subtask = typeof subtasks.$inferSelect
 export type NewSubtask = typeof subtasks.$inferInsert
+
+// Story 6.7 — persistente "dit is geen conflict"-beslissing per (user, datum,
+// Calendar-event). Alleen nodig voor `conflict-not-applicable-button`: de "tijd
+// aanpassen"-route (Story 6.6) heeft geen eigen dismissal-rij nodig, want die verandert de
+// onderliggende data zelf al (exceptie of taakverplaatsing), waardoor het conflict bij de
+// eerstvolgende check vanzelf niet meer optreedt. `googleEventId` (niet nullable) is de
+// identiteit van "dit specifieke conflict" — zonder een user/datum/event-combinatie is er
+// niks eenduidigs om te onthouden.
+export const dismissedConflicts = sqliteTable('dismissed_conflicts', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  // ISO-datum (YYYY-MM-DD) — zelfde vorm als `availableTimeExceptions.date`.
+  date: text('date').notNull(),
+  googleEventId: text('google_event_id').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('dismissed_conflicts_user_date_event_unique').on(table.userId, table.date, table.googleEventId)
+])
+
+export type DismissedConflict = typeof dismissedConflicts.$inferSelect
+export type NewDismissedConflict = typeof dismissedConflicts.$inferInsert
+
+// Story 3.5's TOCTOU-race, opgepakt 2026-08-17 — na twee mislukte pogingen die op Turso's
+// eigen transactie-/statement-atomiciteit vertrouwden (multi-statement-transactie met
+// `BEGIN IMMEDIATE`, en een single-statement optimistic-concurrency-guard): een live
+// concurrency-test (4 gelijktijdige `recalculateTaskPlanning`-aanroepen, verschillende
+// sessieduren om toeval uit te sluiten) bewees dat beide de race niet daadwerkelijk sloten
+// tegen deze Turso/`@libsql/client/web`-verbinding. Root cause niet volledig doorgrond (zie
+// Story 3.5's Dev Notes), maar een expliciete, database-afgedwongen mutual-exclusion-rij is
+// de enige aanpak die empirisch wél werkt: een `UNIQUE`-schending bij een `INSERT` is een
+// basale data-integriteitsgarantie, geen sessie-/transactieafhankelijk lock-concept — die
+// moet elke SQL-engine correct afdwingen, ongeacht Turso's precieze concurrency-model.
+//
+// Eén rij per (user, datum) die actief "bezet" is tijdens het herberekenen van een
+// sessieplaatsing op die dag — voorkomt dat twee taken tegelijk dezelfde "al bezette tijd
+// vandaag" lezen en elkaars plaatsing overschrijven (dubbele boeking).
+export const sessionPlacementLocks = sqliteTable('session_placement_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  date: text('date').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('session_placement_locks_user_date_unique').on(table.userId, table.date)
+])
+
+export type SessionPlacementLock = typeof sessionPlacementLocks.$inferSelect
+export type NewSessionPlacementLock = typeof sessionPlacementLocks.$inferInsert
+
+// Zelfde lock-patroon als `sessionPlacementLocks` hierboven, toegepast op
+// `server/data/availability.ts`'s `updateExceptionForDate`/`setExceptionForDate` (op
+// verzoek van Hillebrand, 2026-08-18) — die twee gebruikten hetzelfde `getDb().transaction
+// (...)`-patroon dat bij Story 3.5's TOCTOU-race empirisch bleek te falen tegen deze Turso-
+// verbinding. Bewust een eigen tabel i.p.v. `sessionPlacementLocks` hergebruiken: andere
+// resource (beschikbaarheids-excepties, niet sessieplaatsingen) — hergebruik zou onnodige
+// kruisblokkering geven tussen twee volledig ongerelateerde operaties op dezelfde datum.
+// Matcht dit project se "dupliceer tot een derde consument"-precedent (zelfde redenering
+// als `envelope()`/het datumfilterpatroon elders).
+export const availabilityWriteLocks = sqliteTable('availability_write_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  date: text('date').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('availability_write_locks_user_date_unique').on(table.userId, table.date)
+])
+
+export type AvailabilityWriteLock = typeof availabilityWriteLocks.$inferSelect
+export type NewAvailabilityWriteLock = typeof availabilityWriteLocks.$inferInsert
+
+// Derde toepassing van hetzelfde lock-patroon (2026-08-18, brede audit op verzoek van
+// Hillebrand naar alle `getDb().transaction(...)`-gebruik in het project) — ditmaal per
+// taak i.p.v. per (user, datum): `updateTaskAndSubtasks` (Story 5.3) leest de huidige
+// deeltaakstatus om `'afgerond'`-rijen te beschermen tegen stilzwijgende overschrijving,
+// en die lezing kan door een gelijktijdige `updateSubtaskStatus`-aanroep (de live-sessie-
+// "Klaar"/"Later"-knoppen) verouderd raken vóór de write. Beide functies nemen nu dezelfde
+// lock op de betrokken `taskId`.
+export const taskEditLocks = sqliteTable('task_edit_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('task_edit_locks_task_unique').on(table.taskId)
+])
+
+export type TaskEditLock = typeof taskEditLocks.$inferSelect
+export type NewTaskEditLock = typeof taskEditLocks.$inferInsert

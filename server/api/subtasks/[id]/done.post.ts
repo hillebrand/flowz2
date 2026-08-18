@@ -41,7 +41,7 @@ export default defineEventHandler(async (event): Promise<{ ok: true } | ErrorEnv
       return envelope(event, 404, ErrorCodes.NotFound, 'Deeltaak niet gevonden.')
     }
 
-    await updateSubtaskStatus(subtaskId, 'afgerond')
+    await updateSubtaskStatus(subtask.taskId, subtaskId, 'afgerond')
     return { ok: true }
   } catch (fout) {
     console.error('[subtasks] Kon deeltaak niet afronden:', fout)

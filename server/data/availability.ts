@@ -1,6 +1,6 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm'
 import { getDb } from './db'
-import { availableTimeExceptions, availableTimePatterns, type AvailableTimePattern, type Weekday } from './schema'
+import { availabilityWriteLocks, availableTimeExceptions, availableTimePatterns, type AvailableTimePattern, type Weekday } from './schema'
 import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '../../shared/utils/availability'
 
 const DELTA_MINUTES = 15
@@ -120,13 +120,19 @@ export interface UpdateExceptionResult {
 
 // Leest uit twee tabellen (AvailableTimePattern én AvailableTimeException) en beslist
 // daarna tussen een delete of een upsert — dat is niet in één atomaire SQL-statement te
-// vangen zoals updateWeekPatternDay hierboven. In een transactie gevat zodat de
-// leesstap en de schrijfstap één geheel vormen: zonder transactie zouden twee
-// gelijktijdige PATCH-calls op dezelfde datum allebei van dezelfde "oude" waarde
-// kunnen uitgaan en elkaar overschrijven (Story 2.1 Dev Notes; hier vermeden i.p.v.
-// achteraf gerepareerd). Nieuw patroon in deze codebase — `db.transaction()` is nog
-// niet eerder tegen deze Turso/`@libsql/client/web`-verbinding gebruikt; empirisch
-// geverifieerd in Task 5, niet aangenomen (Story 1.3-les).
+// vangen zoals updateWeekPatternDay hierboven.
+//
+// GESCHIEDENIS (2026-08-18): dit gebruikte oorspronkelijk `getDb().transaction(...)`
+// ("write"-modus/`BEGIN IMMEDIATE`), met een dev-notitie die claimde dat dit "empirisch
+// geverifieerd" was tegen gelijktijdigheid. Bij Story 3.5's TOCTOU-race (zelfde patroon,
+// gebruikt voor sessieplaatsingen) bleek een live concurrency-test — met bewust
+// verschillende waarden om toeval uit te sluiten, en server-side CloudWatch-bevestiging —
+// dat die transactie NIET daadwerkelijk serialiseert tegen deze Turso/`@libsql/client/web`-
+// verbinding: gelijktijdige aanroepen lazen elkaars staat vóórdat ook maar één schreef. De
+// oorspronkelijke verificatie hier was vermoedelijk minder rigoureus (geen gelijktijdige
+// test met variërende waarden). Vervangen door hetzelfde lock-patroon dat bij Story 3.5 wél
+// empirisch bleek te werken: `availabilityWriteLocks`, een `UNIQUE`-afgedwongen mutual-
+// exclusion-rij per (user, datum) rond de hele lees-dan-schrijf-sectie.
 export async function updateExceptionForDate(
   userId: string,
   date: string,
@@ -134,19 +140,19 @@ export async function updateExceptionForDate(
 ): Promise<UpdateExceptionResult> {
   const weekday = weekdayFromDate(date)
 
-  return getDb().transaction(async (tx) => {
-    // Defensief op 0 in plaats van getOrCreateWeekPattern hier aan te roepen: die
-    // functie gebruikt `getDb()` rechtstreeks, niet déze transactie's `tx`-handle, dus
-    // zou de transactionele isolatie doorbreken. In de praktijk bestaat de rij altijd
-    // al — dezelfde pagina haalt bij het laden eerst /api/availability/week op, wat 'm
-    // lazy aanmaakt — dus dit pad is een vangnet, geen verwacht scenario.
-    const [pattern] = await tx
+  await acquireAvailabilityWriteLock(userId, date)
+  try {
+    // Defensief op 0 in plaats van getOrCreateWeekPattern hier aan te roepen — in de
+    // praktijk bestaat de rij altijd al (dezelfde pagina haalt bij het laden eerst
+    // /api/availability/week op, wat 'm lazy aanmaakt), dus dit pad is een vangnet, geen
+    // verwacht scenario.
+    const [pattern] = await getDb()
       .select()
       .from(availableTimePatterns)
       .where(eq(availableTimePatterns.userId, userId))
     const weekPatternMinutes = pattern ? pattern[weekday] : 0
 
-    const [existing] = await tx
+    const [existing] = await getDb()
       .select()
       .from(availableTimeExceptions)
       .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
@@ -160,40 +166,43 @@ export async function updateExceptionForDate(
     // exact gelijk is aan het weekpatroon voor die weekdag."
     if (next === weekPatternMinutes) {
       if (existing) {
-        await tx.delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
+        await getDb().delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
       }
       return { date, minutes: next, active: false }
     }
 
     if (existing) {
-      await tx
+      await getDb()
         .update(availableTimeExceptions)
         .set({ minutes: next, updatedAt: new Date().toISOString() })
         .where(eq(availableTimeExceptions.id, existing.id))
     } else {
-      await tx.insert(availableTimeExceptions).values({ userId, date, minutes: next })
+      await getDb().insert(availableTimeExceptions).values({ userId, date, minutes: next })
     }
 
     return { date, minutes: next, active: true }
-  })
+  } finally {
+    await releaseAvailabilityWriteLock(userId, date)
+  }
 }
 
-// Story 6.3 — spiegelt `updateExceptionForDate` hierboven (zelfde transactie-/clamp-/
-// auto-verwijder-gedrag), maar met een expliciete doelwaarde i.p.v. een `DELTA_MINUTES`-
-// stap: 3.1-reden-kiezen laat Evelien een absoluut aantal uren/minuten invullen ("ik heb
-// vandaag nog maar 1u30"), geen stapsgewijze aanpassing zoals de exceptie-kalender.
+// Story 6.3 — spiegelt `updateExceptionForDate` hierboven (zelfde lock-/clamp-/auto-
+// verwijder-gedrag), maar met een expliciete doelwaarde i.p.v. een `DELTA_MINUTES`-stap:
+// 3.1-reden-kiezen laat Evelien een absoluut aantal uren/minuten invullen ("ik heb vandaag
+// nog maar 1u30"), geen stapsgewijze aanpassing zoals de exceptie-kalender.
 export async function setExceptionForDate(userId: string, date: string, minutes: number): Promise<UpdateExceptionResult> {
   const weekday = weekdayFromDate(date)
   const clamped = Math.min(MAX_MINUTES_PER_DAY, Math.max(0, minutes))
 
-  return getDb().transaction(async (tx) => {
-    const [pattern] = await tx
+  await acquireAvailabilityWriteLock(userId, date)
+  try {
+    const [pattern] = await getDb()
       .select()
       .from(availableTimePatterns)
       .where(eq(availableTimePatterns.userId, userId))
     const weekPatternMinutes = pattern ? pattern[weekday] : 0
 
-    const [existing] = await tx
+    const [existing] = await getDb()
       .select()
       .from(availableTimeExceptions)
       .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
@@ -202,22 +211,66 @@ export async function setExceptionForDate(userId: string, date: string, minutes:
     // automatisch zodra de waarde toevallig gelijk is aan het weekpatroon voor die dag.
     if (clamped === weekPatternMinutes) {
       if (existing) {
-        await tx.delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
+        await getDb().delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
       }
       return { date, minutes: clamped, active: false }
     }
 
     if (existing) {
-      await tx
+      await getDb()
         .update(availableTimeExceptions)
         .set({ minutes: clamped, updatedAt: new Date().toISOString() })
         .where(eq(availableTimeExceptions.id, existing.id))
     } else {
-      await tx.insert(availableTimeExceptions).values({ userId, date, minutes: clamped })
+      await getDb().insert(availableTimeExceptions).values({ userId, date, minutes: clamped })
     }
 
     return { date, minutes: clamped, active: true }
-  })
+  } finally {
+    await releaseAvailabilityWriteLock(userId, date)
+  }
+}
+
+// Zelfde lock-implementatie als Story 3.5's `acquireSessionPlacementLock`/
+// `releaseSessionPlacementLock` (`server/data/tasks.ts`) — bewust gedupliceerd, niet
+// gedeeld (andere tabel/resource, zie schema.ts's `availabilityWriteLocks`-commentaar).
+const LOCK_STALE_MS = 30_000
+const LOCK_MAX_WAIT_MS = 10_000
+const LOCK_POLL_INTERVAL_MS = 100
+
+async function acquireAvailabilityWriteLock(userId: string, date: string): Promise<void> {
+  const deadline = Date.now() + LOCK_MAX_WAIT_MS
+
+  while (true) {
+    const [inserted] = await getDb()
+      .insert(availabilityWriteLocks)
+      .values({ userId, date })
+      .onConflictDoNothing({ target: [availabilityWriteLocks.userId, availabilityWriteLocks.date] })
+      .returning()
+
+    if (inserted) return
+
+    const [existing] = await getDb()
+      .select()
+      .from(availabilityWriteLocks)
+      .where(and(eq(availabilityWriteLocks.userId, userId), eq(availabilityWriteLocks.date, date)))
+
+    if (existing && Date.now() - new Date(existing.createdAt).getTime() > LOCK_STALE_MS) {
+      await getDb().delete(availabilityWriteLocks).where(eq(availabilityWriteLocks.id, existing.id))
+      continue
+    }
+
+    if (Date.now() > deadline) {
+      throw new Error(`Kon geen beschikbaarheids-lock verkrijgen voor gebruiker ${userId} op ${date} (te lang bezet door een gelijktijdige aanpassing).`)
+    }
+    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_INTERVAL_MS))
+  }
+}
+
+async function releaseAvailabilityWriteLock(userId: string, date: string): Promise<void> {
+  await getDb()
+    .delete(availabilityWriteLocks)
+    .where(and(eq(availabilityWriteLocks.userId, userId), eq(availabilityWriteLocks.date, date)))
 }
 
 // Gerichte per-datum-lookup (Story 3.1) — `getExceptionsForMonth` hierboven is maand-breed,

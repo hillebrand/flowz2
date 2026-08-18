@@ -186,6 +186,11 @@ Claude Opus 5 (claude-opus-5)
 
 **Live gedeployed:** dev-stage op `flowz.fyi`, migratie toegepast op de echte Turso-database.
 
+**Toegevoegd/gewijzigd bij het vervangen van de transactie door een lock (2026-08-18):**
+- `server/data/schema.ts` (gewijzigd — nieuwe `availabilityWriteLocks`-tabel)
+- `server/data/migrations/0016_dazzling_komodo.sql` (nieuw)
+- `server/data/availability.ts` (gewijzigd — `updateExceptionForDate`/`setExceptionForDate` herschreven zonder `getDb().transaction(...)`; `acquireAvailabilityWriteLock`/`releaseAvailabilityWriteLock` toegevoegd)
+
 ## Change Log
 
 | Datum | Wijziging |
@@ -196,6 +201,7 @@ Claude Opus 5 (claude-opus-5)
 | 2026-07-31 | Code review (3 lagen parallel, sterk overlappend): 1 decision-needed, 12 patch (waarvan 2 correcties op het eigen Dev Agent Record), 3 dismissed als ruis. Kern: de maandwissel-bug die de eigen browserverificatie miste (paneel al gesloten vóór maandnavigatie getest) — `shiftMonth` reset `selectedDate` niet, dus het paneel bleef een verouderde datum met de verkeerde waarde tonen. Ook: onbestaande/onmogelijke datums (`2026-02-31`, `2026-13-01`) en maanden (`2026-99`) faalden niet netjes — zelf tot in Node geverifieerd (stille rollover resp. `NaN` → onafgevangen 500). Beslispunt (auto-opruiming vanuit het weekpatroon-pad) geaccepteerd en vastgelegd in `deferred-work.md`. Alle 12 patches toegepast; typecheck en build slagen; datumvalidatie live bevestigd met 6 scenario's incl. het schrikkeljaar-randgeval. Front-end-fixes niet opnieuw live geverifieerd — AWS-sessie verliep tijdens het testen, Hillebrand koos ervoor de story zonder herverificatie af te ronden. Status → done. |
 | 2026-07-31 | **Na `done`, op expliciete productbeslissing van Hillebrand:** het gedismisste "geen bovengrens"-punt alsnog omgedraaid — een plafond van 24 uur (`MAX_MINUTES_PER_DAY`, `shared/utils/availability.ts`, gedeeld met dezelfde wijziging in Story 2.1) toegevoegd aan `updateExceptionForDate`'s `increase`-pad, plus de disabled-state op beide plus-knoppen in de UI. Typecheck en build slagen. |
 | 2026-07-31 | Gedeployed en live geverifieerd na Hillebrand's AWS-herauthenticatie: een exceptie op 2026-10-05 rechtstreeks op 1440 gezet en `increase` geprobeerd → bleef `{minutes:1440, active:true}`, geen overschrijding. Regressiecheck (gewone increase/decrease op het weekpatroon) slaagde ongewijzigd. |
+| 2026-08-18 | **De `db.transaction()`-atomiciteitsclaim uit dit bestand se eigen Debug Log bleek niet houdbaar** — op verzoek van Hillebrand geraadpleegd nadat Story 3.5's TOCTOU-race-fix (`server/domain/scheduling/recalculate.ts`) hetzelfde `getDb().transaction(...)`-patroon met een véél strengere test (4 gelijktijdige aanroepen, bewust variërende waarden om toeval uit te sluiten, server-side CloudWatch-bevestiging) empirisch zag falen tegen deze Turso/`@libsql/client/web`-verbinding. De destijds hier gebruikte test (twee gelijktijdige `PATCH increase`-calls, 15→30) had te weinig statistisch gewicht om een niet-serialiserende transactie betrouwbaar te onderscheiden van een echt-serialiserende — met slechts twee requests is de kans reëel dat ze toevallig niet overlappen, ook al is de onderliggende garantie stuk. **Fix:** `updateExceptionForDate`/`setExceptionForDate` (`server/data/availability.ts`) gebruiken nu hetzelfde lock-patroon dat bij Story 3.5 wél empirisch bleek te werken — een nieuwe `availabilityWriteLocks`-tabel (migratie `0016_dazzling_komodo.sql`, `UNIQUE` op user+datum), niet de transactie. Live herverifieerd met een striktere test (6 gelijktijdige `increase`-calls op een verse datum): resultaat was een perfecte reeks 45/60/75/90/105/120 — elke aanroep bouwde correct voort op de vorige, geen enkele stap verloren. Testdata opgeruimd, `deferred-work.md` bijgewerkt. |
 
 ### Review Findings
 

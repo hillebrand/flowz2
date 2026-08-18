@@ -45,7 +45,7 @@ function kiesTijd() {
 }
 function kiesEnergie() {
   selectedReason.value = 'energy'
-  navigateTo('/herstel/energie-binnenkort')
+  navigateTo('/herstel/energie-voorstel')
 }
 
 async function bevestigen() {

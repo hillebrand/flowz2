@@ -147,7 +147,9 @@ const DUTCH_WEEKDAY_LABELS: Record<string, string> = {
   sunday: 'zondag'
 }
 
-function formatDayLabel(date: string): string {
+// Geëxporteerd (Story 6.4) — `energy.ts`'s wijziging-beschrijvingen hergebruiken hetzelfde
+// dag-label-formaat.
+export function formatDayLabel(date: string): string {
   return DUTCH_WEEKDAY_LABELS[weekdayFromDate(date)]!
 }
 

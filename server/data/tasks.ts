@@ -1,9 +1,11 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm'
 import { getDb } from './db'
 import {
   sessionLogs,
+  sessionPlacementLocks,
   sessions,
   subtasks,
+  taskEditLocks,
   tasks,
   type Difficulty,
   type NewSubtask,
@@ -34,42 +36,52 @@ export interface CreateTaskAndSessionResult {
 }
 
 // Atomair: de Task-insert, de stapelings-som-lezing, de Session-insert, én (Story 3.2) de
-// Subtask-inserts lopen allemaal in dezelfde transactie (code review 2026-08-01) — sluit
-// de TOCTOU-race die twee gelijktijdige `createTask`-aanroepen voor dezelfde user/dag
-// anders zouden hebben. Zelfde racecategorie die `updateExceptionForDate` in server/data/
-// availability.ts al met een transactie oplost.
+// Subtask-inserts lopen allemaal in dezelfde transactie (code review 2026-08-01) — voor
+// alles-of-niets bij een fout halverwege. De TOCTOU-isolatie tegen ándere gelijktijdige
+// aanroepen komt sinds 2026-08-18 niet meer van de transactie zelf (zie Story 3.5's Dev
+// Notes: `getDb().transaction(...)` bleek dat empirisch niet te bieden tegen deze Turso-
+// verbinding), maar van `sessionPlacementLocks` — bewust hergebruikt, niet gedupliceerd:
+// dit is dezelfde resource/hetzelfde conflict als `placeSessionWithStackingOffset`
+// (`recalculateTaskPlanning`) bewaakt — "hoeveel is er al bezet op déze dag" — dus een
+// nieuwe taak aanmaken en een bestaande taak naar dezelfde dag herberekenen moeten elkaar
+// wél degelijk kunnen blokkeren.
 export async function createTaskAndSession(input: CreateTaskAndSessionInput): Promise<CreateTaskAndSessionResult> {
-  return getDb().transaction(async (tx) => {
-    const [task] = await tx.insert(tasks).values(input.task).returning()
+  await acquireSessionPlacementLock(input.task.userId, input.sessionDate)
+  try {
+    return await getDb().transaction(async (tx) => {
+      const [task] = await tx.insert(tasks).values(input.task).returning()
 
-    const existingRows = await tx
-      .select({ plannedMinutes: sessions.plannedMinutes })
-      .from(sessions)
-      .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-      .where(and(
-        eq(tasks.userId, input.task.userId),
-        sql`substr(${sessions.startsAt}, 1, 10) = ${input.sessionDate}`
-      ))
-    const existingMinutes = existingRows.reduce((sum, row) => sum + row.plannedMinutes, 0)
+      const existingRows = await tx
+        .select({ plannedMinutes: sessions.plannedMinutes })
+        .from(sessions)
+        .innerJoin(tasks, eq(sessions.taskId, tasks.id))
+        .where(and(
+          eq(tasks.userId, input.task.userId),
+          sql`substr(${sessions.startsAt}, 1, 10) = ${input.sessionDate}`
+        ))
+      const existingMinutes = existingRows.reduce((sum, row) => sum + row.plannedMinutes, 0)
 
-    const hour = input.sessionAnchorHour + Math.floor(existingMinutes / 60)
-    const minute = existingMinutes % 60
-    const startsAt = amsterdamLocalToUtcIso(input.sessionDate, hour, minute)
+      const hour = input.sessionAnchorHour + Math.floor(existingMinutes / 60)
+      const minute = existingMinutes % 60
+      const startsAt = amsterdamLocalToUtcIso(input.sessionDate, hour, minute)
 
-    const [session] = await tx.insert(sessions).values({
-      taskId: task!.id,
-      startsAt,
-      plannedMinutes: input.plannedMinutes
-    }).returning()
+      const [session] = await tx.insert(sessions).values({
+        taskId: task!.id,
+        startsAt,
+        plannedMinutes: input.plannedMinutes
+      }).returning()
 
-    const insertedSubtasks = input.subtasks.length > 0
-      ? await tx.insert(subtasks).values(
-          input.subtasks.map(subtask => ({ ...subtask, taskId: task!.id }))
-        ).returning()
-      : []
+      const insertedSubtasks = input.subtasks.length > 0
+        ? await tx.insert(subtasks).values(
+            input.subtasks.map(subtask => ({ ...subtask, taskId: task!.id }))
+          ).returning()
+        : []
 
-    return { task: task!, session: session!, subtasks: insertedSubtasks }
-  })
+      return { task: task!, session: session!, subtasks: insertedSubtasks }
+    })
+  } finally {
+    await releaseSessionPlacementLock(input.task.userId, input.sessionDate)
+  }
 }
 
 // Compenserende opruiming (code review 2026-08-01): als de Calendar-sync-aanroep ná de
@@ -271,11 +283,20 @@ export async function getSubtaskById(subtaskId: string): Promise<Subtask | null>
   return subtask ?? null
 }
 
-export async function updateSubtaskStatus(subtaskId: string, status: SubtaskStatus): Promise<void> {
-  await getDb()
-    .update(subtasks)
-    .set({ status, updatedAt: new Date().toISOString() })
-    .where(eq(subtasks.id, subtaskId))
+// `taskId` (2026-08-18, brede audit) — de aanroeper (live-sessie "Klaar"/"Later") kent 'm
+// altijd al (nodig voor de eigen ownership-check), dus geen extra lookup hier. Neemt
+// dezelfde `taskEditLocks`-lock als `updateTaskAndSubtasks`, zodat een taak-bewerk-opslag
+// die net de huidige deeltaakstatus aan het lezen is, deze schrijfactie niet kan missen.
+export async function updateSubtaskStatus(taskId: string, subtaskId: string, status: SubtaskStatus): Promise<void> {
+  await acquireTaskEditLock(taskId)
+  try {
+    await getDb()
+      .update(subtasks)
+      .set({ status, updatedAt: new Date().toISOString() })
+      .where(eq(subtasks.id, subtaskId))
+  } finally {
+    await releaseTaskEditLock(taskId)
+  }
 }
 
 // Story 4.5 — nodig voor de ownership-check in server/api/sessions/[sessionId]/* (de
@@ -302,6 +323,19 @@ export async function markSessionStopped(sessionId: string): Promise<void> {
   await getDb()
     .update(sessions)
     .set({ stoppedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(eq(sessions.id, sessionId))
+}
+
+// Story 4.5's AC #3 (opgepakt 2026-08-17) — ná het stil afronden van een verweesde sessie
+// (`session-heartbeat-fallback.ts`) moeten `lastHeartbeatAt`/`stoppedAt` weer naar `null`
+// zodat een hernieuwde poging op dezelfde sessierij (Sessions is 1:1 per taak, nooit
+// verwijderd-en-opnieuw-aangemaakt — Story 3.5) opnieuw normaal kan heartbeaten. Zonder dit
+// zou `markSessionHeartbeat`'s eigen `isNull(stoppedAt)`-guard (Story 4.5-review) elke
+// volgende heartbeat stil laten mislukken.
+export async function resetSessionHeartbeatTracking(sessionId: string): Promise<void> {
+  await getDb()
+    .update(sessions)
+    .set({ lastHeartbeatAt: null, stoppedAt: null, updatedAt: new Date().toISOString() })
     .where(eq(sessions.id, sessionId))
 }
 
@@ -380,6 +414,120 @@ export async function updateSessionPlacement(
   return session
 }
 
+// Story 3.5 se eigen Dev Notes noemden dit een bewust geaccepteerde TOCTOU-race, op te
+// pakken "zodra de eerste échte replan-trigger-story dit daadwerkelijk gelijktijdig kan
+// laten gebeuren" — inmiddels het geval (Epic 4-6, allemaal `done`, roepen
+// `recalculateTaskPlanning` vanuit minstens acht plekken aan). Opgepakt 2026-08-17/18.
+//
+// Alleen voor `recalculateTaskPlanning` — de andere aanroepers van `sumPlannedMinutesFor-
+// UserOnDate`/`updateSessionPlacement` (`createTaskAndSession`, `apply-recommendation.ts`,
+// `session-placement.ts`, `energy.ts`) blijven ongewijzigd, dit is geen bredere refactor.
+//
+// TWEE aparte bugs speelden hier, ontdekt via live concurrency-tests (zie Story 3.5's Dev
+// Notes voor het volledige onderzoek, incl. CloudWatch-bewijs):
+//
+// 1. **Echte TOCTOU-race** (gelijktijdige aanroepen kunnen elkaars lees-dan-schrijf
+//    overlappen). Twee eerdere pogingen (multi-statement-transactie met `BEGIN IMMEDIATE`;
+//    single-statement optimistic-guard) faalden empirisch tegen deze Turso/`@libsql/client/
+//    web`-verbinding — de precieze reden is niet volledig doorgrond. **Oplossing:** een
+//    expliciete, database-afgedwongen lock-rij (`sessionPlacementLocks`, `UNIQUE` op
+//    user+datum) rond de hele lees-dan-schrijf-sectie — hangt alleen af van een `UNIQUE`-
+//    constraint, de meest basale garantie die elke SQL-engine moet bieden.
+// 2. **Structurele plaatsingsfout, los van concurrency** — pas ontdekt tijdens het testen van
+//    fix 1: zelfs strikt sequentieel (géén gelijktijdigheid) overlapten twee taken die ná
+//    elkaar op dezelfde dag herberekend werden. Reden: de "stapel-aan-het-eind"-formule
+//    (`anker + som van ieders duur behalve die van mezelf`) garandeert wiskundig dat elke
+//    taak op hetzelfde eindpunt uitkomt zodra twee of meer taken die dezelfde dag delen,
+//    ná elkaar herberekend worden — pure optel-wiskunde, geen race. **Oplossing:**
+//    `excludeTaskIds` (plural) i.p.v. één taak-id — `recalculateTaskPlanning` geeft hier de
+//    nog-niet-verwerkte batchgenoten ook mee uit te sluiten (zie dat bestand se commentaar).
+export async function placeSessionWithStackingOffset(
+  sessionId: string,
+  userId: string,
+  date: string,
+  excludeTaskIds: string[],
+  anchorHour: number,
+  plannedMinutes: number,
+  googleEventId: string | null
+): Promise<{ session: Session, startsAt: string }> {
+  await acquireSessionPlacementLock(userId, date)
+  try {
+    const rows = await getDb()
+      .select({ plannedMinutes: sessions.plannedMinutes })
+      .from(sessions)
+      .innerJoin(tasks, eq(sessions.taskId, tasks.id))
+      .where(and(
+        eq(tasks.userId, userId),
+        isNull(tasks.completedAt),
+        isNull(tasks.droppedAt),
+        sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
+        notInArray(tasks.id, excludeTaskIds)
+      ))
+    const existingMinutes = rows.reduce((sum, row) => sum + row.plannedMinutes, 0)
+    const hour = anchorHour + Math.floor(existingMinutes / 60)
+    const minute = existingMinutes % 60
+    const startsAt = amsterdamLocalToUtcIso(date, hour, minute)
+
+    const [session] = await getDb()
+      .update(sessions)
+      .set({ startsAt, plannedMinutes, googleEventId, updatedAt: new Date().toISOString() })
+      .where(eq(sessions.id, sessionId))
+      .returning()
+
+    if (!session) {
+      throw new Error(`Sessie ${sessionId} bestaat niet.`)
+    }
+
+    return { session, startsAt }
+  } finally {
+    await releaseSessionPlacementLock(userId, date)
+  }
+}
+
+// Lang genoeg om een normale lees-dan-schrijf-sectie ruimschoots te dekken, kort genoeg om
+// een écht vastgelopen aanvrager (crash tussen acquire en release) niet permanent een datum
+// te laten blokkeren. Bij een verlopen lock wordt die als "gestolen" beschouwd (verwijderd
+// en opnieuw geprobeerd), net als de `dismissed_conflicts`/heartbeat-fallback-precedenten
+// elders in dit project.
+const LOCK_STALE_MS = 30_000
+const LOCK_MAX_WAIT_MS = 10_000
+const LOCK_POLL_INTERVAL_MS = 100
+
+async function acquireSessionPlacementLock(userId: string, date: string): Promise<void> {
+  const deadline = Date.now() + LOCK_MAX_WAIT_MS
+
+  while (true) {
+    const [inserted] = await getDb()
+      .insert(sessionPlacementLocks)
+      .values({ userId, date })
+      .onConflictDoNothing({ target: [sessionPlacementLocks.userId, sessionPlacementLocks.date] })
+      .returning()
+
+    if (inserted) return
+
+    const [existing] = await getDb()
+      .select()
+      .from(sessionPlacementLocks)
+      .where(and(eq(sessionPlacementLocks.userId, userId), eq(sessionPlacementLocks.date, date)))
+
+    if (existing && Date.now() - new Date(existing.createdAt).getTime() > LOCK_STALE_MS) {
+      await getDb().delete(sessionPlacementLocks).where(eq(sessionPlacementLocks.id, existing.id))
+      continue
+    }
+
+    if (Date.now() > deadline) {
+      throw new Error(`Kon geen plaatsings-lock verkrijgen voor gebruiker ${userId} op ${date} (te lang bezet door een gelijktijdige herberekening).`)
+    }
+    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_INTERVAL_MS))
+  }
+}
+
+async function releaseSessionPlacementLock(userId: string, date: string): Promise<void> {
+  await getDb()
+    .delete(sessionPlacementLocks)
+    .where(and(eq(sessionPlacementLocks.userId, userId), eq(sessionPlacementLocks.date, date)))
+}
+
 export interface UpdateTaskAndSubtasksInput {
   task: {
     subject: string
@@ -406,41 +554,88 @@ export interface UpdateTaskAndSubtasksInput {
 // verzoek. Zonder deze uitzondering zou "Heropenen" nooit persisteren (code review
 // 2026-08-16: bevestigd als een echte bug — de UI liet de rij bewerkbaar lijken, maar de
 // server negeerde de wijziging stilzwijgend).
+// `taskEditLocks`-lock rond de hele operatie (2026-08-18, brede audit) — de transactie
+// zelf bleek bij Story 3.5's onderzoek geen echte isolatie tegen ándere gelijktijdige
+// aanroepen te bieden tegen deze Turso-verbinding (wél nog steeds nuttig voor alles-of-
+// niets-atomiciteit bij een fout halverwege, vandaar dat `tx` blijft staan). Zonder de lock
+// zou de TOCTOU-race die de onderstaande review-patch-comment beschrijft (deeltaak wordt
+// `'afgerond'` via de live-sessie-flow tussen lezen en schrijven) nog steeds kunnen
+// optreden — `updateSubtaskStatus` neemt dezelfde lock vóór zijn eigen write.
 export async function updateTaskAndSubtasks(taskId: string, input: UpdateTaskAndSubtasksInput): Promise<void> {
   const submittedIds = new Set(input.subtasks.filter(s => s.id).map(s => s.id!))
 
-  await getDb().transaction(async (tx) => {
-    // Binnen de transactie gelezen (review-patch) — een lezing vóór `transaction()` liet
-    // een TOCTOU-venster open waarin een deeltaak tussen de lezing en de writes alsnog
-    // `'afgerond'` kon worden (bv. via de live sessie-flow), waarna de reconciliatie op de
-    // inmiddels verouderde status zou handelen.
-    const existingSubtasks = await tx.select().from(subtasks).where(eq(subtasks.taskId, taskId))
-    const existingById = new Map(existingSubtasks.map(s => [s.id, s]))
+  await acquireTaskEditLock(taskId)
+  try {
+    await getDb().transaction(async (tx) => {
+      // Binnen de transactie gelezen (review-patch) — een lezing vóór `transaction()` liet
+      // een TOCTOU-venster open waarin een deeltaak tussen de lezing en de writes alsnog
+      // `'afgerond'` kon worden (bv. via de live sessie-flow), waarna de reconciliatie op de
+      // inmiddels verouderde status zou handelen.
+      const existingSubtasks = await tx.select().from(subtasks).where(eq(subtasks.taskId, taskId))
+      const existingById = new Map(existingSubtasks.map(s => [s.id, s]))
 
-    await tx.update(tasks).set({ ...input.task, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+      await tx.update(tasks).set({ ...input.task, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
 
-    for (const sub of input.subtasks) {
-      const existing = sub.id ? existingById.get(sub.id) : undefined
-      if (existing) {
-        const isExplicitReopen = existing.status === 'afgerond' && sub.status === 'niet-gestart'
-        if (existing.status === 'afgerond' && !isExplicitReopen) continue
-        await tx.update(subtasks)
-          .set({
-            name: sub.name,
-            minutes: sub.minutes,
-            ...(isExplicitReopen ? { status: 'niet-gestart' as SubtaskStatus } : {}),
-            updatedAt: new Date().toISOString()
-          })
-          .where(eq(subtasks.id, existing.id))
-      } else {
-        await tx.insert(subtasks).values({ taskId, name: sub.name, minutes: sub.minutes })
+      for (const sub of input.subtasks) {
+        const existing = sub.id ? existingById.get(sub.id) : undefined
+        if (existing) {
+          const isExplicitReopen = existing.status === 'afgerond' && sub.status === 'niet-gestart'
+          if (existing.status === 'afgerond' && !isExplicitReopen) continue
+          await tx.update(subtasks)
+            .set({
+              name: sub.name,
+              minutes: sub.minutes,
+              ...(isExplicitReopen ? { status: 'niet-gestart' as SubtaskStatus } : {}),
+              updatedAt: new Date().toISOString()
+            })
+            .where(eq(subtasks.id, existing.id))
+        } else {
+          await tx.insert(subtasks).values({ taskId, name: sub.name, minutes: sub.minutes })
+        }
       }
-    }
-    for (const existing of existingSubtasks) {
-      if (existing.status === 'afgerond') continue
-      if (!submittedIds.has(existing.id)) {
-        await tx.delete(subtasks).where(eq(subtasks.id, existing.id))
+      for (const existing of existingSubtasks) {
+        if (existing.status === 'afgerond') continue
+        if (!submittedIds.has(existing.id)) {
+          await tx.delete(subtasks).where(eq(subtasks.id, existing.id))
+        }
       }
+    })
+  } finally {
+    await releaseTaskEditLock(taskId)
+  }
+}
+
+// Zelfde lock-implementatie als `acquireSessionPlacementLock`/`releaseSessionPlacementLock`
+// hierboven, bewust gedupliceerd (andere tabel/scope: per taak, niet per user+datum).
+async function acquireTaskEditLock(taskId: string): Promise<void> {
+  const deadline = Date.now() + LOCK_MAX_WAIT_MS
+
+  while (true) {
+    const [inserted] = await getDb()
+      .insert(taskEditLocks)
+      .values({ taskId })
+      .onConflictDoNothing({ target: taskEditLocks.taskId })
+      .returning()
+
+    if (inserted) return
+
+    const [existing] = await getDb()
+      .select()
+      .from(taskEditLocks)
+      .where(eq(taskEditLocks.taskId, taskId))
+
+    if (existing && Date.now() - new Date(existing.createdAt).getTime() > LOCK_STALE_MS) {
+      await getDb().delete(taskEditLocks).where(eq(taskEditLocks.id, existing.id))
+      continue
     }
-  })
+
+    if (Date.now() > deadline) {
+      throw new Error(`Kon geen bewerk-lock verkrijgen voor taak ${taskId} (te lang bezet door een gelijktijdige wijziging).`)
+    }
+    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_INTERVAL_MS))
+  }
+}
+
+async function releaseTaskEditLock(taskId: string): Promise<void> {
+  await getDb().delete(taskEditLocks).where(eq(taskEditLocks.taskId, taskId))
 }

@@ -1,8 +1,7 @@
-import { clearSessionGoogleEventId, dropTask, getSessionForTask, getTaskById, sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
+import { clearSessionGoogleEventId, dropTask, getSessionForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
 import { updateExceptionForDate } from '../../data/availability'
-import { createHomeworkEvent, deleteHomeworkEvent, updateHomeworkEvent } from '../calendar-sync/homework-events'
-import { SESSION_ANCHOR_HOUR } from './doelmoment'
-import { amsterdamLocalToUtcIso } from '../../../shared/utils/scheduling'
+import { deleteHomeworkEvent, updateHomeworkEvent } from '../calendar-sync/homework-events'
+import { placeSessionOnDate } from './session-placement'
 import type { ShortfallRecommendation } from './shortfall'
 
 // Story 6.2 — past een door `generateShortfallRecommendations` (Story 6.1) gegenereerde
@@ -40,10 +39,11 @@ function stripRecommendationIdPrefix(id: string, prefix: string): string {
 
 // Niveau 1: de sessie verplaatsen naar de al-gevonden alternatieve datum
 // (`recommendation.targetDate`, door `findAlternativeDate` bepaald tijdens het genereren).
-// Zelfde stapelings-/Calendar-sync-sjabloon als `recalculate.ts`'s
-// `recalculateTaskPlanning`, maar bewust niet die functie zelf hergebruikt: die herberekent
-// een nieuw doelmoment vanuit de actuele taakstaat en zou de sessie niet per se op déze
-// specifieke, al-gekozen dag plaatsen (zie de story's "Belangrijk" punt 3).
+// Mutatie zelf zit in het gedeelde `session-placement.ts` (Story 6.4-extractie — `energy.ts`
+// heeft exact dezelfde plaatsings-mutatie nodig voor haar "verschuiven"/"naar voren
+// halen"-stappen). Bewust niet `recalculate.ts`'s `recalculateTaskPlanning` hergebruikt: die
+// herberekent een nieuw doelmoment vanuit de actuele taakstaat en zou de sessie niet per se
+// op déze specifieke, al-gekozen dag plaatsen (zie Story 6.2's "Belangrijk" punt 3).
 async function applyHerplannen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
   const taskId = stripRecommendationIdPrefix(recommendation.id, 'herplannen:')
   const targetDate = recommendation.targetDate
@@ -57,32 +57,7 @@ async function applyHerplannen(userId: string, recommendation: ShortfallRecommen
     throw new Error(`Taak of sessie voor aanbeveling ${recommendation.id} niet gevonden.`)
   }
 
-  const existingMinutes = await sumPlannedMinutesForUserOnDate(userId, targetDate, taskId)
-  const hour = SESSION_ANCHOR_HOUR + Math.floor(existingMinutes / 60)
-  const minute = existingMinutes % 60
-  const startsAt = amsterdamLocalToUtcIso(targetDate, hour, minute)
-  const endsAt = new Date(new Date(startsAt).getTime() + existingSession.plannedMinutes * 60_000).toISOString()
-
-  let session = await updateSessionPlacement(existingSession.id, {
-    startsAt,
-    plannedMinutes: existingSession.plannedMinutes,
-    googleEventId: existingSession.googleEventId
-  })
-
-  if (existingSession.googleEventId) {
-    await updateHomeworkEvent(userId, existingSession.googleEventId, {
-      sessionId: session.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt,
-      endsAt
-    })
-  } else {
-    const result = await createHomeworkEvent(userId, { sessionId: session.id, subject: task.subject, title: task.title, startsAt, endsAt })
-    if (result) {
-      session = await updateSessionPlacement(session.id, { startsAt, plannedMinutes: session.plannedMinutes, googleEventId: result.googleEventId })
-    }
-  }
+  await placeSessionOnDate(userId, task, existingSession, targetDate)
 }
 
 // Niveau 2: beschikbare tijd verhogen voor de tekortdag. Hergebruikt

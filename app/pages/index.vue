@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type { HomePlanResponse } from '#shared/types/tasks'
+import type { AgendaConflictDto, AgendaConflictsResponse } from '#shared/types/conflict'
 
 const { loggedIn } = useUserSession()
 
@@ -22,6 +23,43 @@ const { data: plan, error: planError, status: planStatus } = useFetch<HomePlanRe
 watch(planError, (waarde) => {
   if (is401(waarde)) navigateTo('/inloggen')
 }, { immediate: true })
+
+// Story 6.7 — opstart-check, los van de `plan`-fetch (aparte, onafhankelijke aanroep,
+// zelfde `server: false`-precedent). Bewust NIET ge-`await`-ed (code review-patch): een
+// top-level `await` in `<script setup>` maakt de component async en blokkeert Home's eerste
+// render tot deze call klaar is — precies het "kritiek pad"-gedrag dat de comment hieronder
+// wil vermijden. Faalt de check zelf (netwerk/401), dan verschijnt de modal simpelweg niet.
+const { data: conflictsData, refresh: refreshConflicts } = useFetch<AgendaConflictsResponse>('/api/availability/conflicts', { server: false })
+const conflicts = computed<AgendaConflictDto[]>(() => conflictsData.value?.conflicts ?? [])
+const currentConflict = computed<AgendaConflictDto | null>(() => conflicts.value[0] ?? null)
+
+const dismissError = ref(false)
+
+async function conflictNietVanToepassing(conflict: AgendaConflictDto) {
+  dismissError.value = false
+  try {
+    await $fetch('/api/availability/conflicts/dismiss', {
+      method: 'POST',
+      body: { date: conflict.date, googleEventId: conflict.googleEventId }
+    })
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    // Review-patch: vroeger werd een niet-401-fout stil geslikt en toch herladen — het
+    // conflict kwam dan terug zonder enige uitleg waarom de klik niets deed.
+    dismissError.value = true
+    return
+  }
+  // Hergebruikt de server-staat i.p.v. lokaal te spliced — zelfde les als Story 6.5's
+  // zelfgevonden bug: vertrouw de server-staat, niet een lokale aanname.
+  await refreshConflicts()
+}
+
+function conflictAanpassen(conflict: AgendaConflictDto) {
+  navigateTo(`/agendaconflict/aanpassen?dag=${encodeURIComponent(conflict.date)}`)
+}
 
 const isLoading = computed(() => planStatus.value === 'pending' || planStatus.value === 'idle')
 const nextTask = computed(() => plan.value?.nextTask ?? null)
@@ -150,6 +188,14 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
 
 <template>
   <main v-if="loggedIn" class="home-page">
+    <ConflictModal
+      v-if="currentConflict"
+      :conflict="currentConflict"
+      :error="dismissError"
+      @not-applicable="conflictNietVanToepassing(currentConflict)"
+      @adjust="conflictAanpassen(currentConflict)"
+    />
+
     <header id="home-header" class="home-header">
       <HamburgerMenu />
       <span id="home-header-logo" class="home-header-logo">Flowz</span>

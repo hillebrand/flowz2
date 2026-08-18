@@ -4,8 +4,14 @@
 // uitklapbare menu-knop. Items zijn een simpele interne array — voor déze story precies 1
 // bestemming (Takenoverzicht); een toekomstige tweede bestemming (weekoverzicht, Epic 6)
 // kan er zonder herstructurering aan toegevoegd worden.
+// "Beschikbare tijd" toegevoegd (2026-08-17, op signalering van Hillebrand): deze pagina
+// bestaat al sinds Story 2.1 (done) maar had nooit een menu-link — Story 2.1 bouwde 'm
+// bewust als losse route met de aantekening "hoort bij Epic 4's hoofdscherm", en Story 5.1
+// signaleerde dat gat expliciet toen dít menu gebouwd werd, maar loste het niet zelf op.
 const ITEMS: { label: string, to: string }[] = [
-  { label: 'Takenoverzicht', to: '/taken' }
+  { label: 'Takenoverzicht', to: '/taken' },
+  { label: 'Weekoverzicht', to: '/week' },
+  { label: 'Beschikbare tijd', to: '/instellingen/beschikbare-tijd' }
 ]
 
 const open = ref(false)
