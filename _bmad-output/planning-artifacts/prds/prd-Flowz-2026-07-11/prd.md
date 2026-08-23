@@ -2,7 +2,7 @@
 title: PRD: Flowz
 status: final
 created: 2026-07-11
-updated: 2026-07-26
+updated: 2026-08-23
 ---
 
 # PRD: Flowz
@@ -81,7 +81,7 @@ Ze tikt op een taak en komt in de **detailweergave**, met knoppen om te **bewerk
 Via het **hamburgermenu** opent Evelien het weekoverzicht.
 
 - Voor elke dag van de komende week staat onder elkaar, in cijfers (geen balk): de **beschikbare tijd** en de **benodigde tijd**.
-- Per dag zijn ook de **ingeplande taken/sessies** voor die dag zichtbaar.
+- Per dag zijn ook de **ingeplande taken/sessies** voor die dag zichtbaar, elk met de **geplande tijdsduur** — zo kan Evelien dit overnemen in haar papieren agenda voor dagen waarop ze op school geen telefoon mag gebruiken (zie UJ-9).
 - Waar mogelijk worden ook de overige items uit **Google Calendar** getoond, puur indicatief — dit scherm is niet de plek om beschikbare tijd aan te passen.
 - Wordt voor een dag zichtbaar dat de benodigde tijd de beschikbare tijd overschrijdt, dan markeert Flowz die dag als knelpunt en toont een concrete, direct accepteerbare oplossingssuggestie (dezelfde escalatielogica als UJ-6, maar hier als één voorstel per knelpunt in plaats van de volledige aanbeveling-voor-aanbeveling-flow). Zo ziet Evelien een drukke dag vroeg in de week aankomen, mét oplossing — dit is toegevoegd na de Trigger Map-fase (Objective 2: "Minder gemiste deadlines"), die dit scherm expliciet een proactieve rol gaf naast het oorspronkelijke, puur informatieve karakter.
 
@@ -91,7 +91,7 @@ Flowz merkt zelf op wanneer de benodigde tijd niet meer past binnen de beschikba
 
 - bij het aanmaken van een nieuwe taak (UJ-2)
 - bij het aanpassen van beschikbare of benodigde tijd (UJ-3 / UJ-7)
-- bij het aanpassen van de resterende benodigde tijd na het afronden van een sessie (UJ-1, stap 6)
+- bij het aanpassen van de resterende benodigde tijd na het afronden van een sessie (UJ-1, stap 6; of het invoeren van een schoolsessie, UJ-9)
 
 Dit is een blokkade die direct opgelost moet worden. Flowz doorloopt daarbij escalerend:
 
@@ -120,13 +120,33 @@ Op het hoofdscherm heeft Evelien een knop **"Vandaag niet als gepland?"**. Ze ti
   2. Sessies worden alleen **ingekort** als dat niet leidt tot te hoge studiedruk op de dagen erna.
   3. Flowz toont altijd een **melding** van wat is aangepast — ook als de conclusie is dat er bewust niets is ingekort, omdat dat de studiedruk elders te hoog zou maken.
 
+### UJ-9: Evelien voert schoolsessies in die ze op papier bijhield
+
+Op school moet Eveliens telefoon in het kluisje blijven (sinds dit schooljaar) — ze kan er dus geen sessie live starten of afronden zoals in UJ-1. Voorafgaand neemt ze de geplande taken/sessies met tijdsduur over uit het weekoverzicht (UJ-5) in haar papieren agenda. Daar noteert ze vervolgens per sessie welke taak het was en hoeveel tijd er daadwerkelijk aan besteed is.
+
+'s Avonds thuis opent ze een apart, laagdrempelig bereikbaar verzamelscherm ("schoolsessies van vandaag invoeren"):
+
+1. Voor elke papieren aantekening voegt ze een regel toe met de taak en de bestede tijd.
+2. Na bevestigen verwerkt Flowz elke regel als een afgeronde sessie: dezelfde aanpassing van de resterende benodigde tijd en herberekening van de dagplanning als bij het afronden van een live sessie (UJ-1, stap 6), inclusief het tijdgebrek-signaal van UJ-6 als de resterende tijd niet meer past.
+3. Ze keert terug naar het hoofdscherm met de bijgewerkte dagplanning.
+
+In bijna alle gevallen gaat het om een taak die al gepland stond. Uitzondering: was de taak op school nog niet in Flowz bekend (ze kreeg onderweg nieuw huiswerk mee en is er meteen aan begonnen), dan kan ze in dezelfde flow een nieuwe taak aanmaken — een verkorte versie van UJ-2 waarbij naast titel en bestede tijd ook de **deadline verplicht** is (het enige veld dat de planner minimaal nodig heeft); moeilijkheid, prioriteit en standaard sessieduur krijgen hun gebruikelijke standaardwaarde (gemiddeld) en zijn later aan te vullen/te wijzigen zoals bij elke taak (UJ-4).
+
+### UJ-10: Evelien gebruikt Flowz op een schoollaptop
+
+Soms heeft Evelien op school de beschikking over een schoollaptop (niet haar eigen apparaat), waarmee ze via de browser rechtstreeks bij Flowz kan — in plaats van de papieren-agenda-route van UJ-9.
+
+1. Ze logt in met haar bestaande Google-account. Op het inlogscherm vinkt ze **"dit is een openbare computer"** aan.
+2. Flowz werkt op de laptop identiek aan op haar telefoon — inclusief de volledige live-sessie van UJ-1 (timer, subtaken pauzeren/afronden). Ze hoeft dus niet achteraf te loggen zoals in UJ-9.
+3. Omdat het een **gedeeld schoolapparaat** is, verloopt de sessie automatisch na 30 minuten inactiviteit (vanwege het vinkje bij het inloggen); daarnaast kan ze ook zelf direct uitloggen via een uitlogknop.
+
 ## Buiten scope voor nu
 
 Bewust uitgesteld — architectuur moet hier rekening mee houden zodat latere toevoeging geen herontwerp vereist:
 
 - Magister API- en Microsoft SSO-integratie (handmatige taakinvoer is het v1-mechanisme)
 - Meerdere gebruikersprofielen (Evelien, zusje, vrienden)
-- Multi-device gebruik met synchronisatie (mobiel + pc)
+- Multi-device UX (bv. "laatst bewerkt op ...", gelijktijdig gebruik op meerdere apparaten) — incidentele, niet-gelijktijdige toegang vanaf een tweede apparaat werkt al, omdat de data server-centraal is (zie UJ-10); alleen het apparaat-specifieke ontwerp daarvoor blijft uitgesteld
 - Spraak-naar-tekst taakinvoer
 - Adaptieve tijdschattingen ("Flowz leert van jou" — de kern-differentiator uit de brief, nog niet in v1)
 

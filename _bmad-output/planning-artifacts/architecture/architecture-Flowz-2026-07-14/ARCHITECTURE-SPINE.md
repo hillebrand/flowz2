@@ -4,11 +4,11 @@ type: architecture-spine
 purpose: build-substrate
 altitude: initiative
 paradigm: 'Layered modular monolith (Nuxt fullstack on Lambda)'
-scope: 'Flowz v1 — hobby, single-user greenfield (UJ-1 t/m UJ-8 uit prd.md)'
+scope: 'Flowz v1 — hobby, single-user greenfield (UJ-1 t/m UJ-10 uit prd.md)'
 status: final
 created: '2026-07-14'
-updated: '2026-07-30'
-binds: [UJ-1, UJ-2, UJ-3, UJ-4, UJ-5, UJ-6, UJ-7, UJ-8]
+updated: '2026-08-23'
+binds: [UJ-1, UJ-2, UJ-3, UJ-4, UJ-5, UJ-6, UJ-7, UJ-8, UJ-9, UJ-10]
 sources: ['_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/addendum.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/reconcile-brief.md', '_bmad-output/planning-artifacts/research/technical-magister-api-integratie-en-microsoft-sso-research-2026-07-10.md']
 companions: []
 ---
@@ -82,6 +82,12 @@ graph LR
 - **Rule:** de databasekeuze blijft Turso (libSQL, via Drizzle). Twee AWS-native alternatieven zijn expliciet overwogen en afgewezen: **Aurora Serverless v2** (Postgres-compatible) — afgevallen omdat het standaard in een VPC draait; Lambda-toegang vereist óf Lambda-in-VPC + een NAT-gateway (~€30+/mnd, ondermijnt de vrijwel-€0-idle-doelstelling achter de Lambda-keuze) óf de beperktere RDS Data API. **DynamoDB** — past qua kostenprofiel (écht serverless, geen VPC, blijvend gratis niveau) en AWS-native-wens, maar afgevallen omdat het geen joins ondersteunt: het volgorde-algoritme (AD-1, Epic 3) en de weekoverzicht-aggregatie (Epic 6) zouden herontworpen moeten worden rond vooraf-vastgelegde access patterns — risicovol omdat 5 van de 6 epics nog gebouwd moeten worden en toekomstige querybehoeften nog niet vastliggen, en zou bovendien de al gebouwde Drizzle-laag (Story 1.2) vervangen door een DynamoDB-specifieke library (bv. ElectroDB). Turso's belangrijkste nadeel (externe leverancier buiten AWS, kleine VC-gefinancierde startup ~60 medewerkers) weegt lichter dan deze herontwerpkosten.
 - **Herkomst:** vraag van Hillebrand naar aanleiding van dev-story-werk aan Story 1.2 ("waarom Turso en niet DynamoDB") — geen PRD-eis, productbeslissing van Hillebrand na expliciete afweging tussen Turso, Aurora Serverless v2 en DynamoDB.
 
+### AD-9 — Publieke-computer-sessies verlopen op inactiviteit; expliciet uitloggen is altijd mogelijk [TOEGEVOEGD 2026-08-23]
+
+- **Binds:** UJ-10, auth (bestaande `nuxt-auth-utils`-sessiecookie, AD-2)
+- **Prevents:** dat een implementatie de inactiviteitstimeout via de cookie's eigen (vaste, voor élke sessie gelijke) Max-Age probeert te regelen — dat kan niet per sessie variëren — of een aparte serverside sessietabel introduceert waar er nu bewust geen is
+- **Rule:** de bestaande auth (`server/routes/auth/google.get.ts`) gebruikt een stateless, sealed session-cookie (`nuxt-session`, via `nuxt-auth-utils`) zonder serverside sessietabel; `UserSession` staat willekeurige top-level velden toe (index signature), dus geen aparte tabel nodig. Het "dit is een openbare computer"-vinkje bij inloggen wordt als extra top-level sessieveld opgeslagen (`isPublicComputer`, naast het bestaande `user`-veld — niet genest onder een `.data`-object, dat bestaat niet in deze library). De Nitro-middleware die de sessie al valideert (`server/middleware/session.ts`) houdt daarnaast een top-level `lastActivity`-veld bij en vernieuwt die bij elke geauthenticeerde request (sliding window, via `setUserSession`); zodra `isPublicComputer=true` én er meer dan 30 minuten tussen zit, verklaart diezelfde middleware de sessie serverside ongeldig (`clearUserSession`) — dit is onafhankelijk van en aanvullend op h3's eigen `maxAge` (die absoluut is, gebaseerd op `createdAt`, en identiek voor élke sessie geldt — zie de 7-dagen-instelling in `nuxt.config.ts`, AD-2/NFR5). Sessies zonder het vinkje krijgen geen inactiviteitstimeout — alleen die bestaande 7-dagen refresh-token-vervaldatum blijft daar gelden. Een expliciete uitlog-route (nieuw, roept het al bestaande `clearUserSession` aan) is beschikbaar voor elke sessie, niet alleen publieke-computer-sessies.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -109,7 +115,8 @@ graph LR
 flowz/
   app/              # Vue UI: hoofdscherm, sessie, taak-formulier, weekoverzicht
   server/
-    api/            # Nitro HTTP routes — dun, valideert en delegeert
+    api/            # Nitro HTTP routes (/api/*) — dun, valideert en delegeert
+    routes/auth/    # Google OAuth-flow + uitlog-route (AD-2, AD-9) — buiten /api/*, geen JSON-envelope
     domain/
       tasks/        # Task/Session/Subtask CRUD + mutatie-ownership
       scheduling/    # scheduling engine, escalatielogica (UJ-6/7/8)
@@ -154,14 +161,16 @@ SST's `sst.aws.Nuxt`-component zet deze driedeling (S3 + CloudFront + Lambda) au
 | UJ-6 tijdgebrek | `server/domain/scheduling` escalatieketen | AD-1, AD-7 |
 | UJ-7 agendaconflict bij opstarten | `server/domain/calendar-sync` + escalatieketen | AD-1, AD-4, AD-7 |
 | UJ-8 dag niet volgens plan | `server/domain/scheduling` escalatie (tijd/energie) | AD-1, AD-7 |
-| Auth + Calendar-toegang | `server/api/auth` (Google OAuth) | AD-2, AD-5 |
+| UJ-9 schoolsessies invoeren (papier) | `app/` verzamelscherm + bestaande `server/domain/tasks`/`server/domain/scheduling` (afronden-pad, taak-defaults) | AD-1, AD-3 |
+| UJ-10 schoollaptop-toegang | `app/` (identiek aan UJ-1 op de laptop) + `server/routes/auth` (login-vinkje, uitlog-route, inactiviteitstimeout) | AD-2, AD-9 |
+| Auth + Calendar-toegang | `server/routes/auth` (Google OAuth) | AD-2, AD-5, AD-9 |
 
 **UX-randvoorwaarde zonder architectuur-impact:** "Rustig hoofdscherm" (Ontwerpprincipes) is een puur visueel/UX-gestuurde eis op `app/`'s hoofdscherm-component — geen data- of API-consequentie, dus geen eigen AD. Genoteerd hier voor traceerbaarheid naar de UX-fase.
 
 ## Deferred
 
 - **Meerdere gebruikersprofielen** — `User` is al 1:1 aan een Google-account gekoppeld (AD-2), dus een extra profiel = een extra `User`-rij zonder schema-herontwerp. UI voor profiel-switchen/uitnodigen is niet ontworpen.
-- **Multi-device sync** — inherent aanwezig (Turso is dé bron, bereikbaar vanaf elk apparaat via dezelfde API); apparaat-specifieke UX (bv. "laatst bewerkt op ...") is niet ontworpen.
+- **Multi-device sync** — inherent aanwezig (Turso is dé bron, bereikbaar vanaf elk apparaat via dezelfde API); bevestigd in de praktijk door UJ-10 (schoollaptop). Apparaat-specifieke UX (bv. "laatst bewerkt op ...") en gelijktijdig gebruik op meerdere apparaten blijven niet ontworpen.
 - **Spraak-naar-tekst taakinvoer** — verwacht een pure `app/`-toevoeging (invoerveld), geen impact op `server/domain/` of `server/data/`.
 - **Adaptieve tijdschattingen ("leert van jou")** — voegt een nieuwe domain-concern toe (leer-/schattingsmodel) bovenop AD-1's scheduling-engine; geen schema hiervoor gereserveerd.
 - **Magister API / Microsoft SSO** — zou een tweede identiteits-/importbron naast AD-2 introduceren. Reëel toekomstig conflictpunt: bij oppakken moet expliciet gekozen worden tussen AD-2 uitbreiden of een aparte, auth-loze importstroom.

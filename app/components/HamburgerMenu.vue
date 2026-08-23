@@ -14,6 +14,10 @@ const ITEMS: { label: string, to: string }[] = [
   { label: 'Beschikbare tijd', to: '/instellingen/beschikbare-tijd' }
 ]
 
+// Uitloggen (Story 1.5) staat bewust los van ITEMS/NuxtLink: het is een volledige
+// paginanavigatie naar een server-route (`server/routes/auth/logout.get.ts`), geen
+// SPA-navigatie — vandaar een gewone `<a>` in de template, geen extra ITEMS-entry.
+
 const open = ref(false)
 const rootRef = ref<HTMLElement>()
 
@@ -56,6 +60,10 @@ onUnmounted(() => {
     <ul v-if="open" id="hamburger-menu-panel" class="hamburger-menu-panel" role="menu">
       <li v-for="item in ITEMS" :key="item.to" role="none">
         <NuxtLink :to="item.to" role="menuitem" class="hamburger-menu-item" @click="close">{{ item.label }}</NuxtLink>
+      </li>
+      <li role="none" class="hamburger-menu-divider" />
+      <li role="none">
+        <a id="nav-logout-button" href="/auth/logout" role="menuitem" class="hamburger-menu-item">Uitloggen</a>
       </li>
     </ul>
   </div>
@@ -105,5 +113,10 @@ onUnmounted(() => {
 .hamburger-menu-item:hover,
 .hamburger-menu-item:focus-visible {
   background: #f3f4f6;
+}
+
+.hamburger-menu-divider {
+  margin: 0.375rem 0.25rem;
+  border-top: 1px solid #e5e7eb;
 }
 </style>

@@ -125,7 +125,12 @@
       "mcp__claude_ai_Google_Calendar__delete_event",
       "mcp__claude_ai_Google_Calendar__list_events",
       "WebFetch(domain:docs.turso.tech)",
-      "Bash(aws lambda list-functions *)"
+      "Bash(aws lambda list-functions *)",
+      "Bash(sed -i '' \"s/1-4-openbare-computer-vinkje-inactiviteitstimeout: ready-for-dev/1-4-openbare-computer-vinkje-inactiviteitstimeout: in-progress/\" _bmad-output/implementation-artifacts/sprint-status.yaml)",
+      "Bash(sed -i '' \"s/^last_updated: 2026-08-23$/last_updated: 2026-08-23/\" _bmad-output/implementation-artifacts/sprint-status.yaml)",
+      "Bash(echo \"started with pid $!\")",
+      "Bash(pkill -f \"nuxt dev --port 4173\")",
+      "Bash(pkill -f \"sst shell\")"
     ]
   }
 }

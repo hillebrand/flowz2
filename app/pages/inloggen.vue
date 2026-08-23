@@ -27,6 +27,17 @@ const busy = ref(false)
 function onLoginClick() {
   busy.value = true
 }
+
+// UJ-10/AD-9: op een gedeelde schoollaptop mag de sessie niet onbeperkt blijven staan.
+// De knop wordt hierdoor een computed href i.p.v. een statisch pad — Google echoot
+// onbekende queryparams niet terug op de callback, dus deze vlag wordt server-side
+// (server/routes/auth/google.get.ts) via een kortlevende cookie doorgesluisd, niet
+// via deze queryparam zelf op de callback-leg.
+const publicComputer = ref(false)
+
+const googleLoginHref = computed(() =>
+  publicComputer.value ? '/auth/google?publicComputer=1' : '/auth/google'
+)
 </script>
 
 <template>
@@ -49,7 +60,7 @@ function onLoginClick() {
 
       <a
         id="login-google-button"
-        href="/auth/google"
+        :href="googleLoginHref"
         class="login-google-button"
         :class="{ 'login-google-button--busy': busy }"
         :aria-busy="busy"
@@ -64,6 +75,16 @@ function onLoginClick() {
         </svg>
         {{ busy ? 'Bezig met inloggen…' : 'Inloggen met Google' }}
       </a>
+
+      <label class="login-public-computer-label" for="login-public-computer-checkbox">
+        <input
+          id="login-public-computer-checkbox"
+          v-model="publicComputer"
+          type="checkbox"
+          class="login-public-computer-checkbox"
+        >
+        Dit is een openbare computer
+      </label>
     </div>
   </main>
 </template>
@@ -197,6 +218,24 @@ function onLoginClick() {
 .login-google-button:focus-visible {
   outline: 2px solid #a7f3d0;
   outline-offset: 2px;
+}
+
+.login-public-computer-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: var(--space-sm);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: #7c7a85;
+  cursor: pointer;
+}
+
+.login-public-computer-checkbox {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: #2563eb;
 }
 
 /* Page state "Bezig" (5.1-spec): tijdens de redirect naar Google is de knop inactief,

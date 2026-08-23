@@ -1,4 +1,4 @@
-import { getQuery, sendRedirect } from 'h3'
+import { deleteCookie, getCookie, getQuery, sendRedirect, setCookie } from 'h3'
 import { Resource } from 'sst'
 import { loginWithGoogle } from '../../domain/auth/users'
 
@@ -18,6 +18,19 @@ const CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar'
 type OAuthScopeVariant = 'readonly' | 'write'
 
 const SESSIE_COOKIE = 'nuxt-session'
+
+// UJ-10/AD-9: draagt het "dit is een openbare computer"-vinkje over de OAuth-round-trip
+// heen, net als de oidc-library dat al doet voor state/nonce/PKCE via eigen cookies. Nodig
+// omdat Google onbekende queryparams niet op de callback (`?code=...`) teruggeeft — een
+// `?publicComputer=1` op de eerste leg is dus verdwenen tegen de tijd dat `onSuccess` draait.
+// 10 minuten is ruim voldoende voor een consent-flow en verlaat de browser nooit als de
+// gebruiker de flow afbreekt (cookie verloopt vanzelf).
+const PUBLIC_COMPUTER_COOKIE = 'flowz-oauth-public-computer'
+// Zelfde venster en `secure`-conventie als nuxt-auth-utils' eigen state/nonce/PKCE-cookies
+// (`node_modules/nuxt-auth-utils/dist/runtime/server/lib/utils.js`, `OAUTH_COOKIE_MAX_AGE`),
+// zodat deze cookie ook op localhost (http, geen NODE_ENV=development check) werkt.
+const PUBLIC_COMPUTER_COOKIE_MAX_AGE = 60 * 10
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 // Dwingt een sessie met een verse `createdAt` af bij het inloggen (code review 2026-07-30).
 //
@@ -130,6 +143,13 @@ function getHandler(variant: OAuthScopeVariant) {
       },
 
       async onSuccess(event, { user, tokens }) {
+        // Lees en verwijder de pending-cookie meteen, vóór elke mogelijke vroege return
+        // hieronder (bv. ontbrekende refresh_token) — anders overleeft de cookie een
+        // mislukte poging en besmet hij de eerstvolgende, geheel andere login-poging
+        // (code review 2026-08-23).
+        const pendingPublicComputer = getCookie(event, PUBLIC_COMPUTER_COOKIE) === '1'
+        deleteCookie(event, PUBLIC_COMPUTER_COOKIE, { path: '/' })
+
         // `refresh_token` is in OidcTokens terecht optioneel: Google garandeert 'm niet.
         // Zonder deze guard belandt `undefined` in een NOT NULL-kolom en krijg je een
         // constraint-fout midden in de login i.p.v. de gebruikersgerichte foutstate.
@@ -143,6 +163,19 @@ function getHandler(variant: OAuthScopeVariant) {
         // cumulatief meer) teruggeven dan gevraagd.
         const hasCalendarWriteScope = (tokens.scope ?? '').split(' ').includes(CALENDAR_WRITE_SCOPE)
 
+        // UJ-10/AD-9: bepaal vóór `startNieuweSessie()` (die de bestaande sessie wist) of
+        // dit een publieke-computer-sessie moet worden. Twee bronnen, in volgorde:
+        // 1. De kortlevende cookie van de eerste leg (normale login vanaf 5.1-inlogscherm).
+        // 2. Anders, en uitsluitend bij de `write`-variant: het vinkje van de sessie die hier
+        //    al lag — dekt specifiek Story 2.3's scope-upgrade-her-consent (`?scope=write`)
+        //    door een al ingelogde gebruiker, die geen pending-cookie heeft maar wél een
+        //    bestaand vinkje niet stilzwijgend mag verliezen. Bij de gewone `readonly`-variant
+        //    (ook een her-login vanaf bijv. een bookmark) telt uitsluitend de pending-cookie —
+        //    anders zou een her-login zónder het vinkje het vinkje van een nog actieve oude
+        //    publieke-computer-sessie ongewenst opnieuw opleggen (code review 2026-08-23).
+        const existingSession = await getUserSession(event)
+        const isPublicComputer = pendingPublicComputer || (variant === 'write' && existingSession.isPublicComputer === true)
+
         const dbUser = await loginWithGoogle({
           googleSubjectId: user.sub,
           calendarAccessToken: tokens.access_token,
@@ -153,7 +186,8 @@ function getHandler(variant: OAuthScopeVariant) {
         await startNieuweSessie(event)
 
         await setUserSession(event, {
-          user: { id: dbUser.id }
+          user: { id: dbUser.id },
+          ...(isPublicComputer ? { isPublicComputer: true, lastActivity: Date.now() } : {})
         })
 
         return sendRedirect(event, '/')
@@ -164,6 +198,9 @@ function getHandler(variant: OAuthScopeVariant) {
         // client-id, een state-mismatch en een geweigerde consent zien er voor de gebruiker
         // identiek uit. Alleen foutcode en boodschap — nooit tokens of PII.
         console.error('[auth] Google-login mislukt:', error.statusCode, error.message)
+        // Zelfde reden als in `onSuccess`: een mislukte token-exchange of userinfo-fetch mag
+        // geen stale pending-cookie achterlaten voor de volgende poging (code review 2026-08-23).
+        deleteCookie(event, PUBLIC_COMPUTER_COOKIE, { path: '/' })
         // Geen technische error-envelope (server/domain/errors.ts) — dit is een
         // gebruikersgerichte melding, geen API-fout (AD-6-scheiding in geest toegepast).
         return sendRedirect(event, LOGIN_ERROR_PATH)
@@ -188,10 +225,36 @@ export default defineEventHandler(async (event) => {
   // gememoïseerde varianten de callback verwerkt.
   const variant: OAuthScopeVariant = getQuery(event).scope === 'write' ? 'write' : 'readonly'
 
+  // UJ-10/AD-9: net als hierboven bij `scope`, is `?publicComputer=1` alleen op de eerste
+  // leg aanwezig (geen `code` in de query) — Google geeft 'm niet terug op de callback.
+  // Zet 'm daarom hier in een kortlevende cookie, gelezen in `onSuccess`.
+  if (!getQuery(event).code) {
+    // Wist eerst altijd een eventuele achtergebleven cookie van een eerdere, nooit voltooide
+    // poging (mislukte refresh_token, geweigerde consent, netwerkfout, etc.) — anders markeert
+    // een latere, geheel andere login-poging zónder het vinkje de sessie alsnog als publieke
+    // computer (code review 2026-08-23). Dekt ook Google's "consent geweigerd"-callback (geen
+    // `code`, wel `error`), die dezelfde `!code`-tak volgt.
+    deleteCookie(event, PUBLIC_COMPUTER_COOKIE, { path: '/' })
+
+    if (getQuery(event).publicComputer === '1') {
+      setCookie(event, PUBLIC_COMPUTER_COOKIE, '1', {
+        httpOnly: true,
+        secure: !isDevelopment,
+        sameSite: 'lax',
+        maxAge: PUBLIC_COMPUTER_COOKIE_MAX_AGE,
+        path: '/'
+      })
+    }
+  }
+
   try {
     return await getHandler(variant)(event)
   } catch (error) {
     console.error('[auth] Onverwachte fout in de Google-loginflow:', error)
+    // Zelfde reden als in `onSuccess`/`onError`: dit vangnet dekt o.a. `requestAccessToken`'s
+    // doorgegooide fouten en databasefouten binnen `onSuccess` die de pending-cookie anders
+    // nooit hadden bereikt om op te ruimen (code review 2026-08-23).
+    deleteCookie(event, PUBLIC_COMPUTER_COOKIE, { path: '/' })
     return sendRedirect(event, LOGIN_ERROR_PATH)
   }
 })

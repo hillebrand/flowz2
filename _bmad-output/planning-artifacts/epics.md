@@ -52,7 +52,7 @@ FR10: Bij opslaan van een nieuwe taak verschijnt een bevestiging, wordt de dagpl
 FR11: Via het hamburgermenu kan Evelien een instellingenpagina openen voor beschikbare tijd: een weekpatroon (ma-zo) met +/- knoppen per dag (15 min stappen), en een kalender voor dag-specifieke afwijkingen op dat patroon (automatisch opgeruimd zodra de waarde het weekpatroon weer evenaart).
 FR12: Het takenoverzicht toont alle openstaande taken, gegroepeerd per week en gesorteerd op deadline, met per taak: vak, soort taak, titel, voortgangsbalkje; bevat een snelkoppeling om een nieuwe taak aan te maken.
 FR13: Evelien kan een taak selecteren om een detailweergave te zien, met opties om te bewerken (opent hetzelfde formulier als bij aanmaken, vooringevuld — afgeronde deeltaken read-only met een "Heropenen"-optie) of te verwijderen (met bevestiging).
-FR14: Via het hamburgermenu kan Evelien een weekoverzicht openen dat per dag (komende week) de beschikbare en benodigde tijd toont (in cijfers), de ingeplande taken/sessies, en waar mogelijk overige Google Calendar-items (indicatief, niet bewerkbaar op dit scherm); knelpuntdagen krijgen een directe, accepteerbare oplossingssuggestie.
+FR14: Via het hamburgermenu kan Evelien een weekoverzicht openen dat per dag (komende week) de beschikbare en benodigde tijd toont (in cijfers), de ingeplande taken/sessies mét geplande tijdsduur per sessie (zodat ze dit kan overnemen op papier, zie FR29), en waar mogelijk overige Google Calendar-items (indicatief, niet bewerkbaar op dit scherm); knelpuntdagen krijgen een directe, accepteerbare oplossingssuggestie.
 FR15: Flowz signaleert automatisch tijdgebrek (benodigde tijd > beschikbare tijd) bij: het aanmaken van een nieuwe taak, het aanpassen van beschikbare/benodigde tijd, en het aanpassen van resterende tijd na sessie-afronding.
 FR16: Bij tijdgebrek doorloopt Flowz een escalerende keten van oplossingen: (1) herplannen binnen deadline-grenzen, (2) tijd verruimen met concrete voorstellen, (3) sessies inkorten op prioriteit, (4) een taak volledig laten vervallen (laagste prioriteit eerst) als laatste, gegarandeerde redmiddel.
 FR17: Evelien ziet eerst hoeveel tijd er precies te weinig is, en krijgt een gecureerde set (max 3 tegelijk) losse, apart accepteerbare of afwijsbare aanbevelingen met per aanbeveling de tijdwinst, tot het tekort is opgeheven; afgewezen aanbevelingen komen terug als laatste redmiddel.
@@ -67,6 +67,10 @@ FR25: Bij concurrentie om beschikbare tijd op dezelfde dag bepaalt Flowz de volg
 FR26: Herplanning wordt herberekend zodra: benodigde tijd wijzigt, een sessie/taak wordt afgerond, of Evelien tijd-/energiegebrek aangeeft.
 FR27: Evelien logt in met haar Google-account; in dezelfde OAuth-stap geeft ze toestemming voor Calendar-toegang (lezen + schrijven, zie UX-DR24).
 FR28: Evelien kan op de beschikbare-tijd-instellingenpagina optioneel een vaste Google Calendar-kleur kiezen voor huiswerk-afspraken; Flowz zet vanaf dat moment geplande/herplande sessies zelf als events met die kleur in haar Calendar, en negeert agenda-items met die kleur bij de conflict-detectie (zie UX-DR24).
+FR29: Evelien kan via een apart verzamelscherm ("schoolsessies van vandaag invoeren") per papieren aantekening een schoolsessie invoeren (taak kiezen + bestede tijd); elke regel wordt verwerkt als een afgeronde sessie met dezelfde aanpassing van resterende tijd en herberekening als bij het live afronden van een sessie (UJ-1/FR7-8), inclusief het tijdgebrek-signaal (FR15) als de resterende tijd niet meer past.
+FR30: Was de taak op school nog niet in Flowz bekend, dan kan Evelien in dezelfde flow een nieuwe taak aanmaken met alleen titel, een verplichte deadline en de bestede tijd; moeilijkheid, prioriteit en standaard sessieduur krijgen de standaardwaarde "Gemiddeld" en zijn later aan te vullen via het gewone bewerkformulier (FR13).
+FR31: Op het inlogscherm kan Evelien "dit is een openbare computer" aanvinken.
+FR32: Een expliciete uitlog-actie is voor elke sessie beschikbaar, niet alleen sessies met het openbare-computer-vinkje.
 
 ### NonFunctional Requirements
 
@@ -79,6 +83,7 @@ NFR6: Calendar-data wordt live/pull-only gelezen op het request-pad, nooit lange
 NFR7: Scheduling-logica (doelmoment, volgorde, studiedruk) leeft uitsluitend server-side (AD-1) — geen client berekent zelf een planning.
 NFR8: Herberekening van de planning is idempotent (AD-1) — gaat altijd uit van actuele Task/Session/AvailableTime-staat, nooit van een tussentijds opgeslagen planningsstaat.
 NFR9: Alle schermen zijn Desktop-first ontworpen met een responsive/verkorte mobiele weergave (minder onderdelen tegelijk zichtbaar) — geen aparte native mobile app.
+NFR10: Een sessie met het openbare-computer-vinkje verloopt server-side na 30 minuten inactiviteit (sliding window, telkens vernieuwd bij een geauthenticeerde request), ongeacht de cookie's eigen vervaldatum (AD-9). Sessies zonder dat vinkje krijgen geen inactiviteitstimeout — alleen de bestaande 7-dagen refresh-token-vervaldatum (NFR5) blijft daar gelden.
 
 ### Additional Requirements
 
@@ -97,6 +102,7 @@ NFR9: Alle schermen zijn Desktop-first ontworpen met een responsive/verkorte mob
 - **Niet in v1, expliciet uitgesteld:** achtergrondtaken/push-notificaties, uitgebreide observability/logging (CloudWatch-standaard volstaat), eigen backup-pipeline (Turso's ingebouwde voorziening is het vangnet).
 - **Bekend technisch risico, geaccepteerd zonder mitigatie in v1:** Lambda cold-start (P95 1,2-2,8s) kan botsen met NFR1's "binnen enkele seconden"-doel bij Eveliens sporadische gebruikspatroon; her overwegen (keep-warm-ping) als dit in de praktijk hinderlijk blijkt.
 - **Bekend build-risico:** `@libsql/client`'s platform-specifieke binaries kunnen door Rollup/esbuild-bundling verwijderd worden — controleren bij eerste deploy, zo nodig expliciet als Nitro-external configureren.
+- **Sessie-/authlaag (AD-9):** het openbare-computer-vinkje en `lastActivity` leven als extra velden in de bestaande, stateless sessiecookie (`session.data`, `nuxt-auth-utils`) — geen nieuwe sessietabel. De inactiviteitstimeout wordt gehandhaafd door de bestaande Nitro-middleware die de sessie al valideert, niet via de cookie's eigen (voor elke sessie gelijke) Max-Age.
 
 ### UX Design Requirements
 
@@ -158,13 +164,17 @@ FR25: Epic 3 - Volgorde-algoritme bij concurrentie om tijd
 FR26: Epic 3 - Herberekening bij trigger-momenten
 FR27: Epic 1 - Google-login + Calendar-consent
 FR28: Epic 2 - Huiswerk-kleur instellen + Calendar write-sync (sync-hook gebruikt door Epics 3/4/5/6 bij elke (her)planning)
+FR29: Epic 7 - Schoolsessies-verzamelscherm, verwerkt als afgeronde sessie
+FR30: Epic 7 - Verkorte taak-aanmaak (titel + deadline + tijd) vanuit het verzamelscherm
+FR31: Epic 1 - Openbare-computer-vinkje op het inlogscherm
+FR32: Epic 1 - Expliciete uitlog-actie
 
 ## Epic List
 
 ### Epic 1: Inloggen & Fundament
-Evelien kan inloggen met haar Google-account en krijgt in dezelfde stap Calendar-toegang — de technische basis (User-model, auth, projectstructuur) staat.
-**FRs covered:** FR27
-**NFRs:** NFR4, NFR5
+Evelien kan inloggen met haar Google-account en krijgt in dezelfde stap Calendar-toegang — de technische basis (User-model, auth, projectstructuur) staat, inclusief veilig gebruik op een gedeelde schoollaptop.
+**FRs covered:** FR27, FR31, FR32
+**NFRs:** NFR4, NFR5, NFR10
 **UX:** UX-DR17
 **Implementation Notes:** Bevat ook de "Structural Seed" projectopzet (Nuxt/Nitro/SST-scaffolding, AD-5 secrets-mechanisme, AD-6 error-envelope + Notification-shape conventies) als Story 1 — nodig voordat enige andere epic kan starten.
 
@@ -223,6 +233,49 @@ So that ik nooit vastloop op een onduidelijke fout na 7 dagen inactiviteit.
 **Given** de gebruikerslijst van het Google Cloud OAuth-consentscherm (Testing-modus, cap ~100 testgebruikers)
 **When** een nieuw account voor het eerst probeert in te loggen
 **Then** werkt dit alleen als dat account vooraf handmatig als testgebruiker is toegevoegd (buiten deze story, operationeel gegeven — geen UI-consequentie)
+
+### Story 1.4: Openbare-computer-vinkje & Inactiviteitstimeout
+
+As Evelien,
+I want op een gedeelde schoollaptop kunnen aangeven dat het een openbare computer is,
+So that mijn sessie daar niet onbeperkt blijft openstaan als ik het vergeet af te sluiten.
+
+**Acceptance Criteria:**
+
+**Given** Evelien ziet 5.1-inlogscherm
+**When** de pagina laadt
+**Then** toont ze naast `login-google-button` een aanvinkbare `login-public-computer-checkbox` ("Dit is een openbare computer"), standaard uit
+
+**Given** Evelien vinkt `login-public-computer-checkbox` aan en rondt de Google-login af (Story 1.2)
+**When** de sessie wordt aangemaakt
+**Then** wordt `isPublicComputer: true` en een initiële `lastActivity`-timestamp in de sessiedata zelf opgeslagen (`session.data`, AD-9) — geen nieuwe sessietabel
+**And** vernieuwt de bestaande sessie-validerende Nitro-middleware `lastActivity` bij elke geauthenticeerde request (sliding window)
+
+**Given** een sessie heeft `isPublicComputer: true`
+**When** er meer dan 30 minuten verstrijken zonder geauthenticeerde request
+**Then** verklaart de middleware de sessie serverside ongeldig (`clearUserSession`) bij de eerstvolgende request, onafhankelijk van de cookie's eigen vervaldatum (NFR10)
+**And** wordt Evelien bij die eerstvolgende request naar 5.1-inlogscherm geleid, zoals bij een reguliere sessieverval (Story 1.3)
+
+**Given** een sessie heeft `isPublicComputer` niet aangevinkt (het gebruikelijke geval, bv. haar eigen telefoon)
+**When** er tijd verstrijkt zonder activiteit
+**Then** geldt geen inactiviteitstimeout — alleen de bestaande 7-dagen refresh-token-vervaldatum (Story 1.3) is van toepassing
+
+### Story 1.5: Expliciet Uitloggen
+
+As Evelien,
+I want me op elk moment expliciet kunnen uitloggen,
+So that ik op een schoollaptop niet hoef te wachten op de automatische timeout voordat ik veilig wegloop.
+
+**Acceptance Criteria:**
+
+**Given** Evelien is ingelogd (op elk apparaat, publiek of niet)
+**When** ze in het hamburgermenu op `nav-logout-button` klikt
+**Then** wordt de sessie serverside beëindigd (roept het bestaande `clearUserSession`-mechanisme aan, zelfde als bij een nieuwe login, Story 1.2)
+**And** navigeert de browser naar 5.1-inlogscherm
+
+**Given** Evelien is uitgelogd
+**When** ze de browser-terugknop gebruikt naar een pagina die authenticatie vereist
+**Then** stuurt de server haar terug naar 5.1-inlogscherm (geen gecachte, ingelogde weergave zichtbaar)
 
 ### Epic 2: Beschikbare Tijd & Agenda-koppeling
 Evelien stelt in hoeveel tijd ze per dag beschikbaar heeft voor huiswerk (weekpatroon + uitzonderingen), en kan optioneel haar Google Calendar laten meesyncen met een herkenbare huiswerk-kleur.
@@ -716,7 +769,7 @@ So that ik nooit verrast word door een drukke dag.
 
 **Given** Evelien opent 7.1-weekoverzicht via het hamburgermenu
 **When** de pagina laadt
-**Then** toont `week-days` voor elke dag van de komende week: beschikbare tijd, benodigde tijd (cijfers), ingeplande taken/sessies, en waar mogelijk Google Calendar-items (indicatief, niet bewerkbaar) (FR14)
+**Then** toont `week-days` voor elke dag van de komende week: beschikbare tijd, benodigde tijd (cijfers), ingeplande taken/sessies elk met hun geplande tijdsduur (zodat Evelien dit kan overnemen op papier, zie Epic 7), en waar mogelijk Google Calendar-items (indicatief, niet bewerkbaar) (FR14)
 
 **Given** een dag heeft beschikbare tijd < benodigde tijd
 **When** de pagina laadt
@@ -772,3 +825,50 @@ So that mijn planning nooit stiekem verkeerd is zonder dat ik het weet.
 **Given** er zijn geen conflicten
 **When** 1.1-Home laadt
 **Then** verschijnt de modal niet
+
+### Epic 7: Schoolsessies Invoeren (Papieren Agenda)
+Evelien kan huiswerk dat ze op school deed — waar haar telefoon verplicht in het kluisje blijft — 's avonds thuis alsnog in Flowz vastleggen, op basis van wat ze op papier bijhield.
+**FRs covered:** FR29, FR30
+**Implementation Notes:** Hergebruikt bewust bestaande mechanismen i.p.v. nieuwe te bouwen: het sessie-afronden-pad (Epic 4, Story 4.6/4.7 — resterende tijd + herberekening) en de taak-aanmaak-engine (Epic 3, Story 3.1) voor de verkorte nieuwe-taak-uitzondering. Vereist geen wijziging aan de scheduling-engine zelf (AD-1).
+
+### Story 7.1: Schoolsessies-verzamelscherm
+
+As Evelien,
+I want 's avonds in één scherm alle schoolsessies van die dag invoeren die ik op papier heb bijgehouden,
+So that mijn planning ook klopt met het huiswerk dat ik zonder telefoon heb gedaan.
+
+**Acceptance Criteria:**
+
+**Given** Evelien opent het schoolsessies-verzamelscherm (laagdrempelig bereikbaar, bv. vanaf 1.1-Home of het hamburgermenu)
+**When** de pagina laadt
+**Then** toont `school-sessions-list` een lege rij om mee te beginnen, met per rij `school-session-task-select` (kiezen uit al geplande taken) en `school-session-time-input` (bestede tijd)
+**And** kan Evelien via `school-session-add-row-button` extra rijen toevoegen, één per papieren aantekening
+
+**Given** Evelien heeft één of meer rijen ingevuld en klikt op `school-sessions-confirm-button`
+**When** de server de invoer verwerkt
+**Then** wordt elke regel verwerkt als een afgeronde sessie: dezelfde aanpassing van resterende benodigde tijd en herberekening van de dagplanning als bij het afronden van een live sessie (FR7-8, Story 4.6/4.7's mechanisme, hergebruikt — geen nieuwe herplan-logica)
+**And** verschijnt, als de resterende tijd voor een taak niet meer past, hetzelfde tijdgebrek-signaal als elders (FR15, Story 6.1)
+**And** keert Evelien terug naar 1.1-Home met de bijgewerkte dagplanning (FR29)
+
+**Given** Evelien heeft nog geen rij ingevuld
+**When** ze op `school-sessions-confirm-button` klikt
+**Then** gebeurt er niets (geen lege sessies aanmaken); een validatiemelding wijst op de lege rij
+
+### Story 7.2: Onverwachte Taak Toevoegen vanuit het Verzamelscherm
+
+As Evelien,
+I want een taak die ik pas op school kreeg en er meteen aan begon direct kunnen vastleggen,
+So that ik niet eerst apart een volledig taak-formulier hoef in te vullen voordat ik de bestede tijd kan loggen.
+
+**Acceptance Criteria:**
+
+**Given** Evelien staat op het schoolsessies-verzamelscherm en de taak stond nog niet in Flowz
+**When** ze in `school-session-task-select` kiest voor "Nieuwe taak toevoegen"
+**Then** verschijnt een verkorte invoer: `school-session-new-task-title-input` (verplicht) en `school-session-new-task-deadline-input` (verplicht) — geen ander veld
+**And** wordt bij validatie dezelfde regel gehanteerd als op het volledige taak-formulier (titel niet-leeg, deadline niet in het verleden, Story 3.1)
+
+**Given** Evelien bevestigt de rij met een nieuw aangemaakte taak
+**When** de server verwerkt (samen met Story 7.1's sessie-verwerking)
+**Then** wordt een `Task`-rij aangemaakt (Epic 3's `POST /api/tasks`-pad) met moeilijkheid, prioriteit en standaard sessieduur op de standaardwaarde "Gemiddeld" (FR30)
+**And** berekent de scheduling-engine (Epic 3, ongewijzigd) op basis van de ingevulde deadline meteen een doelmoment, zoals bij elke andere taak
+**And** is de taak nadien via 6.3-bewerkformulier (Epic 5) verder aan te vullen, net als elke andere taak
