@@ -219,3 +219,43 @@ export interface UpdateTaskInput extends Omit<CreateTaskInput, 'subtasks'> {
   // laten. Ontbrekend/`undefined` betekent "geen wijziging bedoeld".
   subtasks: (SubtaskInput & { id?: string, status?: SubtaskStatus })[]
 }
+
+// Story 7.1 — databron voor het schoolsessies-verzamelscherm se `school-session-task-select`
+// (`GET /api/school-sessions/tasks`). Alleen wat de dropdown nodig heeft, zelfde
+// "geen client-behoefte, niet meesturen"-precedent als `HomePlanResponse`.
+export interface SchoolSessionTaskOption {
+  id: string
+  subject: string
+  title: string
+}
+
+export type SchoolSessionTasksResponse = SchoolSessionTaskOption[]
+
+// Story 7.1 — body van `POST /api/school-sessions`. Elke regel wordt verwerkt als een
+// afgeronde sessie (`replanAfterSession`, zelfde mechanisme als UJ-1/Story 4.7) met
+// `remainingTotalMinutes: null` ("ongewijzigd") — er is bewust geen resterende-tijd-veld
+// op dit scherm, zie de story se Dev Notes. `rowId` is een client-gegenereerde, willekeurige
+// waarde (geen taak-id) — nodig om resultaten terug te koppelen aan de juiste rij ook als
+// twee rijen toevallig dezelfde taak kiezen (code review 2026-08-23: partial-failure-fix).
+export interface SchoolSessionEntry {
+  rowId: string
+  taskId: string
+  actualMinutes: number
+}
+
+export interface SchoolSessionsInput {
+  entries: SchoolSessionEntry[]
+}
+
+// Per-regel resultaat i.p.v. alles-of-niets — nodig zodat de client na een gedeeltelijke
+// mislukking alleen de nog-mislukte rijen opnieuw kan versturen, zonder een al geslaagde
+// rij (sessielog al geschreven) een tweede keer te posten (code review 2026-08-23).
+export interface SchoolSessionResult {
+  rowId: string
+  ok: boolean
+  message?: string
+}
+
+export interface SchoolSessionsResponse {
+  results: SchoolSessionResult[]
+}

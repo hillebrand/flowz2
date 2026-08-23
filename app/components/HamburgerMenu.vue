@@ -11,7 +11,8 @@
 const ITEMS: { label: string, to: string }[] = [
   { label: 'Takenoverzicht', to: '/taken' },
   { label: 'Weekoverzicht', to: '/week' },
-  { label: 'Beschikbare tijd', to: '/instellingen/beschikbare-tijd' }
+  { label: 'Beschikbare tijd', to: '/instellingen/beschikbare-tijd' },
+  { label: 'Schoolsessies invoeren', to: '/schoolsessies' }
 ]
 
 // Uitloggen (Story 1.5) staat bewust los van ITEMS/NuxtLink: het is een volledige
