@@ -4,7 +4,7 @@ baseline_commit: 535955b1066362fb70221d3e66f9334e41ec1c92
 
 # Story 1.4: Openbare-computer-vinkje & Inactiviteitstimeout
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -169,3 +169,4 @@ Claude Sonnet 5 (claude-sonnet-5)
 | 2026-08-23 | Story aangemaakt via create-story, na afronding van PRD-update (UJ-10) en architecture-update (AD-9). |
 | 2026-08-23 | Code review: 2 bevindingen (stale pending-cookie na mislukte poging; te brede scope-upgrade-fallback), beide gefixt in `server/routes/auth/google.get.ts`. Typecheck/build schoon; fix voor bevinding 1 empirisch geverifieerd (tijdelijke diagnostische kortsluiting tegen de dev-stage, direct verwijderd). Status blijft `review` — klaar voor menselijke/vervolgreview. |
 | 2026-08-23 | Tasks 1-7 geïmplementeerd (typecheck/build schoon). Live/handmatige verificatie kon aanvankelijk niet worden uitgevoerd (geen geldige AWS-sessie); na hernieuwde AWS-login door Hillebrand alsnog volledig uitgevoerd tegen de dev-stage (lokaal, `sst shell --stage dev`), inclusief geforceerde sessiecookies met de échte `SessionPassword` om de 30-minuten-inactiviteitstimeout end-to-end te bewijzen (alle drie scenario's: publiek+vers, publiek+verlopen, normaal). Alle 4 AC's empirisch bevestigd. Status → review. |
+| 2026-08-23 | Hillebrand markeert de story als `done` — code review afgehandeld, geen verdere actie nodig. Status → done. |

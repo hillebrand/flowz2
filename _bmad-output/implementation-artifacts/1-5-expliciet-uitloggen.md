@@ -4,7 +4,7 @@ baseline_commit: 535955b1066362fb70221d3e66f9334e41ec1c92
 
 # Story 1.5: Expliciet Uitloggen
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -150,3 +150,4 @@ Claude Sonnet 5 (claude-sonnet-5)
 | 2026-08-23 | Story aangemaakt via create-story, na afronding van Story 1.4 (openbare-computer-vinkje + inactiviteitstimeout, status review) en diens code-review-fixes. |
 | 2026-08-23 | Tasks 1-4 geïmplementeerd en geverifieerd, inclusief een echte Chrome-browsertest (niet alleen curl) voor AC #2's bfcache-risico — bleek in de praktijk niet op te treden. Typecheck/build schoon. Status → review. |
 | 2026-08-23 | Code review: 1 bevinding (logout-CSRF via de `SameSite=Lax`-cookie op een cross-site GET), gefixt met een `Sec-Fetch-Site`-check in `server/routes/auth/logout.get.ts`. Typecheck/build schoon; fix live met drie curl-scenario's geverifieerd tegen de dev-stage. Status blijft `review`. |
+| 2026-08-23 | Hillebrand markeert de story als `done` — code review afgehandeld, geen verdere actie nodig. Status → done. |
