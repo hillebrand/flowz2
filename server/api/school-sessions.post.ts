@@ -2,6 +2,10 @@ import { readBody } from 'h3'
 import { getSessionForTask, getTaskById } from '../data/tasks'
 import { ErrorCodes, type ErrorEnvelope } from '../domain/errors'
 import { replanAfterSession } from '../domain/scheduling/replan'
+import { createTask } from '../domain/tasks/create-task'
+import { MAX_SESSION_DURATION, MAX_TITLE_LENGTH, MIN_SESSION_DURATION } from '../domain/tasks/validate-task-input'
+import { isValidCalendarDate } from '../../shared/utils/availability'
+import { todayInAmsterdam } from '../../shared/utils/scheduling'
 import type { SchoolSessionEntry, SchoolSessionResult, SchoolSessionsInput, SchoolSessionsResponse } from '../../shared/types/tasks'
 
 // Story 7.1 — UJ-9: schoolsessies (op papier bijgehouden, geen telefoon op school) 's avonds
@@ -15,6 +19,17 @@ import type { SchoolSessionEntry, SchoolSessionResult, SchoolSessionsInput, Scho
 // zouden worden (`replanAfterSession` heeft alleen een `task.completedAt`-idempotency-guard,
 // geen deduplicatie voor de "nog niet klaar"-tak). Nu verwerkt de route élke regel apart en
 // meldt per regel of het gelukt is, zodat de client alleen de mislukte rijen hoeft te retryen.
+//
+// Story 7.2 — een entry kan i.p.v. een bestaande `taskId` een `newTask` bevatten (titel +
+// deadline, "pas op school opgegeven"-uitzondering). Vak/soort taak/moeilijkheid/prioriteit/
+// sessieduur krijgen dan vaste defaults (Hillebrand, 2026-08-23) — zie de story se Dev Notes
+// voor de volledige redenering. `createTask()` zelf (Story 3.1) blijft ongewijzigd; alleen
+// de invoer ervoor wordt hier samengesteld.
+const NEW_TASK_SUBJECT = 'Overig'
+const NEW_TASK_TYPE = 'opdracht' as const
+const NEW_TASK_DIFFICULTY = 'gemiddeld' as const
+const NEW_TASK_PRIORITY = 'gemiddeld' as const
+
 function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   setResponseStatus(event, statusCode)
   return { error: { code, message } }
@@ -23,9 +38,30 @@ function envelope(event: Parameters<typeof readBody>[0], statusCode: number, cod
 function isValidEntry(value: unknown): value is SchoolSessionEntry {
   if (!value || typeof value !== 'object') return false
   const entry = value as Record<string, unknown>
-  return typeof entry.rowId === 'string' && entry.rowId.length > 0
-    && typeof entry.taskId === 'string' && entry.taskId.length > 0
-    && typeof entry.actualMinutes === 'number' && Number.isInteger(entry.actualMinutes) && entry.actualMinutes >= 0
+  if (typeof entry.rowId !== 'string' || entry.rowId.length === 0) return false
+  if (typeof entry.actualMinutes !== 'number' || !Number.isInteger(entry.actualMinutes) || entry.actualMinutes < 0) return false
+
+  const hasTaskId = typeof entry.taskId === 'string' && entry.taskId.length > 0
+  const hasNewTask = !!entry.newTask && typeof entry.newTask === 'object'
+  // Precies één van beide (Story 7.2) — geen bestaande taak èn een nieuwe taak tegelijk,
+  // en niet geen van beide.
+  if (hasTaskId === hasNewTask) return false
+
+  if (hasNewTask) {
+    const newTask = entry.newTask as Record<string, unknown>
+    if (typeof newTask.title !== 'string' || newTask.title.trim().length === 0 || newTask.title.length > MAX_TITLE_LENGTH) return false
+    if (typeof newTask.deadline !== 'string' || !isValidCalendarDate(newTask.deadline)) return false
+  }
+
+  return true
+}
+
+// Geklemd binnen validateTaskInput's eigen sessieduur-grenzen (5-480 min) — dit pad kent
+// geen sessieduur-invoer, dus de zojuist bestede tijd is de meest zinnige afleiding (zie
+// Dev Notes: dit bepaalt via `computeTotalMinutes()` ook meteen de "resterende benodigde
+// tijd" van de taak, zelfde formule als elke andere taak zonder deeltaken/override).
+function toDefaultSessionDuration(actualMinutes: number): number {
+  return Math.min(Math.max(actualMinutes, MIN_SESSION_DURATION), MAX_SESSION_DURATION)
 }
 
 export default defineEventHandler(async (event): Promise<SchoolSessionsResponse | ErrorEnvelope> => {
@@ -46,18 +82,43 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
 
   for (const entry of body.entries) {
     try {
-      // Ownership-check: zelfde "niet-bestaand en niet-eigen krijgen dezelfde 404"-precedent
-      // als sessions/[sessionId]/replan.post.ts — hier als per-regel resultaat i.p.v. een
-      // hele-aanroep-404, zodat de overige regels van de batch gewoon doorgaan.
-      const task = await getTaskById(entry.taskId)
-      if (!task || task.userId !== session.user.id) {
-        results.push({ rowId: entry.rowId, ok: false, message: 'Taak niet gevonden.' })
-        continue
+      let taskId = entry.taskId
+
+      if (entry.newTask) {
+        if (entry.newTask.deadline < todayInAmsterdam()) {
+          results.push({ rowId: entry.rowId, ok: false, message: 'Deadline mag niet in het verleden liggen.' })
+          continue
+        }
+
+        const defaultSessionDuration = toDefaultSessionDuration(entry.actualMinutes)
+        const task = await createTask(session.user.id, {
+          subject: NEW_TASK_SUBJECT,
+          title: entry.newTask.title.trim(),
+          type: NEW_TASK_TYPE,
+          deadline: entry.newTask.deadline,
+          difficulty: NEW_TASK_DIFFICULTY,
+          priority: NEW_TASK_PRIORITY,
+          defaultSessionDuration,
+          description: null,
+          subtasks: [],
+          totalMinutesOverride: null,
+          needs: []
+        })
+        taskId = task.id
+      } else {
+        // Ownership-check: zelfde "niet-bestaand en niet-eigen krijgen dezelfde 404"-precedent
+        // als sessions/[sessionId]/replan.post.ts — hier als per-regel resultaat i.p.v. een
+        // hele-aanroep-404, zodat de overige regels van de batch gewoon doorgaan.
+        const task = await getTaskById(taskId as string)
+        if (!task || task.userId !== session.user.id) {
+          results.push({ rowId: entry.rowId, ok: false, message: 'Taak niet gevonden.' })
+          continue
+        }
       }
 
       // "Architectuur kent precies 1 sessie per taak" (server/data/tasks.ts) — geen
       // aparte sessionId nodig van de client.
-      const taskSession = await getSessionForTask(entry.taskId)
+      const taskSession = await getSessionForTask(taskId as string)
       if (!taskSession) {
         results.push({ rowId: entry.rowId, ok: false, message: 'Geen geplande sessie voor deze taak.' })
         continue
@@ -66,7 +127,7 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
       // `remainingTotalMinutes: null` = "ongewijzigd", zelfde standaardpad als het
       // live-sessie-afrondscherm (Dev Notes: dit is geen edge case, maar het gebruikelijke
       // gedrag als Evelien de resterende-tijd-velden leeg laat).
-      await replanAfterSession(task.id, taskSession.id, entry.actualMinutes, null)
+      await replanAfterSession(taskId as string, taskSession.id, entry.actualMinutes, null)
       results.push({ rowId: entry.rowId, ok: true })
     } catch (fout) {
       console.error('[school-sessions] Kon één schoolsessie niet verwerken:', fout)

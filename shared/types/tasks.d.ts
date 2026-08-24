@@ -231,15 +231,26 @@ export interface SchoolSessionTaskOption {
 
 export type SchoolSessionTasksResponse = SchoolSessionTaskOption[]
 
+// Story 7.2 — een taak die pas op school werd opgegeven en nog niet in Flowz bestond.
+// Alleen titel + deadline (epics.md: "geen ander veld") — vak/soort taak/moeilijkheid/
+// prioriteit/sessieduur krijgen server-side vaste defaults (zie server/api/school-sessions.post.ts).
+export interface SchoolSessionNewTask {
+  title: string
+  deadline: string
+}
+
 // Story 7.1 — body van `POST /api/school-sessions`. Elke regel wordt verwerkt als een
 // afgeronde sessie (`replanAfterSession`, zelfde mechanisme als UJ-1/Story 4.7) met
 // `remainingTotalMinutes: null` ("ongewijzigd") — er is bewust geen resterende-tijd-veld
 // op dit scherm, zie de story se Dev Notes. `rowId` is een client-gegenereerde, willekeurige
 // waarde (geen taak-id) — nodig om resultaten terug te koppelen aan de juiste rij ook als
 // twee rijen toevallig dezelfde taak kiezen (code review 2026-08-23: partial-failure-fix).
+// Story 7.2 — precies één van `taskId` (bestaande taak) of `newTask` (nog niet in Flowz
+// bekende taak) is aanwezig, nooit beide/geen van beide (server valideert dit).
 export interface SchoolSessionEntry {
   rowId: string
-  taskId: string
+  taskId?: string
+  newTask?: SchoolSessionNewTask
   actualMinutes: number
 }
 

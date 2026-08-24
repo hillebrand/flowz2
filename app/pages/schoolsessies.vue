@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type { SchoolSessionTasksResponse, SchoolSessionEntry, SchoolSessionsResponse } from '#shared/types/tasks'
+import { isValidCalendarDate } from '#shared/utils/availability'
+import { todayInAmsterdam } from '#shared/utils/scheduling'
+
+// Zelfde grens als het volledige taak-formulier (TaakFormulier.vue's `MAX_TITLE_LENGTH`,
+// server/domain/tasks/validate-task-input.ts) — bewust een losse constante i.p.v. een
+// gedeelde import, zelfde precedent als Story 7.2's sessieduur-klemgrenzen server-side.
+const MAX_NEW_TASK_TITLE_LENGTH = 100
+// Sentinel-waarde voor "Nieuwe taak toevoegen" in de task-select — geen taak-id kan hier
+// ooit mee botsen (echte taak-id's zijn UUID's).
+const NEW_TASK_OPTION = '__new__'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
@@ -24,13 +34,17 @@ interface Row {
   // Client-gegenereerd, geen taak-id — nodig om serverresultaten na een gedeeltelijke
   // mislukking op de juiste rij terug te koppelen (zie `versturen()`).
   id: string
+  // `NEW_TASK_OPTION` betekent "nieuwe taak" (Story 7.2) — de titel/deadline-velden
+  // hieronder zijn dan van toepassing i.p.v. een gekozen bestaande taak.
   taskId: string | null
+  newTaskTitle: string
+  newTaskDeadline: string
   minutes: number | string | null
   rowError: string
 }
 
 function nieuweRij(): Row {
-  return { id: crypto.randomUUID(), taskId: null, minutes: null, rowError: '' }
+  return { id: crypto.randomUUID(), taskId: null, newTaskTitle: '', newTaskDeadline: '', minutes: null, rowError: '' }
 }
 
 const isLoading = ref(true)
@@ -68,6 +82,30 @@ function aangeraakteRijen(): Row[] {
   return rows.value.filter(row => row.taskId !== null || !isEmptyField(row.minutes))
 }
 
+// Rij-specifieke validatie i.p.v. één generieke boodschap voor alle rijen (Story 7.2) —
+// een "nieuwe taak"-rij heeft andere eisen (titel + deadline) dan een bestaande-taak-rij.
+function valideerRij(row: Row): string {
+  if (!row.taskId) return 'Kies een taak.'
+  if (isEmptyField(row.minutes) || !Number.isInteger(Number(row.minutes)) || Number(row.minutes) < 0) {
+    return 'Vul een geldig aantal minuten in.'
+  }
+  if (row.taskId === NEW_TASK_OPTION) {
+    const title = row.newTaskTitle.trim()
+    if (!title || title.length > MAX_NEW_TASK_TITLE_LENGTH) {
+      return `Vul een titel in (max ${MAX_NEW_TASK_TITLE_LENGTH} tekens).`
+    }
+    if (!row.newTaskDeadline || !isValidCalendarDate(row.newTaskDeadline)) {
+      return 'Vul een geldige deadline in.'
+    }
+    // Zelfde `todayInAmsterdam()` als de server (TaakFormulier.vue's precedent) —
+    // voorkomt een client/server-tijdzoneverschil rond middernacht.
+    if (row.newTaskDeadline < todayInAmsterdam()) {
+      return 'Deadline mag niet in het verleden liggen.'
+    }
+  }
+  return ''
+}
+
 async function versturen() {
   validationError.value = ''
   submitError.value = false
@@ -78,20 +116,19 @@ async function versturen() {
     validationError.value = 'Vul minstens één schoolsessie in.'
     return
   }
-  const onvolledig = aangeraakt.filter(row =>
-    !row.taskId || isEmptyField(row.minutes) || !Number.isInteger(Number(row.minutes)) || Number(row.minutes) < 0
-  )
-  if (onvolledig.length > 0) {
-    for (const row of onvolledig) row.rowError = 'Kies een taak en vul een geldig aantal minuten in.'
+  let heeftFout = false
+  for (const row of aangeraakt) {
+    row.rowError = valideerRij(row)
+    if (row.rowError) heeftFout = true
+  }
+  if (heeftFout) {
     validationError.value = 'Kies bij elke ingevulde rij een taak en een geldig aantal minuten.'
     return
   }
 
-  const entries: SchoolSessionEntry[] = aangeraakt.map(row => ({
-    rowId: row.id,
-    taskId: row.taskId as string,
-    actualMinutes: Number(row.minutes)
-  }))
+  const entries: SchoolSessionEntry[] = aangeraakt.map(row => row.taskId === NEW_TASK_OPTION
+    ? { rowId: row.id, newTask: { title: row.newTaskTitle.trim(), deadline: row.newTaskDeadline }, actualMinutes: Number(row.minutes) }
+    : { rowId: row.id, taskId: row.taskId as string, actualMinutes: Number(row.minutes) })
 
   busy.value = true
   try {
@@ -158,6 +195,7 @@ onMounted(loadTaskOptions)
             <select id="school-session-task-select" v-model="row.taskId" class="school-session-task-select">
               <option :value="null" disabled>Kies een taak…</option>
               <option v-for="option in taskOptions" :key="option.id" :value="option.id">{{ option.subject }} — {{ option.title }}</option>
+              <option :value="NEW_TASK_OPTION">+ Nieuwe taak toevoegen</option>
             </select>
             <input
               id="school-session-time-input"
@@ -167,6 +205,21 @@ onMounted(loadTaskOptions)
               step="1"
               placeholder="Minuten"
               class="school-session-time-input"
+            >
+          </div>
+          <div v-if="row.taskId === NEW_TASK_OPTION" class="school-new-task-fields">
+            <input
+              id="school-session-new-task-title-input"
+              v-model="row.newTaskTitle"
+              type="text"
+              placeholder="Titel"
+              class="school-session-new-task-title-input"
+            >
+            <input
+              id="school-session-new-task-deadline-input"
+              v-model="row.newTaskDeadline"
+              type="date"
+              class="school-session-new-task-deadline-input"
             >
           </div>
           <p v-if="row.rowError" class="school-error school-row-error" role="alert">{{ row.rowError }}</p>
@@ -243,6 +296,25 @@ onMounted(loadTaskOptions)
 .school-row-error {
   margin-top: 0.375rem;
   margin-bottom: 0;
+}
+
+.school-new-task-fields {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.school-session-new-task-title-input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+}
+
+.school-session-new-task-deadline-input {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
 }
 
 .school-session-task-select {

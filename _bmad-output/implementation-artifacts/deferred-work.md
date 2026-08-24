@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review van 7-2-onverwachte-taak-toevoegen-vanuit-het-verzamelscherm (2026-08-24)
+
+- **Dubbele DOM-id's over meerdere `v-for`-rijen** (`school-session-task-select`/`school-session-time-input`, Story 7.1; `school-session-new-task-title-input`/`-deadline-input`, Story 7.2; ook al eerder `week-day-suggestion-accept-button`, Story 6.5) — een vaste id herhaald per rij, ongeldige HTML, risicovol zodra ooit een `getElementById`/`<label for>`/id-gebaseerde e2e-selector wordt toegevoegd. **Reden voor doorschuiven:** een consistent, herhaaldelijk toegepast patroon in dit project (selector-conventie voor UX-specs, niet strikte DOM-uniciteit); een losse fix op één plek zou inconsistent zijn met de rest. Verdient een eigen, projectbrede pas over alle vergelijkbare elementen tegelijk (zelfde soort aanpak als een toekomstige a11y-pas, zie de `aria-live`-op-verdwijnend-element-entry hieronder), niet losse patches per story. Vandaag geen enkele echte aanroeper in de app zelf die hierdoor breekt.
+
 ## Audit (2026-08-18, op verzoek van Hillebrand): alle resterende `getDb().transaction()`-aanroepen in het project nagelopen — twee nog kwetsbare plekken gevonden én opgelost
 
 Aanleiding: na Story 3.5's en `availability.ts`'s TOCTOU-fixes vroeg Hillebrand of dit patroon nog ergens anders in het project speelt. Alle 7 resterende `.transaction()`-gebruiken doorgelopen (`server/data/tasks.ts` en `server/data/availability.ts`): 2 bleken genuine, nog niet gefixte varianten van hetzelfde risico (lezen-dan-beslissen binnen een multi-statement-`tx`, die bij dit project se Turso-verbinding niet betrouwbaar serialiseert); de overige 5 (`deleteTaskAndSession`, `logSessionAndCompleteTask`, `logSessionAndUpdateRemaining`, `getOrCreateWeekPattern`, `updateWeekPatternDay`) zijn vaste-key-only schrijfacties zonder read-then-decide-risico, dus veilig zoals ze zijn.

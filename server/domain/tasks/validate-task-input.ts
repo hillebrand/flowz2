@@ -17,14 +17,17 @@ function isSubtaskStatus(value: unknown): value is SubtaskStatus {
 // nieuwe taak heeft nooit bestaande deeltaak-id's), `tasks/[id].put.ts` geeft `id` door
 // aan `updateTask()` voor de reconciliatie.
 
-const MAX_TITLE_LENGTH = 100
+// Geëxporteerd (Story 7.2) — het verkorte taak-aanmaakpad vanuit het schoolsessies-scherm
+// (server/api/school-sessions.post.ts) hergebruikt deze grenzen voor zijn eigen, kleinere
+// titel-/sessieduur-validatie i.p.v. ze te dupliceren.
+export const MAX_TITLE_LENGTH = 100
 const MAX_DESCRIPTION_LENGTH = 500
-const MIN_SESSION_DURATION = 5
+export const MIN_SESSION_DURATION = 5
 // Bovengrens (code review 2026-08-01): zonder dit kan een oversized sessieduur de
 // dag-plaatsingslus onbegrensd lang laten zoeken (zie server/domain/scheduling/
 // doelmoment.ts's MAX_SEARCH_DAYS) en levert het geen zinnig "één zitting"-sessiemodel
 // meer op. 8 uur is ruim voldoende voor elke realistische huiswerksessie.
-const MAX_SESSION_DURATION = 480
+export const MAX_SESSION_DURATION = 480
 const MAX_SUBTASK_NAME_LENGTH = 100
 // Veiligheidsgrens (code review 2026-08-01), geen product-eis: voorkomt een ongebreidelde
 // insert-batch bij misbruik van de route; 50 deeltaken is ruim boven wat een reëel huiswerk
