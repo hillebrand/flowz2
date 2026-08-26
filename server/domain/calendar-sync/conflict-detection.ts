@@ -3,7 +3,7 @@ import { getTasksWithSessionOnDate } from '../../data/tasks'
 import { getDismissedConflictIds } from '../../data/dismissed-conflicts'
 import { addDays } from '../scheduling/doelmoment'
 import { getTodayEvents, type DayEvent } from './day-events'
-import { isTimedEvent, overlapInterval } from './actual-availability'
+import { isBlockingEvent, overlapInterval } from './actual-availability'
 
 // Story 6.7 — opstart-check voor 8.1-conflictmelding: welke echte Calendar-events
 // overlappen met een geplande sessie, terwijl Evelien's ingestelde beschikbare tijd daar
@@ -38,13 +38,13 @@ async function detectConflictsOnDate(userId: string, date: string, homeworkColor
     const taskSessions = await getTasksWithSessionOnDate(userId, date)
     if (taskSessions.length === 0) return []
 
-    const [events, dismissedIds] = await Promise.all([
+    const [result, dismissedIds] = await Promise.all([
       getTodayEvents(userId, date),
       getDismissedConflictIds(userId, date)
     ])
-    if (!events) return []
+    if (!result) return []
 
-    return buildConflicts(date, taskSessions, events, dismissedIds, homeworkColorId)
+    return buildConflicts(date, taskSessions, result.events, dismissedIds, homeworkColorId)
   } catch (fout) {
     console.error(`[availability] Kon conflicten voor ${date} niet bepalen:`, fout)
     return []
@@ -61,7 +61,7 @@ function buildConflicts(
 
   const homeworkColorIdString = homeworkColorId === null ? null : String(homeworkColorId)
   const candidateEvents = events
-    .filter(isTimedEvent)
+    .filter(isBlockingEvent)
     .filter((event: DayEvent) => event.colorId !== homeworkColorIdString)
     .filter((event: DayEvent) => !dismissedIds.has(event.id))
 

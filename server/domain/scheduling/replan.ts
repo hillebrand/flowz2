@@ -1,5 +1,4 @@
 import {
-  clearSessionGoogleEventId,
   getSessionById,
   getTaskById,
   insertSessionLog,
@@ -7,7 +6,7 @@ import {
   logSessionAndUpdateRemaining
 } from '../../data/tasks'
 import type { Session, Task } from '../../data/schema'
-import { deleteHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { recalculateTaskPlanning } from './recalculate'
 
 // Story 4.7 — tussenlaag tussen de `/replan`-route en `recalculateTaskPlanning` (Story
@@ -43,16 +42,16 @@ export async function replanAfterSession(
     if (!session) {
       throw new Error(`Sessie ${sessionId} bestaat niet.`)
     }
-    // `googleEventId` staat op de sessie-rij zelf, niet op de taak.
-    if (session.googleEventId) {
-      await deleteHomeworkEvent(task.userId, session.googleEventId)
-      // Review-patch: rij intern consistent houden — verwijst anders naar een niet meer
-      // bestaand Calendar-event.
-      await clearSessionGoogleEventId(sessionId)
-    }
     // Review-patch (transactie): logregel + afronding atomair, zelfde precedent als
     // `createTaskAndSession`/`deleteTaskAndSession`.
     await logSessionAndCompleteTask(taskId, actualMinutes)
+    // Story 2.5: ná de afronding herberekenen (de taak telt dan al niet meer mee in
+    // `getTasksWithSessionOnDate`, dus het blok krimpt/verdwijnt vanzelf correct).
+    try {
+      await syncHomeworkBlocksForDate(task.userId, session.startsAt.slice(0, 10))
+    } catch (fout) {
+      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na afronden van taak ${taskId}:`, fout)
+    }
     return { completed: true }
   }
 

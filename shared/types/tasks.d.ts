@@ -89,6 +89,15 @@ export interface HomePlanResponse {
     title: string
     plannedMinutes: number
   }[]
+  // Amendement (Hillebrand, 2026-08-26) — taken die vandaag al zijn afgerond, blijven
+  // zichtbaar i.p.v. stilzwijgend te verdwijnen (zie ook het schoolsessies-scherm se
+  // gelijknamige amendement). Los van `laterTasks` — niet klikbaar/geen `plannedMinutes`
+  // nodig, puur ter bevestiging.
+  completedTasks: {
+    id: string
+    subject: string
+    title: string
+  }[]
   // Story 4.2 — `null` = Calendar-aanroep mislukt (home-calendar-dayview toont dan
   // "Kan agenda niet laden", fail-safe: geen banner).
   calendarDayEvents: {
@@ -97,6 +106,12 @@ export interface HomePlanResponse {
     endsAt: string
   }[] | null
   sessionTimeCheck: SessionTimeCheck | null
+  // Story 2.4 — best-effort agenda-lezen (meerdere agenda's, niet alleen primary): `null`
+  // als geen enkele agenda opgehaald kon worden (zelfde betekenis als `calendarDayEvents:
+  // null`); `[]` als alles lukte. Eigen, klein shape i.p.v. server/domain/notification.ts's
+  // `Notification`-type — dat is niet importeerbaar vanuit `shared/` (geen precedent in dit
+  // project om die grens te doorbreken), en deze melding heeft nooit `actions` nodig.
+  calendarWarnings: { type: 'info' | 'warning', message: string }[] | null
 }
 
 // Story 4.3 — databron voor 1.2-sessie-tussenscherm's terugvalpad (GET /api/tasks/[id]),
@@ -166,6 +181,18 @@ export interface ReplanSessionResponse {
   completed: boolean
 }
 
+// Amendement (Hillebrand, 2026-08-26) — body van `POST /api/tasks/{id}/reopen`. Zelfde
+// uren+minuten-conventie als `ReplanSessionInput`, maar hier is een waarde verplicht (zie
+// de route zelf) — heropenen zonder resterende tijd heeft geen zinnige betekenis.
+export interface ReopenTaskInput {
+  remainingHours: number | null
+  remainingMinutes: number | null
+}
+
+export interface ReopenTaskResponse {
+  ok: true
+}
+
 // Story 5.1 — databron voor 6.1-takenoverzicht (`GET /api/tasks?status=open`). Al gesorteerd
 // op deadline (server-side, `getOpenTasksWithProgress`) — client groepeert alleen nog op
 // week ("Deze week"/"Volgende week"/"Later"), geen herordening nodig.
@@ -177,6 +204,11 @@ export interface OpenTaskItem {
   deadline: string
   totalSubtasks: number
   doneSubtasks: number
+  // Amendement (Hillebrand, 2026-08-26) — toegevoegd t.b.v. het schoolsessies-scherm se
+  // resterende-tijd-suggestie ("Andere taak zoeken"-pad). `totalMinutes` is de resterende
+  // benodigde tijd (Story 4.7's kernbeslissing, zie `server/data/tasks.ts`'s
+  // `logSessionAndUpdateRemaining`), niet de oorspronkelijke schatting.
+  totalMinutes: number
 }
 
 export interface OpenTasksResponse {
@@ -227,6 +259,15 @@ export interface SchoolSessionTaskOption {
   id: string
   subject: string
   title: string
+  // Amendement (Hillebrand, 2026-08-26) — resterende benodigde tijd, voor de
+  // resterende-tijd-suggestie (resterend - besteed) op het schoolsessies-scherm.
+  totalMinutes: number
+  // Amendement (Hillebrand, 2026-08-26) — geplande tijd voor déze sessie, gebruikt om de
+  // besteede-tijd-invoer voor te vullen (het gebruikelijke geval: verliep zoals gepland).
+  plannedMinutes: number
+  // Amendement (Hillebrand, 2026-08-26) — vandaag al afgerond? Blijft dan zichtbaar op het
+  // schoolsessies-scherm, duidelijk gemarkeerd, i.p.v. stilzwijgend te verdwijnen.
+  completed: boolean
 }
 
 export type SchoolSessionTasksResponse = SchoolSessionTaskOption[]
@@ -240,18 +281,24 @@ export interface SchoolSessionNewTask {
 }
 
 // Story 7.1 — body van `POST /api/school-sessions`. Elke regel wordt verwerkt als een
-// afgeronde sessie (`replanAfterSession`, zelfde mechanisme als UJ-1/Story 4.7) met
-// `remainingTotalMinutes: null` ("ongewijzigd") — er is bewust geen resterende-tijd-veld
-// op dit scherm, zie de story se Dev Notes. `rowId` is een client-gegenereerde, willekeurige
-// waarde (geen taak-id) — nodig om resultaten terug te koppelen aan de juiste rij ook als
-// twee rijen toevallig dezelfde taak kiezen (code review 2026-08-23: partial-failure-fix).
+// afgeronde sessie (`replanAfterSession`, zelfde mechanisme als UJ-1/Story 4.7). `rowId` is
+// een client-gegenereerde, willekeurige waarde (geen taak-id) — nodig om resultaten terug
+// te koppelen aan de juiste rij ook als twee rijen toevallig dezelfde taak kiezen (code
+// review 2026-08-23: partial-failure-fix).
 // Story 7.2 — precies één van `taskId` (bestaande taak) of `newTask` (nog niet in Flowz
 // bekende taak) is aanwezig, nooit beide/geen van beide (server valideert dit).
+// Amendement (Hillebrand, 2026-08-26, na live gebruik): `remainingHours`/`remainingMinutes`
+// toegevoegd — zelfde uren+minuten-conventie als `ReplanSessionInput` (beide `null` =
+// "ongewijzigd", `0`+`0` = taak klaar). Geldt voor zowel een bestaande-taak-rij als een
+// nieuwe-taak-rij (bij een nieuwe taak overschrijft dit de zojuist-afgeleide standaard-
+// totaaltijd direct in dezelfde aanroep).
 export interface SchoolSessionEntry {
   rowId: string
   taskId?: string
   newTask?: SchoolSessionNewTask
   actualMinutes: number
+  remainingHours: number | null
+  remainingMinutes: number | null
 }
 
 export interface SchoolSessionsInput {

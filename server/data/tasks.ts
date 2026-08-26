@@ -195,6 +195,26 @@ export async function getTasksWithSessionOnDate(userId: string, date: string): P
   return rows
 }
 
+// Amendement (Hillebrand, 2026-08-26) — voor het schoolsessies-scherm: een afgeronde taak
+// mag daar niet stilzwijgend verdwijnen (`getTasksWithSessionOnDate` hierboven sluit 'm
+// bewust uit — terecht voor élke capaciteitsberekening, maar niet voor dit scherm, waar
+// Evelien juist wil zien wat ze al heeft afgerond). Zelfde query, zonder de
+// `isNull(tasks.completedAt)`-voorwaarde. `droppedAt` blijft wél uitgesloten — een laten-
+// vervallen taak hoort hier niet thuis, dat is geen "afgerond".
+export async function getTasksWithSessionOnDateIncludingCompleted(userId: string, date: string): Promise<{ task: Task, session: Session }[]> {
+  const rows = await getDb()
+    .select({ task: tasks, session: sessions })
+    .from(sessions)
+    .innerJoin(tasks, eq(sessions.taskId, tasks.id))
+    .where(and(
+      eq(tasks.userId, userId),
+      isNull(tasks.droppedAt),
+      sql`substr(${sessions.startsAt}, 1, 10) = ${date}`
+    ))
+
+  return rows
+}
+
 // Story 5.1 — voor 6.1-takenoverzicht (`GET /api/tasks?status=open`). Alle openstaande
 // taken van `userId`, gesorteerd op deadline, met per taak het totale en afgeronde-aantal
 // subtaken via een `LEFT JOIN` + `GROUP BY` (één query i.p.v. N+1 per taak). `LEFT JOIN`
@@ -362,6 +382,17 @@ export async function logSessionAndCompleteTask(taskId: string, actualMinutes: n
   })
 }
 
+// Amendement (Hillebrand, 2026-08-26) — "resterende tijd kunnen krijgen/heropend kunnen
+// worden als het toch niet klaar is": een taak die per ongeluk/voortijdig is afgerond
+// (`completedAt` gezet) weer terugzetten naar open, met een nieuwe resterende tijd. Geen
+// nieuwe `sessionLogs`-rij (dat gebeurde al bij het afronden zelf) — dit is puur het
+// ongedaan maken van de afronding + een nieuwe schatting. De aanroeper (`server/domain/
+// scheduling/recalculate.ts`'s `recalculateTaskPlanning`) plaatst de bestaande sessie
+// opnieuw op basis van deze nieuwe `totalMinutes`.
+export async function reopenTaskWithRemaining(taskId: string, totalMinutes: number): Promise<void> {
+  await getDb().update(tasks).set({ completedAt: null, totalMinutes, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+}
+
 // Story 6.2 — niveau 4 "laten vervallen" (tekort-escalatieketen). Géén `sessionLogs`-rij
 // (in tegenstelling tot `logSessionAndCompleteTask` hierboven): er is geen bestede tijd om
 // te loggen, de taak is nooit uitgevoerd. Zet uitsluitend `droppedAt` — zie schema.ts's
@@ -383,23 +414,14 @@ export async function logSessionAndUpdateRemaining(taskId: string, actualMinutes
   })
 }
 
-// Story 4.7 (review-patch) — na het verwijderen van het Calendar-event bij "taak klaar"
-// (`replanAfterSession`) blijft `googleEventId` anders op de sessierij staan en verwijst
-// dan naar een niet meer bestaand event — leeg maken houdt de rij intern consistent.
-export async function clearSessionGoogleEventId(sessionId: string): Promise<void> {
-  await getDb()
-    .update(sessions)
-    .set({ googleEventId: null, updatedAt: new Date().toISOString() })
-    .where(eq(sessions.id, sessionId))
-}
-
 // Voor `recalculateTaskPlanning` (Story 3.5) — één `UPDATE` op de bestaande sessierij,
-// geen delete+insert: houdt `id`/`createdAt` stabiel (belangrijk zodra `googleEventId` er
-// al aan hangt) en is letterlijker idempotent (twee keer dezelfde waarde schrijven is een
-// no-op-in-effect; twee keer verwijderen+aanmaken zou telkens een nieuwe `id` genereren).
+// geen delete+insert: houdt `id`/`createdAt` stabiel en is letterlijker idempotent (twee
+// keer dezelfde waarde schrijven is een no-op-in-effect; twee keer verwijderen+aanmaken
+// zou telkens een nieuwe `id` genereren). Sinds Story 2.5 geen `googleEventId` meer in de
+// input — dat leeft op `homeworkCalendarBlocks`, niet meer per sessie.
 export async function updateSessionPlacement(
   sessionId: string,
-  input: { startsAt: string, plannedMinutes: number, googleEventId: string | null }
+  input: { startsAt: string, plannedMinutes: number }
 ): Promise<Session> {
   const [session] = await getDb()
     .update(sessions)
@@ -447,8 +469,7 @@ export async function placeSessionWithStackingOffset(
   date: string,
   excludeTaskIds: string[],
   anchorHour: number,
-  plannedMinutes: number,
-  googleEventId: string | null
+  plannedMinutes: number
 ): Promise<{ session: Session, startsAt: string }> {
   await acquireSessionPlacementLock(userId, date)
   try {
@@ -470,7 +491,7 @@ export async function placeSessionWithStackingOffset(
 
     const [session] = await getDb()
       .update(sessions)
-      .set({ startsAt, plannedMinutes, googleEventId, updatedAt: new Date().toISOString() })
+      .set({ startsAt, plannedMinutes, updatedAt: new Date().toISOString() })
       .where(eq(sessions.id, sessionId))
       .returning()
 

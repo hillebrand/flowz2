@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import { getTasksWithSessionOnDate } from '../../data/tasks'
+import { getTasksWithSessionOnDateIncludingCompleted } from '../../data/tasks'
+import { getUserById } from '../../data/users'
 import { averageDailyAvailableMinutes } from '../../domain/scheduling/doelmoment'
 import { sortByVolgorde } from '../../domain/scheduling/ordering'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
@@ -28,11 +29,18 @@ export default defineEventHandler(async (event): Promise<HomePlanResponse | Erro
   const today = todayInAmsterdam()
 
   try {
-    const [items, avgDailyMinutes, calendarDayEvents] = await Promise.all([
-      getTasksWithSessionOnDate(userId, today),
+    const [allItems, avgDailyMinutes, calendarEventsResult, user] = await Promise.all([
+      getTasksWithSessionOnDateIncludingCompleted(userId, today),
       averageDailyAvailableMinutes(userId),
-      getTodayEvents(userId, today)
+      getTodayEvents(userId, today),
+      getUserById(userId)
     ])
+    // Amendement (Hillebrand, 2026-08-26) — "afgeronde taken moeten ook op de homepage
+    // getoond worden". `sortByVolgorde`/`nextTask`/`laterTasks` blijven op de open taken
+    // werken (ongewijzigd gedrag, een afgeronde taak hoort niet in de actie-lijst thuis),
+    // maar de al-afgeronde taken van vandaag krijgen een eigen, apart veld in de respons.
+    const items = allItems.filter(item => item.task.completedAt === null)
+    const completedItems = allItems.filter(item => item.task.completedAt !== null)
     const sorted = sortByVolgorde(items, today, avgDailyMinutes)
 
     // "Openstaand" = simpelweg "heeft een sessie vandaag" (Story 4.1 Dev Notes) — er bestaat
@@ -63,23 +71,40 @@ export default defineEventHandler(async (event): Promise<HomePlanResponse | Erro
 
     // sessionTimeCheck: null zonder nextTask (niets om te checken) of bij een mislukte
     // Calendar-aanroep (fail-safe, AC #1 — geen ongefundeerde waarschuwing).
-    // Live-verificatiebevinding (2026-08-02): de sessie's eigen huiswerk-Calendar-event
-    // (googleEventId, indien aanwezig) overlapt per definitie zichzelf — zonder uitsluiting
-    // zou elke gebruiker met write-scope altijd "unavailable" krijgen voor de eigen sessie.
+    // Story 2.5: sessies hebben geen eigen `googleEventId` meer (die granulariteit bestaat
+    // niet meer, zie server/domain/calendar-sync/homework-blocks.ts) — de eigen huiswerk-
+    // blokken worden nu op kleur uitgesloten, consistent met hoe conflict-detection.ts dit
+    // al deed. Zonder uitsluiting zou elke gebruiker met write-scope altijd "unavailable"
+    // krijgen voor de eigen sessie (die immers binnen haar eigen huiswerk-blok valt).
     let sessionTimeCheck: HomePlanResponse['sessionTimeCheck'] = null
-    if (first && calendarDayEvents) {
+    if (first && calendarEventsResult) {
       const sessionEndsAt = new Date(new Date(first.session.startsAt).getTime() + first.session.plannedMinutes * 60_000).toISOString()
-      const otherEvents = calendarDayEvents.filter(dayEvent => dayEvent.id !== first.session.googleEventId)
+      const homeworkColorIdString = user.homeworkCalendarColorId === null ? null : String(user.homeworkCalendarColorId)
+      const otherEvents = calendarEventsResult.events.filter(dayEvent => dayEvent.colorId !== homeworkColorIdString)
       sessionTimeCheck = determineSessionTimeCheck({ startsAt: first.session.startsAt, endsAt: sessionEndsAt }, otherEvents)
     }
 
-    // Review-patch: Google's interne event-id is alleen nodig voor de self-overlap-filter
-    // hierboven, geen client-behoefte — niet meesturen in de respons.
-    const calendarDayEventsForClient: HomePlanResponse['calendarDayEvents'] = calendarDayEvents
-      ? calendarDayEvents.map(({ title, startsAt, endsAt }) => ({ title, startsAt, endsAt }))
+    // Review-patch: Google's interne event-id is geen client-behoefte — niet meesturen in
+    // de respons (de self-overlap-filter hierboven werkt sinds Story 2.5 op kleur, niet
+    // meer op een specifiek event-id).
+    const calendarDayEventsForClient: HomePlanResponse['calendarDayEvents'] = calendarEventsResult
+      ? calendarEventsResult.events.map(({ title, startsAt, endsAt }) => ({ title, startsAt, endsAt }))
       : null
 
-    return { nextTask, remainingMinutesToday, laterTasks, calendarDayEvents: calendarDayEventsForClient, sessionTimeCheck }
+    // Story 2.4 — best-effort: agenda's die niet opgehaald konden worden (terwijl minstens
+    // één andere agenda wél lukte) krijgen hier een niet-blokkerende melding, in plaats van
+    // stilzwijgend te ontbreken. `null` alleen wanneer alle agenda's mislukten.
+    const calendarWarnings: HomePlanResponse['calendarWarnings'] = calendarEventsResult
+      ? calendarEventsResult.failedCalendarNames.map(naam => ({ type: 'info' as const, message: `Agenda '${naam}' kon niet worden opgehaald` }))
+      : null
+
+    const completedTasks: HomePlanResponse['completedTasks'] = completedItems.map(item => ({
+      id: item.task.id,
+      subject: item.task.subject,
+      title: item.task.title
+    }))
+
+    return { nextTask, remainingMinutesToday, laterTasks, completedTasks, calendarDayEvents: calendarDayEventsForClient, sessionTimeCheck, calendarWarnings }
   } catch {
     return envelope(event, 500, ErrorCodes.InternalError, 'Kon dagplanning niet ophalen.')
   }

@@ -30,7 +30,8 @@ export default defineEventHandler(async (event): Promise<OpenTasksResponse | Err
         type: task.type,
         deadline: task.deadline,
         totalSubtasks,
-        doneSubtasks
+        doneSubtasks,
+        totalMinutes: task.totalMinutes
       }))
     }
   } catch (fout) {

@@ -23,6 +23,8 @@ so that Flowz mijn geplande sessies zichtbaar in mijn agenda zet en nooit meer e
 
 > **Amendement (Hillebrand, 2026-08-01, na code review):** AC #1 en #4's "optioneel"/"Verplicht: Nee" zijn omgedraaid — huiswerk-kleur is nu **verplicht**. Reden: wissen kon eerder eerder aangemaakte Calendar-events voorgoed weeskind maken, en "alle bestaande items automatisch bijwerken bij een kleurwissel" (het geprefereerde alternatief) is niet bouwbaar zolang de `googleEventId`-opslag naar Epic 3+ is doorgeschoven. AC #4's letterlijke scenario ("geen kleur ingesteld") bestaat nu alleen nog kortstondig, vóór een gebruiker deze pagina voor het eerst bezoekt — niet meer als actieve, blijvende keuze. Zie Dev Agent Record → Completion Notes voor de volledige implementatie.
 
+> **Kruisverwijzing (Correct Course, 2026-08-26):** AC #2's "één event per sessie"-granulariteit (`sessions.googleEventId`, `homework-events.ts`'s per-sessie create/update/delete) is vervangen door samenvattende dagblokken — zie de nieuwe Story 2.5 (`syncHomeworkBlocksForDate`, nieuwe `homeworkCalendarBlocks`-tabel). Deze story se AC #1, #3 en #4 (kleur kiezen, her-consent, "bron van waarheid", no-op zonder kleur) blijven ongewijzigd van kracht.
+
 ## Tasks / Subtasks
 
 - [x] Task 1: Schema — kleurvoorkeur + write-scope-vlag (AC: #1, #2, #4)

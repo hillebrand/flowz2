@@ -1,5 +1,5 @@
 import { deleteTaskAndSession, getSessionForTask, getTaskById } from '../../data/tasks'
-import { deleteHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 
 // Story 5.2 (review-patch) — symmetrisch met create-task.ts: deze verwijder-orkestratie
 // (Calendar-event opruimen + multi-table-delete) is te domain-vormig om rechtstreeks in
@@ -20,20 +20,18 @@ export async function deleteTask(userId: string, taskId: string): Promise<Delete
     throw new Error(`Taak ${taskId} bestaat maar heeft geen sessie (AD-3-schending).`)
   }
 
-  if (session.googleEventId) {
-    try {
-      // Calendar-event vóór de DB-verwijdering (AD-7: synchroon binnen hetzelfde request),
-      // zelfde volgorde-precedent als replanAfterSession's "taak klaar"-tak (Story 4.7).
-      await deleteHomeworkEvent(task.userId, session.googleEventId)
-    } catch (fout) {
-      // Review-patch: een falende externe Calendar-aanroep (netwerk, verlopen refresh-
-      // token) mag een bevestigde, puur lokale verwijderactie niet blokkeren — het event
-      // blijft dan verweesd op Eveliens agenda staan, een kleiner probleem dan haar taak
-      // helemaal niet kunnen verwijderen. Wel loggen, niet stil negeren.
-      console.error(`[tasks] Kon Calendar-event ${session.googleEventId} niet verwijderen, taak wordt alsnog verwijderd:`, fout)
-    }
+  // Story 2.5: volgorde gedraaid t.o.v. vóór deze story — de DB-verwijdering gebeurt nu
+  // EERST, zodat `syncHomeworkBlocksForDate` (die de actuele DB-staat leest, AD-1) déze
+  // taak al niet meer meetelt. Zelfde "een falende Calendar-aanroep mag een bevestigde
+  // lokale verwijdering niet blokkeren"-precedent als vóór deze story: alleen loggen.
+  const date = session.startsAt.slice(0, 10)
+  await deleteTaskAndSession(taskId, session.id)
+
+  try {
+    await syncHomeworkBlocksForDate(task.userId, date)
+  } catch (fout) {
+    console.error(`[tasks] Kon huiswerk-Calendar-blokken niet synchroniseren na verwijderen van taak ${taskId}:`, fout)
   }
 
-  await deleteTaskAndSession(taskId, session.id)
   return { ok: true }
 }

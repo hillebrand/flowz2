@@ -1,5 +1,5 @@
 import { sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
-import { createHomeworkEvent, updateHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { SESSION_ANCHOR_HOUR } from './doelmoment'
 import { amsterdamLocalToUtcIso } from '../../../shared/utils/scheduling'
 import type { Task, Session } from '../../data/schema'
@@ -9,30 +9,30 @@ import type { Task, Session } from '../../data/schema'
 // dezelfde DB+Calendar-mutatie nodig als niveau 1's herplannen, alleen de richting
 // verschilt (vandaag→elders vs. elders→vandaag). Eén gedeelde functie i.p.v. twee kopieën.
 export async function placeSessionOnDate(userId: string, task: Task, session: Session, targetDate: string): Promise<void> {
+  const oudeDatum = session.startsAt.slice(0, 10)
   const existingMinutes = await sumPlannedMinutesForUserOnDate(userId, targetDate, task.id)
   const hour = SESSION_ANCHOR_HOUR + Math.floor(existingMinutes / 60)
   const minute = existingMinutes % 60
   const startsAt = amsterdamLocalToUtcIso(targetDate, hour, minute)
-  const endsAt = new Date(new Date(startsAt).getTime() + session.plannedMinutes * 60_000).toISOString()
 
-  let placed = await updateSessionPlacement(session.id, {
-    startsAt,
-    plannedMinutes: session.plannedMinutes,
-    googleEventId: session.googleEventId
-  })
+  await updateSessionPlacement(session.id, { startsAt, plannedMinutes: session.plannedMinutes })
 
-  if (session.googleEventId) {
-    await updateHomeworkEvent(userId, session.googleEventId, {
-      sessionId: placed.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt,
-      endsAt
-    })
-  } else {
-    const result = await createHomeworkEvent(userId, { sessionId: placed.id, subject: task.subject, title: task.title, startsAt, endsAt })
-    if (result) {
-      placed = await updateSessionPlacement(placed.id, { startsAt, plannedMinutes: placed.plannedMinutes, googleEventId: result.googleEventId })
+  // Story 2.5: beide betrokken datums herberekenen — de nieuwe (waar het blok groeit) en,
+  // als de sessie daadwerkelijk van dag wisselde, ook de oude (waar het blok krimpt/
+  // verdwijnt). Review-patch (2026-08-26): elke aanroep los ge-try/catcht — anders
+  // voorkomt een fout op de eerste aanroep dat de tweede (oudeDatum) ooit draait, en mag
+  // een falende Calendar-sync sowieso de al-doorgevoerde plaatsing niet als 500 laten
+  // bubbelen, zelfde precedent als create-task.ts/delete-task.ts/recalculate.ts.
+  try {
+    await syncHomeworkBlocksForDate(userId, targetDate)
+  } catch (fout) {
+    console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren voor ${targetDate} na plaatsing van sessie ${session.id}:`, fout)
+  }
+  if (oudeDatum !== targetDate) {
+    try {
+      await syncHomeworkBlocksForDate(userId, oudeDatum)
+    } catch (fout) {
+      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren voor ${oudeDatum} na plaatsing van sessie ${session.id}:`, fout)
     }
   }
 }

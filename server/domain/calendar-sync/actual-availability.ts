@@ -20,6 +20,18 @@ export function isTimedEvent(event: DayEvent): boolean {
   return event.startsAt.includes('T')
 }
 
+// Live gebruiksbevinding (2026-08-26, na Story 2.4): met meerdere agenda's erbij kwamen
+// dagvullende, informatieve afspraken (bv. een Magister-agenda-item) mee die in Google
+// Calendar zelf op "Vrij" staan (`transparency: 'transparent'`) — die blokkeerden tot nu
+// toe ten onrechte, want alleen op "heeft een tijdstip" werd gefilterd, nooit op vrij/
+// bezet. Ontbrekend `transparency` betekent Google's eigen default: 'opaque' (bezet).
+// Geëxporteerd, zelfde hergebruik-precedent als `isTimedEvent`/`toInstant`/
+// `overlapInterval` hierboven — conflict-detection.ts en session-time-check.ts gebruiken
+// 'm ook.
+export function isBlockingEvent(event: DayEvent): boolean {
+  return isTimedEvent(event) && event.transparency !== 'transparent'
+}
+
 // Zelfde `Date.getTime()`-vergelijking als session-time-check.ts — Google se `dateTime`
 // komt niet altijd in hetzelfde ISO-formaat terug als onze eigen `toISOString()`-waarden,
 // dus nooit de ruwe strings vergelijken.
@@ -69,20 +81,23 @@ export async function calculateActualAvailableMinutes(userId: string, date: stri
 
   if (taskSessions.length === 0) return currentMinutes
 
-  const events = await getTodayEvents(userId, date)
+  const result = await getTodayEvents(userId, date)
   // `null` betekent hier een mislukte Calendar-call (niet "geen agenda") — anders dan het
   // fail-safe-precedent in shortfall.ts (een achtergrond-wegingsfactor waar "geen signaal"
   // acceptabel is), is Calendar-conflict-detectie het hele doel van dit scherm, dus een
   // mislukte call moet zichtbaar falen i.p.v. stilzwijgend de ongewijzigde tijd te tonen.
-  if (!events) {
+  // Story 2.4: `null` betekent nu specifiek "alle agenda's mislukt" — een gedeeltelijke
+  // mislukking (best-effort) faalt hier bewust niet, dat zou dit scherm onnodig blokkeren
+  // op een agenda die niet eens overlapt.
+  if (!result) {
     throw new Error('Kon agenda-items niet ophalen voor conflict-berekening.')
   }
 
-  const timedEvents = events.filter(isTimedEvent)
+  const blockingEvents = result.events.filter(isBlockingEvent)
   let overlap = 0
   for (const { session } of taskSessions) {
     const endsAt = new Date(new Date(session.startsAt).getTime() + session.plannedMinutes * 60_000).toISOString()
-    overlap += mergedOverlapMinutes({ startsAt: session.startsAt, endsAt }, timedEvents)
+    overlap += mergedOverlapMinutes({ startsAt: session.startsAt, endsAt }, blockingEvents)
   }
 
   return Math.max(0, currentMinutes - overlap)

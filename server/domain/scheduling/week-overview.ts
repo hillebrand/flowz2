@@ -23,8 +23,8 @@ export async function buildWeekDay(userId: string, date: string): Promise<WeekDa
     }
   }
 
-  const events = await getTodayEvents(userId, date)
-  const calendarItems = events ? events.map(e => ({ title: e.title, startsAt: e.startsAt, endsAt: e.endsAt })) : null
+  const result = await getTodayEvents(userId, date)
+  const calendarItems = result ? result.events.map(e => ({ title: e.title, startsAt: e.startsAt, endsAt: e.endsAt })) : null
 
   return { date, availableMinutes, neededMinutes, tasks, calendarItems, suggestion }
 }

@@ -160,13 +160,6 @@ export const sessions = sqliteTable('sessions', {
   // "Sessie-tijdstip", afgestemd met Hillebrand 2026-08-01).
   startsAt: text('starts_at').notNull(),
   plannedMinutes: integer('planned_minutes').notNull(),
-  // Story 3.5 — Google's event-ID, nodig om een bestaand Calendar-event via
-  // `updateHomeworkEvent` bij te werken i.p.v. bij elke herberekening een duplicaat aan te
-  // maken. Nullable, geen DB-default nodig (een `ALTER TABLE ADD COLUMN` zonder `NOT NULL`
-  // stelt geen non-null-default-eis, in tegenstelling tot Story 3.3's `needs`-kolom):
-  // bestaande sessies vóór deze migratie, en sessies aangemaakt zonder actieve Calendar-
-  // write-scope/kleur, hebben 'm simpelweg niet.
-  googleEventId: text('google_event_id'),
   // Story 4.5 — server-side bewijs-van-activiteit voor de wegnavigeer-bescherming. Nullable,
   // zelfde reden als `googleEventId` hierboven: geen DB-default nodig, bestaande sessies
   // hebben 'm simpelweg niet. `lastHeartbeatAt` wordt periodiek bijgewerkt zolang de sessie
@@ -307,3 +300,42 @@ export const taskEditLocks = sqliteTable('task_edit_locks', {
 
 export type TaskEditLock = typeof taskEditLocks.$inferSelect
 export type NewTaskEditLock = typeof taskEditLocks.$inferInsert
+
+// Story 2.5 (Correct Course, 2026-08-26) — vervangt `sessions.googleEventId` als bron van
+// waarheid voor de Calendar-write-sync. Eén sessie hoort niet meer 1-op-1 bij één event:
+// meerdere sessies op dezelfde dag, zonder een bezet agenda-item ertussen, worden
+// samengevoegd tot één "Huiswerk"-blok (`syncHomeworkBlocksForDate`). Bewust géén unique-
+// index op (userId, date) — één datum kan meerdere blok-rijen hebben (bv. vóór/na een
+// bezette afspraak). `googleEventId` niet nullable: een rij bestaat pas ná een geslaagde
+// Calendar-aanmaak, nooit als tussenstap.
+export const homeworkCalendarBlocks = sqliteTable('homework_calendar_blocks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  // ISO-datum (YYYY-MM-DD) — zelfde vorm als `availableTimeExceptions.date`.
+  date: text('date').notNull(),
+  startsAt: text('starts_at').notNull(),
+  endsAt: text('ends_at').notNull(),
+  googleEventId: text('google_event_id').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type HomeworkCalendarBlock = typeof homeworkCalendarBlocks.$inferSelect
+export type NewHomeworkCalendarBlock = typeof homeworkCalendarBlocks.$inferInsert
+
+// Vierde toepassing van hetzelfde lock-patroon als `sessionPlacementLocks`/
+// `availabilityWriteLocks`/`taskEditLocks` hierboven (project se bewezen TOCTOU-fix) —
+// eigen tabel, geen hergebruik: `syncHomeworkBlocksForDate` is een andere resource dan
+// sessieplaatsing zelf, hergebruik zou onnodige kruisblokkering geven tussen twee
+// ongerelateerde operaties op dezelfde datum.
+export const homeworkBlockSyncLocks = sqliteTable('homework_block_sync_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  date: text('date').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('homework_block_sync_locks_user_date_unique').on(table.userId, table.date)
+])
+
+export type HomeworkBlockSyncLock = typeof homeworkBlockSyncLocks.$inferSelect
+export type NewHomeworkBlockSyncLock = typeof homeworkBlockSyncLocks.$inferInsert

@@ -99,6 +99,11 @@ const warningBannerText = computed(() => {
   return null
 })
 
+// Story 2.4 — home-calendar-warnings: per agenda die niet opgehaald kon worden (bij een
+// gedeeltelijke Calendar-mislukking) een eigen, niet-blokkerende melding. Los van
+// warningBannerText (sessionTimeCheck, ongewijzigd).
+const calendarWarnings = computed(() => plan.value?.calendarWarnings ?? [])
+
 // home-calendar-dayview (AC #2) — vast venster 07:00-22:00 (zie de story's Open Questions),
 // events als verticaal gepositioneerde blokken. Hele-dag-afspraken (geen tijdcomponent)
 // worden apart getoond, niet gepositioneerd.
@@ -221,6 +226,10 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
         <p>{{ warningBannerText }}</p>
       </section>
 
+      <section v-if="calendarWarnings.length > 0" id="home-calendar-warnings" class="home-calendar-warnings">
+        <p v-for="(warning, index) in calendarWarnings" :key="index">{{ warning.message }}</p>
+      </section>
+
       <section v-if="nextTask" id="home-task-section" class="home-task-section">
         <div id="home-task-card" class="home-task-card">
           <p id="home-task-subject" class="home-task-subject">{{ nextTask.subject }}</p>
@@ -246,9 +255,9 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
         <p>Je bent klaar voor vandaag!</p>
       </section>
 
+      <h2 id="home-today-heading" class="home-today-heading">Vandaag</h2>
       <section id="home-secondary-row" class="home-secondary-row">
         <div class="home-later-column">
-          <h2 id="home-later-heading" class="home-later-heading">Later vandaag</h2>
           <ul v-if="plan && plan.laterTasks.length > 0" id="home-later-list" class="home-later-list">
             <li v-for="taak in plan.laterTasks" :key="taak.id">
               <button
@@ -263,10 +272,17 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
             </li>
           </ul>
           <p v-else id="home-later-list" class="home-later-empty">Verder niets gepland vandaag</p>
+
+          <ul v-if="plan && plan.completedTasks.length > 0" id="home-completed-list" class="home-completed-list">
+            <li v-for="taak in plan.completedTasks" :key="taak.id" class="home-completed-item">
+              <span class="home-completed-item-title">{{ taak.title }}</span>
+              <span class="home-completed-item-subject">{{ taak.subject }}</span>
+              <span class="home-completed-badge">✓ Afgerond</span>
+            </li>
+          </ul>
         </div>
 
         <div class="home-calendar-column">
-          <h2 id="home-calendar-heading" class="home-calendar-heading">Vandaag</h2>
           <p v-if="!plan || plan.calendarDayEvents === null" id="home-calendar-error" class="home-calendar-error">Kan agenda niet laden</p>
           <template v-else>
             <p v-if="allDayCalendarEvents.length > 0" class="home-calendar-all-day">
@@ -333,6 +349,23 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   font-size: 0.875rem;
 }
 
+.home-calendar-warnings {
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.home-calendar-warnings p {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.home-calendar-warnings p + p {
+  margin-top: 0.25rem;
+}
+
 .home-task-section {
   padding: 1.5rem;
 }
@@ -391,25 +424,24 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   color: #4b5563;
 }
 
+.home-today-heading {
+  margin: 1.5rem 1.5rem 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 .home-secondary-row {
   display: flex;
   gap: 1.5rem;
-  padding: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-  margin-top: 1.5rem;
+  padding: 0 1.5rem 1.5rem;
 }
 
 .home-later-column,
 .home-calendar-column {
   flex: 1;
   min-width: 0;
-}
-
-.home-later-heading,
-.home-calendar-heading {
-  margin: 0 0 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
 }
 
 .home-later-list {
@@ -451,6 +483,40 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   margin: 0;
   font-size: 0.8125rem;
   color: #6b7280;
+}
+
+.home-completed-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0 0;
+  border-top: 1px dashed #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.home-completed-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+}
+
+.home-completed-item-title {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+.home-completed-item-subject {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.home-completed-badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #16a34a;
 }
 
 .home-calendar-error {

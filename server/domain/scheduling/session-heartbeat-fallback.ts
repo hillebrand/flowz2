@@ -42,7 +42,7 @@ export async function finalizeStaleSessionIfNeeded(session: Session): Promise<bo
   await replanAfterSession(session.taskId, session.id, actualMinutes, null)
   // Ná `replanAfterSession` (die zelf `recalculateTaskPlanning` aanroept, maar
   // `lastHeartbeatAt`/`stoppedAt` nooit aanraakt — `updateSessionPlacement` beperkt zich tot
-  // `startsAt`/`plannedMinutes`/`googleEventId`) — reset zodat een hernieuwde sessie op
+  // `startsAt`/`plannedMinutes`) — reset zodat een hernieuwde sessie op
   // dezelfde rij weer normaal kan heartbeaten.
   await resetSessionHeartbeatTracking(session.id)
 

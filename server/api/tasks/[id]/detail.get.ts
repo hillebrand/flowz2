@@ -38,7 +38,8 @@ export default defineEventHandler(async (event): Promise<OpenTaskItem | ErrorEnv
       type: result.task.type,
       deadline: result.task.deadline,
       totalSubtasks: result.totalSubtasks,
-      doneSubtasks: result.doneSubtasks
+      doneSubtasks: result.doneSubtasks,
+      totalMinutes: result.task.totalMinutes
     }
   } catch (fout) {
     console.error('[tasks] Kon taakdetail niet ophalen:', fout)

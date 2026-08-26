@@ -18,6 +18,14 @@ function isTimedEvent(event: DayEvent): boolean {
   return event.startsAt.includes('T')
 }
 
+// Zelfde vrij/bezet-regel als actual-availability.ts's `isBlockingEvent` (Story 2.4-
+// vervolg, 2026-08-26) — bewust hier lokaal gedupliceerd, zelfde precedent als
+// `isTimedEvent`/`toInstant` hierboven. Ontbrekend `transparency` = Google's default
+// 'opaque' (bezet); alleen expliciet 'transparent' ("Vrij") telt als niet-blokkerend.
+function isBlockingEvent(event: DayEvent): boolean {
+  return isTimedEvent(event) && event.transparency !== 'transparent'
+}
+
 // Live-verificatiebevinding (2026-08-02): Google geeft `dateTime` terug met een echte
 // UTC-offset (bv. "+02:00"), niet altijd met "Z" en milliseconden zoals onze eigen
 // `toISOString()`-waarden — lexicografische stringvergelijking van twee verschillend
@@ -34,7 +42,7 @@ function overlaps(session: SessionWindow, event: DayEvent): boolean {
 
 // Zuivere functie, geen I/O.
 export function determineSessionTimeCheck(session: SessionWindow, events: DayEvent[]): SessionTimeCheck {
-  const timedEvents = events.filter(isTimedEvent)
+  const timedEvents = events.filter(isBlockingEvent)
 
   if (timedEvents.some(event => overlaps(session, event))) {
     return 'unavailable'

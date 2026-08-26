@@ -1,8 +1,8 @@
-import { createTaskAndSession, deleteTaskAndSession, updateSessionPlacement } from '../../data/tasks'
+import { createTaskAndSession } from '../../data/tasks'
 import type { Difficulty, Priority, Task, TaskType } from '../../data/schema'
 import { averageDailyAvailableMinutes, calculateDoelmoment, findSessionDate, SESSION_ANCHOR_HOUR } from '../scheduling/doelmoment'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
-import { createHomeworkEvent, deleteHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 // `SubtaskInput` niet lokaal dupliceren (code review 2026-08-01) — al gedefinieerd in
 // shared/types/tasks.d.ts, gedeeld met de route en de client.
 import type { SubtaskInput } from '../../../shared/types/tasks'
@@ -87,51 +87,18 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
     subtasks: input.subtasks
   })
 
-  const endsAt = new Date(new Date(session.startsAt).getTime() + input.defaultSessionDuration * 60_000).toISOString()
-
-  // Calendar-sync-aanroep (AC #2, laatste bullet) — synchroon binnen dit request (AD-1/
-  // AD-7). `createHomeworkEvent` is al zelf-bewakend op kleur + write-scope (Story 2.3),
-  // dus hier geen eigen if-check.
+  // Calendar-sync (AC #2 Story 2.3, granulariteit sinds Story 2.5 per-datum i.p.v.
+  // per-sessie) — synchroon binnen dit request (AD-1/AD-7). `syncHomeworkBlocksForDate`
+  // is al zelf-bewakend op kleur + write-scope (Story 2.3 AC #4).
   //
-  // Faalt de Calendar-call, dan zijn Task/Session/Subtask al gecommit (de transactie
-  // hierboven is al afgerond — een HTTP-call kan niet in dezelfde SQL-transactie
-  // meelopen). Ruim ze dan expliciet op i.p.v. een weeskind-Task/Session/Subtask achter te
-  // laten die nooit meer te vinden is (code review 2026-08-01, Story 3.2 breidt de
-  // opruiming uit met Subtask-rijen).
+  // Bewust GEEN rollback meer van Task/Session/Subtask bij een sync-fout (in
+  // tegenstelling tot vóór Story 2.5): dit is nu een gedeelde-datum-operatie die ook
+  // andere taken op dezelfde dag kan raken, dus déze taak terugdraaien zou onterecht
+  // zijn. Self-healing bij de eerstvolgende herberekening voor die datum.
   try {
-    const result = await createHomeworkEvent(userId, {
-      sessionId: session.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt: session.startsAt,
-      endsAt
-    })
-    // `googleEventId` alsnog opslaan (Story 3.5) — voorheen weggegooid (Story 2.3's eigen,
-    // toen geldende scope-grens), maar een latere herberekening kan een bestaand event pas
-    // via `updateHomeworkEvent` bijwerken (i.p.v. steeds een duplicaat aan te maken) als de
-    // sessie hier al weet welk event bij haar hoort. `result` is `null` zonder actieve
-    // Calendar-write-scope/kleur (AC #4) — dan blijft `googleEventId` gewoon `NULL`,
-    // self-healing bij een latere herberekening (server/domain/scheduling/recalculate.ts).
-    if (result) {
-      // Compenserende opruiming (code review 2026-08-02): faalt déze `updateSessionPlacement`
-      // (bv. een tijdelijke DB-fout) nádat het Calendar-event al is aangemaakt, dan zou de
-      // buitenste catch hieronder alleen de Task/Session/Subtask-rijen opruimen — het net
-      // aangemaakte Calendar-event blijft dan permanent verweesd op Eveliens échte agenda
-      // staan, zonder dat er nog een sessie naar verwijst. Ruim het daarom eerst zelf op.
-      try {
-        await updateSessionPlacement(session.id, {
-          startsAt: session.startsAt,
-          plannedMinutes: session.plannedMinutes,
-          googleEventId: result.googleEventId
-        })
-      } catch (opslagFout) {
-        await deleteHomeworkEvent(userId, result.googleEventId)
-        throw opslagFout
-      }
-    }
+    await syncHomeworkBlocksForDate(userId, session.startsAt.slice(0, 10))
   } catch (fout) {
-    await deleteTaskAndSession(task.id, session.id)
-    throw fout
+    console.error(`[tasks] Kon huiswerk-Calendar-blokken niet synchroniseren na aanmaken van taak ${task.id}:`, fout)
   }
 
   return task

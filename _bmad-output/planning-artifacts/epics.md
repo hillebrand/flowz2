@@ -351,6 +351,63 @@ So that Flowz mijn geplande sessies zichtbaar in mijn agenda zet en nooit meer e
 **When** een sessie gepland/herpland wordt
 **Then** gebeurt er geen Calendar-write — dit veld is optioneel en Flowz blijft dan volledig alleen-lezend zoals voorheen
 
+> **Kruisverwijzing (Correct Course, 2026-08-26):** de "één event per sessie"-granulariteit uit de tweede AC hierboven is vervangen door samenvattende dagblokken — zie Story 2.5. Deze story se overige AC's (kleur kiezen, her-consent, "Flowz is bron van waarheid") blijven ongewijzigd van kracht.
+
+### Story 2.4: Alle Geabonneerde Agenda's Meenemen bij Calendar-lezen [TOEGEVOEGD 2026-08-26, Correct Course]
+
+As Evelien,
+I want dat Flowz mijn volledige Google Calendar leest (alle agenda's die ik zie in Google Calendar, niet alleen mijn persoonlijke agenda),
+So that het Magister-rooster en mijn zelfgemaakte slaap/eet-agenda's meetellen in de dagweergave, tijdgebrek-detectie en agendaconflict-detectie.
+
+**Acceptance Criteria:**
+
+**Given** Evelien is ingelogd met calendar.readonly-scope (Story 1.2)
+**When** `server/domain/calendar-sync/day-events.ts` agenda-items ophaalt voor een dag
+**Then** wordt eerst `calendarList.list` aangeroepen om alle voor Evelien zichtbare/geabonneerde agenda's te bepalen (selected=true, niet verborgen)
+**And** worden voor elke gevonden agenda de events voor die dag opgehaald en samengevoegd tot één `DayEvent[]`-resultaat, zelfde vorm als nu (id, title, startsAt, endsAt, colorId) — alle 5 bestaande afnemers (home-plan, week-overview, shortfall, actual-availability, conflict-detection) werken hierop ongewijzigd door
+
+**Given** een individuele agenda-aanroep (calendarList of één specifieke agenda's events) mislukt, maar niet allemaal
+**When** de resultaten worden samengevoegd
+**Then** blijft het resultaat best-effort: agenda's die wel lukten worden gewoon meegenomen, de mislukte agenda('s) worden overgeslagen
+**And** toont het hoofdscherm (`server/api/home/plan.get.ts`) per mislukte agenda een niet-blokkerende Notification (AD-6-shape) met de agendanaam ("Agenda '{naam}' kon niet worden opgehaald")
+**And** blijven de overige 4 afnemers stil op de best-effort-data (zelfde precedent als bij een volledige Calendar-uitval nu al)
+
+**Given** zowel `calendarList.list` faalt, of alle individuele agenda-aanroepen falen
+**When** het totaalresultaat wordt bepaald
+**Then** is het resultaat `null` — zelfde fail-safe-contract als nu, alle 5 afnemers blijven hun bestaande null-afhandeling gebruiken zonder codewijziging
+
+**Given** een huiswerk-kleur is ingesteld (FR28, Story 2.3)
+**When** agenda-items worden samengevoegd
+**Then** blijft de homework-kleur-uitsluiting ongewijzigd werken (huiswerk-events staan uitsluitend in de primary-agenda — zie Story 2.5 voor de write-sync-granulariteit, die op déze story se lees-kant geen invloed heeft)
+
+### Story 2.5: Samenvattende Huiswerk-Blokken per Dag [TOEGEVOEGD 2026-08-26, Correct Course]
+
+As Evelien,
+I want dat Flowz niet voor elke taak apart een blokje in mijn agenda zet, maar één samenvattend "Huiswerk"-blok per aaneengesloten stuk vrije tijd op een dag,
+So that mijn agenda overzichtelijk blijft in plaats van vol te staan met losse taakblokjes.
+
+**Acceptance Criteria:**
+
+**Given** een huiswerk-kleur is ingesteld (Story 2.3) en meerdere sessies staan op dezelfde datum gepland, zonder een bezet agenda-item ertussen
+**When** de planning voor die datum verandert (taak aangemaakt/herpland/verwijderd/afgerond — elk bestaand mutatiepunt in Epic 3/4/6)
+**Then** wordt niet langer per sessie een los Calendar-event geschreven, maar wordt één nieuwe functie `syncHomeworkBlocksForDate(userId, datum)` aangeroepen die de complete set Calendar-blokken voor die datum herberekent en synchroniseert
+**And** worden die sessies samengevoegd tot één Calendar-event getiteld "Huiswerk" (niet meer per vak/taak), van start eerste sessie tot einde laatste sessie, in de gekozen huiswerk-kleur
+
+**Given** twee of meer sessies op dezelfde datum met een bezet agenda-item ertussen (bv. een "Avondeten"-afspraak — zelfde vrij/bezet-logica als Story 2.4's `isBlockingEvent`)
+**When** blokken herberekend worden
+**Then** ontstaan er meerdere aparte Calendar-events, één per aaneengesloten stuk sessies, nooit één blok dat over een bezet agenda-item heen loopt
+
+**Given** de sessie-samenstelling voor een datum wijzigt (sessie verschoven naar/van die datum, taak verwijderd/afgerond, nieuwe taak toegevoegd)
+**When** `syncHomeworkBlocksForDate` opnieuw draait voor de betrokken datum/datums
+**Then** worden overbodige blokken (Calendar-event + rij) verwijderd, gewijzigde blokken bijgewerkt en nieuwe blokken aangemaakt — idempotent, nooit duplicaten, vanuit de actuele staat herberekend (AD-1)
+**And** verandert dit de datastructuur: sessies dragen niet langer zelf een `googleEventId` — een nieuwe tabel `homeworkCalendarBlocks` (userId, datum, starttijd, eindtijd, googleEventId) is de bron van waarheid per dag-blok
+
+**Given** geen huiswerk-kleur ingesteld of geen Calendar write-scope
+**When** `syncHomeworkBlocksForDate` wordt aangeroepen
+**Then** gebeurt er niets (zelfde no-op-precedent als Story 2.3's AC #4)
+
+**Implementation Notes:** Raakt alle 7 bestaande aanroeppunten van de per-sessie write-sync (`server/domain/tasks/create-task.ts`, `delete-task.ts`, `server/domain/scheduling/apply-recommendation.ts`, `session-placement.ts`, `replan.ts`, `energy.ts`, `recalculate.ts`) — die roepen voortaan `syncHomeworkBlocksForDate` aan voor de betrokken datum(s) i.p.v. zelf create/update/delete te orkestreren. Ook de "is dit mijn eigen huiswerk-event"-uitsluiting op het hoofdscherm (`server/api/home/plan.get.ts`, nu op sessie-`googleEventId` gebaseerd) wordt op kleur gebaseerd, consistent met hoe `conflict-detection.ts` dat al doet. Migratie nodig voor het laten vervallen van `sessions.googleEventId`.
+
 ### Epic 3: Taak Aanmaken met Automatische Tijdsverdeling
 Evelien maakt een taak aan (met optioneel deeltaken/benodigdheden) en Flowz plant er meteen een realistisch doelmoment voor, vóór de deadline.
 **FRs covered:** FR9, FR10, FR24, FR25, FR26

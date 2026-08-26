@@ -35,11 +35,23 @@ function envelope(event: Parameters<typeof readBody>[0], statusCode: number, cod
   return { error: { code, message } }
 }
 
+// Zelfde uren/minuten-validatie als sessions/[sessionId]/replan.post.ts (Story 4.7) —
+// bewust hier lokaal gedupliceerd, zelfde precedent als de rest van dit bestand.
+function isValidHours(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isValidMinutes(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 59
+}
+
 function isValidEntry(value: unknown): value is SchoolSessionEntry {
   if (!value || typeof value !== 'object') return false
   const entry = value as Record<string, unknown>
   if (typeof entry.rowId !== 'string' || entry.rowId.length === 0) return false
   if (typeof entry.actualMinutes !== 'number' || !Number.isInteger(entry.actualMinutes) || entry.actualMinutes < 0) return false
+  if (entry.remainingHours !== null && !isValidHours(entry.remainingHours)) return false
+  if (entry.remainingMinutes !== null && !isValidMinutes(entry.remainingMinutes)) return false
 
   const hasTaskId = typeof entry.taskId === 'string' && entry.taskId.length > 0
   const hasNewTask = !!entry.newTask && typeof entry.newTask === 'object'
@@ -124,10 +136,12 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
         continue
       }
 
-      // `remainingTotalMinutes: null` = "ongewijzigd", zelfde standaardpad als het
-      // live-sessie-afrondscherm (Dev Notes: dit is geen edge case, maar het gebruikelijke
-      // gedrag als Evelien de resterende-tijd-velden leeg laat).
-      await replanAfterSession(taskId as string, taskSession.id, entry.actualMinutes, null)
+      // Beide velden leeg = "ongewijzigd" (null); anders de som, ontbrekende helft telt als 0
+      // — zelfde interpretatie als sessions/[sessionId]/replan.post.ts (Story 4.7).
+      const remainingTotalMinutes = entry.remainingHours === null && entry.remainingMinutes === null
+        ? null
+        : (entry.remainingHours ?? 0) * 60 + (entry.remainingMinutes ?? 0)
+      await replanAfterSession(taskId as string, taskSession.id, entry.actualMinutes, remainingTotalMinutes)
       results.push({ rowId: entry.rowId, ok: true })
     } catch (fout) {
       console.error('[school-sessions] Kon één schoolsessie niet verwerken:', fout)

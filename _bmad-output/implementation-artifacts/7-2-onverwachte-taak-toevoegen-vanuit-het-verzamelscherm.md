@@ -4,7 +4,7 @@ baseline_commit: 47cee8d5d3ece5498a7c87bdfefccc7984069923
 
 # Story 7.2: Onverwachte Taak Toevoegen vanuit het Verzamelscherm
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -18,6 +18,8 @@ so that ik niet eerst apart een volledig taak-formulier hoef in te vullen voorda
 
 1. **Given** Evelien staat op het schoolsessies-verzamelscherm en de taak stond nog niet in Flowz, **when** ze in `school-session-task-select` kiest voor "Nieuwe taak toevoegen", **then** verschijnt een verkorte invoer: `school-session-new-task-title-input` (verplicht) en `school-session-new-task-deadline-input` (verplicht) — geen ander veld **and** wordt bij validatie dezelfde regel gehanteerd als op het volledige taak-formulier (titel niet-leeg, deadline niet in het verleden).
 2. **Given** Evelien bevestigt de rij met een nieuw aangemaakte taak, **when** de server verwerkt (samen met Story 7.1's sessie-verwerking), **then** wordt een `Task`-rij aangemaakt (Epic 3's bestaande `createTask`/`validateTaskInput`-pad, ongewijzigd) met moeilijkheid, prioriteit **en vak/soort taak** op een standaardwaarde ("gemiddeld", resp. "Overig"/"opdracht" — zie Dev Notes) **and** berekent de scheduling-engine (Epic 3, ongewijzigd) op basis van de ingevulde deadline meteen een doelmoment, zoals bij elke andere taak **and** is de taak nadien via 6.3-bewerkformulier (Epic 5) verder aan te vullen, net als elke andere taak.
+
+> **Amendement (Hillebrand, 2026-08-26, na live gebruik):** ook voor een nieuwe-taak-rij moet zowel de bestede áls de resterende tijd ingevoerd kunnen worden — dit keert Dev Notes' "resterende tijd niet expliciet aangepast (Story 7.1's `remainingTotalMinutes: null`-precedent)"-aanname om. Opgelost als onderdeel van Story 7.1's amendement (zelfde resterende-tijd-uren/minuten-velden, gedeeld tussen elke rijsoort in `schoolsessies.vue` — geen apart pad voor nieuwe-taak-rijen nodig, `remainingHours`/`remainingMinutes` lopen door dezelfde `entries`-mapping en hetzelfde `replanAfterSession`-vervolgpad als een bestaande-taak-rij).
 
 ## Tasks / Subtasks
 
@@ -158,3 +160,4 @@ Claude Sonnet 5 (claude-sonnet-5)
 | 2026-08-23 | Story aangemaakt via create-story, na afronding van Story 7.1 (schoolsessies-verzamelscherm, `done`/`review`, gecommit als `47cee8d`). Open productbeslissing (vak/soort-taak-default voor het verkorte pad) voorgelegd aan en beantwoord door Hillebrand: `subject: 'Overig'`, `type: 'opdracht'`. |
 | 2026-08-24 | Tasks 1-3 geïmplementeerd en volledig live geverifieerd tegen de dev-stage (gemengde batch, klemming, verleden-deadline, structurele validatie). Typecheck/build schoon. Status → review. |
 | 2026-08-24 | Code review: 1 bevinding (dubbele DOM-id's over meerdere rijen), bewust uitgesteld — consistent met een al bestaand, herhaaldelijk toegepast patroon in dit project (Story 7.1/6.5). Toegevoegd aan `deferred-work.md`. Status blijft `review`. |
+| 2026-08-26 | **Amendement na live gebruik (Hillebrand):** resterende-tijd-invoer geldt nu ook voor nieuwe-taak-rijen (zie het Amendement bij de Acceptance Criteria) — meegenomen als onderdeel van Story 7.1's amendement, zelfde gedeelde code-pad. Status blijft `review`. |

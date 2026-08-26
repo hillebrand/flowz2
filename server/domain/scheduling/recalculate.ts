@@ -1,8 +1,8 @@
-import { getSessionForTask, getTaskById, placeSessionWithStackingOffset, updateSessionPlacement } from '../../data/tasks'
+import { getSessionForTask, getTaskById, placeSessionWithStackingOffset } from '../../data/tasks'
 import type { Session, Task } from '../../data/schema'
 import { averageDailyAvailableMinutes, calculateDoelmoment, findSessionDate, SESSION_ANCHOR_HOUR } from './doelmoment'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
-import { createHomeworkEvent, deleteHomeworkEvent, updateHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 
 // Eerste inhoud van dit bestand (Story 3.5) — naast `doelmoment.ts`/`ordering.ts` in
 // dezelfde map. In tegenstelling tot die twee (puur lezen) is dit een echte mutatie: de
@@ -42,6 +42,7 @@ export async function recalculateTaskPlanning(
   if (!existingSession) {
     throw new Error(`Taak ${taskId} heeft geen sessie.`)
   }
+  const oudeDatum = existingSession.startsAt.slice(0, 10)
 
   const today = todayInAmsterdam()
   const avgAvailableMinutes = await averageDailyAvailableMinutes(task.userId)
@@ -60,54 +61,28 @@ export async function recalculateTaskPlanning(
   // concurrency-kant). `[task.id, ...additionalExcludeTaskIds]` sluit zowel de eigen,
   // nog-niet-verplaatste sessie uit als eventuele batchgenoten die in déze aanroep nog niet
   // aan de beurt zijn geweest.
-  let { session, startsAt } = await placeSessionWithStackingOffset(
+  const { session, startsAt } = await placeSessionWithStackingOffset(
     existingSession.id,
     task.userId,
     sessionDate,
     [task.id, ...additionalExcludeTaskIds],
     SESSION_ANCHOR_HOUR,
-    plannedMinutes,
-    existingSession.googleEventId
+    plannedMinutes
   )
 
-  const endsAt = new Date(new Date(startsAt).getTime() + plannedMinutes * 60_000).toISOString()
-
-  // Calendar-sync ná de write hierboven (bewust — zie de story's Dev Notes "Waarom geen
-  // rollback"): de nieuwe sessieplaatsing blijft geldig, ook als deze aanroep hierna faalt.
-  if (existingSession.googleEventId) {
-    await updateHomeworkEvent(task.userId, existingSession.googleEventId, {
-      sessionId: session.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt,
-      endsAt
-    })
-  } else {
-    // Self-healing: geen `googleEventId` (nooit gehad, of sessie van vóór deze migratie) —
-    // `createHomeworkEvent` is zelf-bewakend op kleur/write-scope (Story 2.3) en retourneert
-    // `null` als die nog steeds ontbreken, dus geen eigen if-check hier nodig.
-    const result = await createHomeworkEvent(task.userId, {
-      sessionId: session.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt,
-      endsAt
-    })
-    if (result) {
-      // Compenserende opruiming (code review 2026-08-02): faalt deze `updateSessionPlacement`
-      // (bv. een tijdelijke DB-fout) nádat het Calendar-event al is aangemaakt, dan blijft
-      // `googleEventId` op de sessie `null` — de eerstvolgende herberekening zou de
-      // self-healing-tak dan opnieuw triggeren en een ongebreidelde reeks duplicaat-events
-      // aanmaken (erger dan het algemene "geen rollback"-gedrag hierboven, dat alleen
-      // tijdelijk stale wordt, niet blijvend dupliceert). Ruim het net aangemaakte event dus
-      // op als het opslaan van zijn ID faalt.
-      try {
-        session = await updateSessionPlacement(session.id, { startsAt, plannedMinutes, googleEventId: result.googleEventId })
-      } catch (opslagFout) {
-        await deleteHomeworkEvent(task.userId, result.googleEventId)
-        throw opslagFout
-      }
+  // Story 2.5: Calendar-sync ná de write hierboven (bewust — zelfde "geen rollback"-
+  // redenering als vóór deze story: de nieuwe sessieplaatsing blijft geldig, ook als de
+  // sync hierna faalt, self-healing bij de eerstvolgende herberekening). Beide betrokken
+  // datums: de nieuwe (waar het blok groeit/ontstaat) en, als de sessie van dag
+  // wisselde, ook de oude (waar het blok krimpt/verdwijnt).
+  const nieuweDatum = startsAt.slice(0, 10)
+  try {
+    await syncHomeworkBlocksForDate(task.userId, nieuweDatum)
+    if (nieuweDatum !== oudeDatum) {
+      await syncHomeworkBlocksForDate(task.userId, oudeDatum)
     }
+  } catch (fout) {
+    console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na herberekening van taak ${taskId}:`, fout)
   }
 
   return { task, session }

@@ -4,14 +4,12 @@ import { refreshCalendarAccessToken } from '../auth/calendar-token'
 // Eerste echte inhoud van deze map — de Structural Seed reserveerde 'm al sinds Story 1.1
 // (`server/domain/calendar-sync/.gitkeep`).
 //
-// Input-vorm bewust niet gekoppeld aan een DB-model: Task/Session bestaan nog niet
-// (Epic 3). `sessionId` is voor déze story een ondoorzichtige identifier — de aanroeper
-// in Epic 3+ bepaalt wat dat wordt, hier alleen gebruikt om events terug te kunnen vinden
-// via het door Google teruggegeven `googleEventId` (opslag daarvan is aan die aanroeper,
-// zie Dev Notes).
-export interface HomeworkSession {
-  sessionId: string
-  subject: string
+// Story 2.5 (Correct Course, 2026-08-26): vereenvoudigd van een per-sessie-vorm
+// (`HomeworkSession`, met `sessionId`/`subject`/`title`) naar een generieke, neutrale
+// Calendar-CRUD-laag — een blok dekt sinds deze story mogelijk meerdere taken tegelijk,
+// dus een taak-gebonden titel/identifier hoort hier niet meer thuis. De aanroeper
+// (`server/domain/calendar-sync/homework-blocks.ts`) bepaalt de titel (altijd "Huiswerk").
+export interface CalendarBlockEvent {
   title: string
   // ISO 8601 UTC datetime (bv. "2026-08-01T14:00:00Z") — Google's Events-resource
   // accepteert een RFC3339-tijdstip rechtstreeks in `dateTime`, geen aparte `timeZone`
@@ -22,12 +20,11 @@ export interface HomeworkSession {
 
 const CALENDAR_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
 
-function toEventResource(session: HomeworkSession, colorId: number) {
+function toEventResource(event: CalendarBlockEvent, colorId: number) {
   return {
-    // AC #2, letterlijke titel-template.
-    summary: `Huiswerk: ${session.subject} — ${session.title}`,
-    start: { dateTime: session.startsAt },
-    end: { dateTime: session.endsAt },
+    summary: event.title,
+    start: { dateTime: event.startsAt },
+    end: { dateTime: event.endsAt },
     // Google's Events-resource verwacht colorId als string ("7"), ook al is de
     // opgeslagen `homeworkCalendarColorId` in dit project een integer 1-11.
     colorId: String(colorId),
@@ -92,7 +89,7 @@ export interface CreateHomeworkEventResult {
 // retry-met-vertraging. Een falende Calendar-call laat deze aanroep gewoon falen.
 export async function createHomeworkEvent(
   userId: string,
-  session: HomeworkSession
+  event: CalendarBlockEvent
 ): Promise<CreateHomeworkEventResult | null> {
   const user = await getUserById(userId)
   if (user.homeworkCalendarColorId === null || !user.hasCalendarWriteScope) {
@@ -101,7 +98,7 @@ export async function createHomeworkEvent(
 
   const response = await calendarRequestMetVerversing(userId, user.calendarAccessToken, '', {
     method: 'POST',
-    body: JSON.stringify(toEventResource(session, user.homeworkCalendarColorId))
+    body: JSON.stringify(toEventResource(event, user.homeworkCalendarColorId))
   })
 
   if (!response.ok) {
@@ -121,7 +118,7 @@ export async function createHomeworkEvent(
 export async function updateHomeworkEvent(
   userId: string,
   googleEventId: string,
-  session: HomeworkSession
+  event: CalendarBlockEvent
 ): Promise<void> {
   const user = await getUserById(userId)
   if (user.homeworkCalendarColorId === null || !user.hasCalendarWriteScope) {
@@ -130,7 +127,7 @@ export async function updateHomeworkEvent(
 
   const response = await calendarRequestMetVerversing(userId, user.calendarAccessToken, `/${googleEventId}`, {
     method: 'PATCH',
-    body: JSON.stringify(toEventResource(session, user.homeworkCalendarColorId))
+    body: JSON.stringify(toEventResource(event, user.homeworkCalendarColorId))
   })
 
   if (!response.ok) {

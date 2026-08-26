@@ -3,7 +3,7 @@ import { placeSessionOnDate } from './session-placement'
 import { calculateStudiedrukScore, formatDayLabel } from './shortfall'
 import { addDays, availableMinutesForDate, averageDailyAvailableMinutes, calculateDoelmoment, isBefore } from './doelmoment'
 import { PRIORITY_WEIGHT, daysBetween } from './ordering'
-import { updateHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import type { Task, Session } from '../../data/schema'
 
 // Story 6.4 — energie-pad (FR23). Zelfde AD-1/AD-3-precedent als `shortfall.ts`: puur
@@ -326,22 +326,19 @@ export async function applyEnergyProposal(userId: string, proposal: EnergyPropos
     }
 
     const newPlannedMinutes = session.plannedMinutes - item.shortenMinutes
-    const endsAt = new Date(new Date(session.startsAt).getTime() + newPlannedMinutes * 60_000).toISOString()
 
     await updateSessionPlacement(session.id, {
       startsAt: session.startsAt,
-      plannedMinutes: newPlannedMinutes,
-      googleEventId: session.googleEventId
+      plannedMinutes: newPlannedMinutes
     })
 
-    if (session.googleEventId) {
-      await updateHomeworkEvent(userId, session.googleEventId, {
-        sessionId: session.id,
-        subject: task.subject,
-        title: task.title,
-        startsAt: session.startsAt,
-        endsAt
-      })
+    // Review-patch (2026-08-26): een falende Calendar-sync voor dit item mag de rest van
+    // de batch niet afbreken, en mag de al-doorgevoerde verkorting niet als 500 laten
+    // bubbelen — zelfde loggen-en-doorgaan-precedent als apply-recommendation.ts.
+    try {
+      await syncHomeworkBlocksForDate(userId, session.startsAt.slice(0, 10))
+    } catch (fout) {
+      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na inkorten van taak ${item.taskId}:`, fout)
     }
   }
 }

@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { getTasksWithSessionOnDate } from '../../data/tasks'
+import { getTasksWithSessionOnDateIncludingCompleted } from '../../data/tasks'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import type { SchoolSessionTasksResponse } from '../../../shared/types/tasks'
@@ -19,8 +19,21 @@ export default defineEventHandler(async (event): Promise<SchoolSessionTasksRespo
   }
 
   try {
-    const items = await getTasksWithSessionOnDate(session.user.id, todayInAmsterdam())
-    return items.map(({ task }) => ({ id: task.id, subject: task.subject, title: task.title }))
+    const items = await getTasksWithSessionOnDateIncludingCompleted(session.user.id, todayInAmsterdam())
+    return items.map(({ task, session: taskSession }) => ({
+      id: task.id,
+      subject: task.subject,
+      title: task.title,
+      totalMinutes: task.totalMinutes,
+      // Amendement (Hillebrand, 2026-08-26) — geplande tijd voor déze sessie, zodat de
+      // client de besteede tijd kan voorinvullen (het gebruikelijke geval: het ging zoals
+      // gepland, Evelien hoeft alleen nog op "Opslaan" te klikken).
+      plannedMinutes: taskSession.plannedMinutes,
+      // Amendement (Hillebrand, 2026-08-26) — een taak die vandaag al is afgerond (via dit
+      // scherm of live) blijft zichtbaar, duidelijk gemarkeerd, i.p.v. stilzwijgend te
+      // verdwijnen.
+      completed: task.completedAt !== null
+    }))
   } catch (fout) {
     console.error('[school-sessions] Kon taken van vandaag niet ophalen:', fout)
     return envelope(event, 500, ErrorCodes.InternalError, 'Kon taken niet ophalen.')

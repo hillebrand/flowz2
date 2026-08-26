@@ -1,6 +1,6 @@
-import { clearSessionGoogleEventId, dropTask, getSessionForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
+import { dropTask, getSessionForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
 import { updateExceptionForDate } from '../../data/availability'
-import { deleteHomeworkEvent, updateHomeworkEvent } from '../calendar-sync/homework-events'
+import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { placeSessionOnDate } from './session-placement'
 import type { ShortfallRecommendation } from './shortfall'
 
@@ -85,36 +85,36 @@ async function applyInkorten(userId: string, recommendation: ShortfallRecommenda
   }
 
   const newPlannedMinutes = existingSession.plannedMinutes - recommendation.gainMinutes
-  const endsAt = new Date(new Date(existingSession.startsAt).getTime() + newPlannedMinutes * 60_000).toISOString()
 
   await updateSessionPlacement(existingSession.id, {
     startsAt: existingSession.startsAt,
-    plannedMinutes: newPlannedMinutes,
-    googleEventId: existingSession.googleEventId
+    plannedMinutes: newPlannedMinutes
   })
 
-  if (existingSession.googleEventId) {
-    await updateHomeworkEvent(userId, existingSession.googleEventId, {
-      sessionId: existingSession.id,
-      subject: task.subject,
-      title: task.title,
-      startsAt: existingSession.startsAt,
-      endsAt
-    })
+  // Review-patch (2026-08-26): een falende Calendar-sync mag de al-doorgevoerde
+  // inkorting niet als 500 laten bubbelen naar de aanroeper — zelfde
+  // loggen-en-doorgaan-precedent als create-task.ts/delete-task.ts/recalculate.ts.
+  try {
+    await syncHomeworkBlocksForDate(userId, existingSession.startsAt.slice(0, 10))
+  } catch (fout) {
+    console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na inkorten van taak ${taskId}:`, fout)
   }
 }
 
 // Niveau 4: de taak laten vervallen (`tasks.droppedAt`, geen `sessionLogs`-rij — zie
-// `dropTask`'s eigen commentaar) en het bijbehorende Calendar-event opruimen, zelfde
+// `dropTask`'s eigen commentaar) en het bijbehorende Calendar-blok herberekenen, zelfde
 // precedent als `replanAfterSession`'s "resterende tijd 0"-tak (Story 4.7).
 async function applyVervallen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
   const taskId = stripRecommendationIdPrefix(recommendation.id, 'vervallen:')
   const existingSession = await getSessionForTask(taskId)
 
-  if (existingSession?.googleEventId) {
-    await deleteHomeworkEvent(userId, existingSession.googleEventId)
-    await clearSessionGoogleEventId(existingSession.id)
-  }
-
   await dropTask(taskId)
+
+  if (existingSession) {
+    try {
+      await syncHomeworkBlocksForDate(userId, existingSession.startsAt.slice(0, 10))
+    } catch (fout) {
+      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na vervallen van taak ${taskId}:`, fout)
+    }
+  }
 }

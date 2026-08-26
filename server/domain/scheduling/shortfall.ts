@@ -117,8 +117,8 @@ export async function calculateStudiedrukScore(userId: string, date: string): Pr
   // Fail-safe (zelfde contract als `getTodayEvents` zelf) — een mislukte Calendar-call
   // levert `null`, telt hier als "geen extra agenda-druk" (0): dit is een achtergrond-
   // wegingsfactor in een score, geen kritiek pad zoals 1.1-Home's eigen banner-logica.
-  const events = await getTodayEvents(userId, date)
-  const agendaFactor = events ? clamp01(events.length / AGENDA_DRUK_EVENT_CAP) : 0
+  const result = await getTodayEvents(userId, date)
+  const agendaFactor = result ? clamp01(result.events.length / AGENDA_DRUK_EVENT_CAP) : 0
 
   const overigeGemiddelde = (moeilijkheidFactor + deadlineFactor + agendaFactor) / 3
   const raw = (TIJDGEBREK_GEWICHT * tijdgebrekFactor + overigeGemiddelde) / (TIJDGEBREK_GEWICHT + 1)
