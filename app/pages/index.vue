@@ -2,6 +2,7 @@
 import type { FetchError } from 'ofetch'
 import type { HomePlanResponse } from '#shared/types/tasks'
 import type { AgendaConflictDto, AgendaConflictsResponse } from '#shared/types/conflict'
+import { todayInAmsterdam } from '#shared/utils/scheduling'
 
 const { loggedIn } = useUserSession()
 
@@ -147,17 +148,22 @@ function daysBetweenDateKeys(fromKey: string, toKey: string): number {
 }
 
 // Review-patch (gemeld door Hillebrand, 2026-08-30): een dag-overschrijdend event (bv.
-// 'Slaapritme' 20:15-07:00 de volgende ochtend) kreeg met alleen "minuten sinds
-// middernacht" een eindtijd die vóór de begintijd léék te liggen (07:00 < 20:15), en werd
+// 'Slaapritme' 20:15-07:30 de volgende ochtend) kreeg met alleen "minuten sinds
+// middernacht" een eindtijd die vóór de begintijd léék te liggen (07:30 < 20:15), en werd
 // daardoor als 'ongeldig' weggefilterd — ook al begint het event ruim binnen het
-// 07:00-22:00-venster. Corrigeert de eindtijd met het aantal dagen verschil t.o.v. de
-// startdag, zodat zo'n event een correcte positieve duur krijgt.
-function eventMinutesRange(event: { startsAt: string, endsAt: string }): { start: number, end: number } | null {
+// 07:00-22:00-venster. Beide tijdstippen worden hier uitgedrukt in minuten t.o.v. de
+// middernacht van de dag die de dayview toont (`today`, niet de eigen startdag van het
+// event) — anders krijgt hetzelfde event op de ÓCHTEND na de startdag (waar alleen het
+// 00:00-07:30-staartje relevant is) alsnog de verkeerde positie: verankerd op de eigen
+// startdag zou het als een blok van 20:15 tot 22:00 renderen i.p.v. als 07:00-07:30.
+function eventMinutesRange(event: { startsAt: string, endsAt: string }, today: string): { start: number, end: number } | null {
   const startParts = amsterdamDateTimeParts(event.startsAt)
   const endParts = amsterdamDateTimeParts(event.endsAt)
   if (!startParts || !endParts) return null
-  const dayOffset = daysBetweenDateKeys(startParts.dateKey, endParts.dateKey)
-  return { start: startParts.minutes, end: endParts.minutes + dayOffset * 1440 }
+  return {
+    start: startParts.minutes + daysBetweenDateKeys(today, startParts.dateKey) * 1440,
+    end: endParts.minutes + daysBetweenDateKeys(today, endParts.dateKey) * 1440
+  }
 }
 
 function formatTimeAmsterdam(iso: string): string {
@@ -201,8 +207,10 @@ interface CalendarBlock {
 // zodat de homepage-agenda dezelfde events bevat als het weekoverzicht (dat geen
 // venster hanteert) — gemeld door Hillebrand (2026-08-30): events buiten 07:00-22:00
 // ontbraken stilzwijgend op de homepage terwijl het weekoverzicht ze wél toonde.
+const today = todayInAmsterdam()
+
 function isOutsideWindow(event: { startsAt: string, endsAt: string }): boolean {
-  const range = eventMinutesRange(event)
+  const range = eventMinutesRange(event, today)
   if (!range || range.end <= range.start) return false
   return range.end <= WINDOW_START_HOUR * 60 || range.start >= WINDOW_END_HOUR * 60
 }
@@ -211,7 +219,7 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   (plan.value?.calendarDayEvents ?? [])
     .filter(event => !isAllDayEvent(event) && !isOutsideWindow(event))
     .flatMap((event) => {
-      const range = eventMinutesRange(event)
+      const range = eventMinutesRange(event, today)
       if (!range || range.end <= range.start) return []
 
       const startMinutes = clamp(range.start - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
