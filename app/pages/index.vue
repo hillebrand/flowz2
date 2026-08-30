@@ -383,15 +383,15 @@ const outsideWindowCalendarEvents = computed(() =>
 
 .home-header-time-indicator {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-warning-banner {
   margin: 0.75rem 1.5rem 0;
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
 }
 
 .home-warning-banner p {
@@ -403,8 +403,8 @@ const outsideWindowCalendarEvents = computed(() =>
   margin: 0.75rem 1.5rem 0;
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
 }
 
 .home-calendar-warnings p {
@@ -425,14 +425,14 @@ const outsideWindowCalendarEvents = computed(() =>
   flex-direction: column;
   gap: 0.5rem;
   padding: 1.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
 }
 
 .home-task-subject {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-task-name {
@@ -444,7 +444,7 @@ const outsideWindowCalendarEvents = computed(() =>
 .home-task-duration {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-task-start-button {
@@ -453,8 +453,8 @@ const outsideWindowCalendarEvents = computed(() =>
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -464,20 +464,20 @@ const outsideWindowCalendarEvents = computed(() =>
   margin-top: 0.5rem;
   text-align: right;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-empty-state,
 .home-error-state {
   padding: 3rem 1.5rem;
   text-align: center;
-  color: #4b5563;
+  color: var(--color-text-secondary);
 }
 
 .home-today-heading {
   margin: 1.5rem 1.5rem 0.5rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border-subtle);
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -512,34 +512,34 @@ const outsideWindowCalendarEvents = computed(() =>
   align-items: flex-start;
   gap: 0.125rem;
   padding: 0.5rem 0.625rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   text-align: left;
 }
 
 .home-later-item-title {
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .home-later-item-subject {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-later-empty {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-completed-list {
   list-style: none;
   margin: 0.75rem 0 0;
   padding: 0.75rem 0 0;
-  border-top: 1px dashed #e5e7eb;
+  border-top: 1px dashed var(--color-border-subtle);
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
@@ -554,40 +554,40 @@ const outsideWindowCalendarEvents = computed(() =>
 
 .home-completed-item-title {
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: var(--color-text-faint);
 }
 
 .home-completed-item-subject {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-faint);
 }
 
 .home-completed-badge {
   margin-left: auto;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .home-calendar-error {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-calendar-dayview {
   position: relative;
   height: 16rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
-  background: #fafafa;
+  background: var(--color-surface-muted);
 }
 
 .home-calendar-hour-marker {
   position: absolute;
   left: 0.375rem;
   font-size: 0.6875rem;
-  color: #9ca3af;
+  color: var(--color-text-faint);
 }
 
 .home-calendar-block {
@@ -597,8 +597,8 @@ const outsideWindowCalendarEvents = computed(() =>
   min-height: 0.75rem;
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: var(--color-accent-bg-subtle);
+  color: var(--color-accent-text-strong);
   font-size: 0.6875rem;
   overflow: hidden;
   white-space: nowrap;
@@ -608,13 +608,13 @@ const outsideWindowCalendarEvents = computed(() =>
 .home-calendar-all-day {
   margin: 0 0 0.375rem;
   font-size: 0.6875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .home-calendar-outside-window {
   margin: 0 0 0.375rem;
   font-size: 0.6875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 @media (max-width: 768px) {
@@ -632,7 +632,7 @@ const outsideWindowCalendarEvents = computed(() =>
 
 .home-skeleton-block {
   border-radius: 0.5rem;
-  background: #e5e7eb;
+  background: var(--color-skeleton);
   animation: home-skeleton-pulse 1.4s ease-in-out infinite;
 }
 

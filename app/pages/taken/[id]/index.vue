@@ -186,7 +186,7 @@ async function bevestigVerwijderen() {
 .detail-back-link {
   font-size: 0.875rem;
   text-decoration: none;
-  color: #2563eb;
+  color: var(--color-accent);
   border: none;
   background: none;
   padding: 0;
@@ -202,7 +202,7 @@ async function bevestigVerwijderen() {
 
 .detail-skeleton-block {
   border-radius: 0.5rem;
-  background: #e5e7eb;
+  background: var(--color-skeleton);
   animation: detail-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -231,7 +231,7 @@ async function bevestigVerwijderen() {
   margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   letter-spacing: 0.02em;
 }
 
@@ -244,7 +244,7 @@ async function bevestigVerwijderen() {
 .detail-deadline {
   margin: 0;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .detail-progress {
@@ -254,20 +254,20 @@ async function bevestigVerwijderen() {
 .detail-progress-bar {
   height: 0.375rem;
   border-radius: 999px;
-  background: #e5e7eb;
+  background: var(--color-skeleton);
   overflow: hidden;
 }
 
 .detail-progress-bar-fill {
   height: 100%;
-  background: #2563eb;
+  background: var(--color-accent);
   border-radius: 999px;
 }
 
 .detail-progress-text {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .detail-action-section {
@@ -279,10 +279,10 @@ async function bevestigVerwijderen() {
 
 .detail-delete-button {
   padding: 0.625rem 1.25rem;
-  border: 1px solid #dc2626;
+  border: 1px solid var(--color-danger);
   border-radius: 999px;
-  background: #fff;
-  color: #dc2626;
+  background: var(--color-surface);
+  color: var(--color-danger);
   font-weight: 600;
   cursor: pointer;
 }
@@ -291,8 +291,8 @@ async function bevestigVerwijderen() {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -308,7 +308,7 @@ async function bevestigVerwijderen() {
 }
 
 .detail-delete-confirm-dialog {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: 24rem;
@@ -321,7 +321,7 @@ async function bevestigVerwijderen() {
 .detail-delete-error {
   margin: 0;
   font-size: 0.8125rem;
-  color: #b91c1c;
+  color: var(--color-danger-strong);
 }
 
 .detail-delete-confirm-actions {
@@ -332,9 +332,9 @@ async function bevestigVerwijderen() {
 
 .detail-delete-cancel-button {
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -342,8 +342,8 @@ async function bevestigVerwijderen() {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 999px;
-  background: #dc2626;
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }

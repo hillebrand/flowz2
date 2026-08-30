@@ -169,7 +169,7 @@ onMounted(loadWeek)
   padding: 0;
   border: none;
   background: none;
-  color: #4b5563;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-weight: 500;
   font: inherit;
@@ -183,7 +183,7 @@ onMounted(loadWeek)
 }
 
 .week-status {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .week-skeleton {
@@ -195,7 +195,7 @@ onMounted(loadWeek)
 .week-skeleton-row {
   height: 5rem;
   border-radius: 0.75rem;
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 37%, #f3f4f6 63%);
+  background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-skeleton) 37%, var(--color-surface-muted) 63%);
   background-size: 400% 100%;
   animation: week-skeleton-pulse 1.4s ease infinite;
 }
@@ -212,13 +212,13 @@ onMounted(loadWeek)
 }
 
 .week-status--error {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .week-retry {
   border: none;
   background: none;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
@@ -232,7 +232,7 @@ onMounted(loadWeek)
 }
 
 .week-day-row {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
   padding: 1rem;
 }
@@ -248,15 +248,15 @@ onMounted(loadWeek)
   margin: 0 0 0.5rem;
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
 
 .week-day-figures {
   margin: 0 0 0.5rem;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .week-day-tasks,
@@ -264,27 +264,27 @@ onMounted(loadWeek)
   margin: 0 0 0.5rem;
   padding-left: 1.25rem;
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .week-day-calendar-items {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .week-day-tasks--empty {
   padding-left: 0;
   list-style: none;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .week-day-calendar-items--error {
   padding-left: 0;
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .week-day-suggestion-card {
   margin-top: 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
 }
@@ -294,7 +294,7 @@ onMounted(loadWeek)
   font-weight: 700;
   font-size: 0.8125rem;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .week-day-suggestion-description {
@@ -310,7 +310,7 @@ onMounted(loadWeek)
 
 .week-day-suggestion-gain {
   font-weight: 700;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .week-day-suggestion-accept-button {
@@ -320,8 +320,8 @@ onMounted(loadWeek)
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -333,7 +333,7 @@ onMounted(loadWeek)
 
 .week-day-suggestion-error {
   margin: 0.5rem 0 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 
@@ -341,7 +341,7 @@ onMounted(loadWeek)
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: week-spin 700ms linear infinite;
 }

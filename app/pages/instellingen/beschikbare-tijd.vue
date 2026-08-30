@@ -557,7 +557,7 @@ async function wijzigHomeworkColor(event: Event) {
   border: none;
   background: none;
   padding: 0;
-  color: #2563eb;
+  color: var(--color-accent);
   text-decoration: none;
   font-weight: 600;
   font-size: 1rem;
@@ -566,13 +566,13 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-back-link:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
 .avail-load-error {
   padding: 1.5rem;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-weight: 500;
 }
 
@@ -619,8 +619,8 @@ async function wijzigHomeworkColor(event: Event) {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   font-size: 1.125rem;
   line-height: 1;
   cursor: pointer;
@@ -632,7 +632,7 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-day-button:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
@@ -646,7 +646,7 @@ async function wijzigHomeworkColor(event: Event) {
 .avail-skeleton-row {
   height: 2rem;
   border-radius: 0.5rem;
-  background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 37%, #f0f0f0 63%);
+  background: linear-gradient(90deg, var(--color-border-subtle) 25%, #f8f8f8 37%, var(--color-border-subtle) 63%);
   background-size: 400% 100%;
   animation: avail-skeleton-shimmer 1.4s ease infinite;
 }
@@ -673,7 +673,7 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-calendar {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
   padding: 1rem;
 }
@@ -694,8 +694,8 @@ async function wijzigHomeworkColor(event: Event) {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   font-size: 1.125rem;
   line-height: 1;
   cursor: pointer;
@@ -707,7 +707,7 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-calendar-nav-button:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
@@ -721,7 +721,7 @@ async function wijzigHomeworkColor(event: Event) {
 .avail-calendar-weekday-header {
   margin-bottom: 0.25rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-align: center;
 }
 
@@ -740,12 +740,12 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-calendar-day:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-muted);
 }
 
 .avail-calendar-day--selected {
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 .avail-calendar-day--exception::after {
@@ -757,22 +757,22 @@ async function wijzigHomeworkColor(event: Event) {
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  background: #16a34a;
+  background: var(--color-success);
 }
 
 .avail-calendar-day--selected.avail-calendar-day--exception::after {
-  background: #fff;
+  background: var(--color-surface);
 }
 
 .avail-calendar-day:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
 .avail-exception-panel {
   margin-top: 0.75rem;
   padding: 1rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
 }
 
@@ -792,13 +792,13 @@ async function wijzigHomeworkColor(event: Event) {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   cursor: pointer;
 }
 
 .avail-exception-close-button:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
@@ -821,7 +821,7 @@ async function wijzigHomeworkColor(event: Event) {
 
 .avail-homework-sync-description {
   margin: 0 0 1rem;
-  color: #4b5563;
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -846,9 +846,9 @@ async function wijzigHomeworkColor(event: Event) {
 .avail-homework-color-select {
   margin-left: auto;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  background: #fff;
+  background: var(--color-surface);
   font-family: inherit;
   font-size: 0.875rem;
 }
@@ -859,13 +859,13 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-homework-color-select:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
 .avail-homework-color-error {
   margin: 0.5rem 0 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 

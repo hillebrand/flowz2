@@ -1019,8 +1019,8 @@ async function onSubmit() {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -1028,7 +1028,7 @@ async function onSubmit() {
 .taak-cancel-link:focus-visible,
 .taak-save-button:focus-visible,
 .taak-segmented-button:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
@@ -1065,8 +1065,8 @@ async function onSubmit() {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -1079,7 +1079,7 @@ async function onSubmit() {
   border: none;
   background: none;
   padding: 0;
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 0.8125rem;
   cursor: pointer;
   white-space: nowrap;
@@ -1088,9 +1088,9 @@ async function onSubmit() {
 .taak-subtask-add-button {
   align-self: flex-start;
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.875rem;
@@ -1113,13 +1113,13 @@ async function onSubmit() {
 
 .taak-total-time-separator {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .taak-total-time-calculated-hint {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .taak-field {
@@ -1135,7 +1135,7 @@ async function onSubmit() {
 
 .taak-input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   font-family: inherit;
   font-size: 0.9375rem;
@@ -1157,12 +1157,12 @@ async function onSubmit() {
 }
 
 .taak-input[aria-invalid='true'] {
-  border-color: #b45309;
+  border-color: var(--color-warning-text);
 }
 
 .taak-error {
   margin: 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 
@@ -1173,18 +1173,18 @@ async function onSubmit() {
 
 .taak-segmented-button {
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.875rem;
 }
 
 .taak-segmented-button--active {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 .taak-segmented-button:disabled {
@@ -1204,7 +1204,7 @@ async function onSubmit() {
 }
 
 .taak-cancel-link {
-  color: #4b5563;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-weight: 500;
 }
@@ -1221,8 +1221,8 @@ async function onSubmit() {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1236,7 +1236,7 @@ async function onSubmit() {
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: taak-save-spin 700ms linear infinite;
 }
@@ -1255,18 +1255,18 @@ async function onSubmit() {
 
 .taak-subject-loading {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .taak-save-error {
   margin: 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-weight: 500;
 }
 
 .taak-save-confirmation {
   margin: 0;
-  color: #16a34a;
+  color: var(--color-success);
   font-weight: 500;
 }
 
@@ -1281,7 +1281,7 @@ async function onSubmit() {
 }
 
 .taak-confirm-dialog {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: 24rem;
@@ -1298,23 +1298,23 @@ async function onSubmit() {
 .taak-confirm-leave {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   cursor: pointer;
 }
 
 .taak-confirm-leave {
-  background: #b91c1c;
-  border-color: #b91c1c;
-  color: #fff;
+  background: var(--color-danger-strong);
+  border-color: var(--color-danger-strong);
+  color: var(--color-accent-contrast);
 }
 
 .taak-confirm-confirm {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  border: 1px solid #2563eb;
-  background: #2563eb;
-  color: #fff;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   cursor: pointer;
 }
 
@@ -1324,7 +1324,7 @@ async function onSubmit() {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
 }
 
@@ -1334,8 +1334,8 @@ async function onSubmit() {
   gap: 0.375rem;
   padding: 0.25rem 0.5rem;
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-accent-bg-subtle);
+  color: var(--color-accent-strong);
   font-size: 0.875rem;
 }
 

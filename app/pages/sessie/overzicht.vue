@@ -257,7 +257,7 @@ function terugNaarHome() {
   border: none;
   background: none;
   padding: 0;
-  color: #2563eb;
+  color: var(--color-accent);
   font-size: 0.875rem;
   cursor: pointer;
 }
@@ -269,13 +269,13 @@ function terugNaarHome() {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .wrap-deviation-section {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  background: #f3f4f6;
+  background: var(--color-surface-muted);
 }
 
 .wrap-deviation-banner {
@@ -298,18 +298,18 @@ function terugNaarHome() {
 .wrap-remaining-input {
   width: 4.5rem;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
 .wrap-remaining-separator {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .wrap-error {
   margin: 0;
   font-size: 0.8125rem;
-  color: #b91c1c;
+  color: var(--color-danger-strong);
 }
 
 .wrap-exit-section {
@@ -322,8 +322,8 @@ function terugNaarHome() {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }

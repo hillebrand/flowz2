@@ -202,17 +202,17 @@ onMounted(laadVoorstel)
 }
 
 .conflict-status {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .conflict-status--error {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .conflict-retry {
   border: none;
   background: none;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
@@ -235,8 +235,8 @@ onMounted(laadVoorstel)
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   font-size: 1.125rem;
   cursor: pointer;
 }
@@ -254,7 +254,7 @@ onMounted(laadVoorstel)
 
 .conflict-error {
   margin: 0 0 0.5rem;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 
@@ -265,8 +265,8 @@ onMounted(laadVoorstel)
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
@@ -281,7 +281,7 @@ onMounted(laadVoorstel)
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: conflict-spin 700ms linear infinite;
 }
@@ -307,13 +307,13 @@ onMounted(laadVoorstel)
 .conflict-summary-changes--empty {
   padding-left: 0;
   list-style: none;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .conflict-summary-bottleneck-warning {
   display: block;
   margin: 0 0 1.5rem;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-weight: 600;
   text-decoration: none;
 }

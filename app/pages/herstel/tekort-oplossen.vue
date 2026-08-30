@@ -228,22 +228,22 @@ onMounted(loadShortfall)
 
 .shortfall-reassurance-text {
   margin: 0 0 1.5rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.9375rem;
 }
 
 .shortfall-status {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .shortfall-status--error {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .shortfall-retry {
   border: none;
   background: none;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
@@ -259,7 +259,7 @@ onMounted(loadShortfall)
 .shortfall-resolved {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .shortfall-recommendations {
@@ -269,7 +269,7 @@ onMounted(loadShortfall)
 }
 
 .shortfall-recommendation-card {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 1rem;
 }
@@ -279,7 +279,7 @@ onMounted(loadShortfall)
   font-weight: 700;
   font-size: 0.8125rem;
   text-transform: uppercase;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .shortfall-recommendation-description {
@@ -295,7 +295,7 @@ onMounted(loadShortfall)
 
 .shortfall-recommendation-gain {
   font-weight: 700;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .shortfall-recommendation-actions {
@@ -305,9 +305,9 @@ onMounted(loadShortfall)
 
 .shortfall-recommendation-reject-button {
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -318,8 +318,8 @@ onMounted(loadShortfall)
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -334,7 +334,7 @@ onMounted(loadShortfall)
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: shortfall-spin 700ms linear infinite;
 }
@@ -353,7 +353,7 @@ onMounted(loadShortfall)
 
 .shortfall-recommendation-error {
   margin: 0.5rem 0 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 

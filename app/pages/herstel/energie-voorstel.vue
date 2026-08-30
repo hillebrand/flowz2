@@ -155,23 +155,23 @@ onUnmounted(() => {
 }
 
 .energy-back-link {
-  color: #4b5563;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-weight: 500;
 }
 
 .energy-status {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .energy-status--error {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .energy-retry {
   border: none;
   background: none;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
@@ -190,7 +190,7 @@ onUnmounted(() => {
 
 .energy-reassurance-text {
   margin: 0;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.9375rem;
 }
 
@@ -211,7 +211,7 @@ onUnmounted(() => {
 }
 
 .energy-change-item {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   font-size: 0.9375rem;
@@ -219,7 +219,7 @@ onUnmounted(() => {
 }
 
 .energy-empty-text {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .energy-action-section {
@@ -237,8 +237,8 @@ onUnmounted(() => {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
@@ -253,7 +253,7 @@ onUnmounted(() => {
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: energy-spin 700ms linear infinite;
 }
@@ -272,7 +272,7 @@ onUnmounted(() => {
 
 .energy-error {
   margin: 0.5rem 0 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 

@@ -176,7 +176,7 @@ onMounted(() => {
 .tasks-new-button {
   font-size: 0.875rem;
   text-decoration: none;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .tasks-back-link {
@@ -188,7 +188,7 @@ onMounted(() => {
 
 .tasks-new-button {
   padding: 0.5rem 1rem;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--color-accent);
   border-radius: 999px;
 }
 
@@ -201,7 +201,7 @@ onMounted(() => {
 
 .tasks-skeleton-block {
   border-radius: 0.5rem;
-  background: #e5e7eb;
+  background: var(--color-skeleton);
   animation: tasks-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -221,7 +221,7 @@ onMounted(() => {
 
 .tasks-error-state {
   padding: 1.5rem 1rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .tasks-list-section {
@@ -241,13 +241,13 @@ onMounted(() => {
   margin: 0 1rem;
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-tint-bg);
+  color: var(--color-success-tint-text);
   font-size: 0.875rem;
 }
 
 .tasks-empty-state {
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .tasks-groups {
@@ -266,7 +266,7 @@ onMounted(() => {
   margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .tasks-item {
@@ -274,14 +274,14 @@ onMounted(() => {
   width: 100%;
   text-align: left;
   padding: 1rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
 .tasks-item:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -289,7 +289,7 @@ onMounted(() => {
   margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   letter-spacing: 0.02em;
 }
 
@@ -306,20 +306,20 @@ onMounted(() => {
 .tasks-item-progress-bar {
   height: 0.375rem;
   border-radius: 999px;
-  background: #e5e7eb;
+  background: var(--color-skeleton);
   overflow: hidden;
 }
 
 .tasks-item-progress-bar-fill {
   height: 100%;
-  background: #2563eb;
+  background: var(--color-accent);
   border-radius: 999px;
 }
 
 .tasks-item-progress-text {
   margin: 0.375rem 0 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 @media (min-width: 1024px) {

@@ -3,9 +3,24 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-07-28',
   devtools: { enabled: true },
   modules: ['nuxt-auth-utils'],
+  css: ['~/assets/css/themes.css'],
   app: {
     head: {
-      htmlAttrs: { lang: 'nl' }
+      htmlAttrs: { lang: 'nl' },
+      // Kleurthema's — vóór hydratie de data-theme-*-attributen zetten (uit localStorage,
+      // met systeemvoorkeur als fallback) voorkomt een zichtbare flits van het verkeerde
+      // thema. Zie app/composables/useTheme.ts voor de vervolgstate na hydratie; deze
+      // sleutels/waarden moeten in sync blijven met dat bestand.
+      script: [{
+        innerHTML: `(function(){try{
+          var c=localStorage.getItem('flowz-theme-color')||'blauw';
+          var m=localStorage.getItem('flowz-theme-mode')||'systeem';
+          var r=m==='systeem'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'donker':'licht'):m;
+          var el=document.documentElement;
+          el.setAttribute('data-theme-color',c);
+          el.setAttribute('data-theme-mode',r);
+        }catch(e){}})();`
+      }]
     }
   },
   // Alleen niet-geheime waarden hier (gewone env vars, zie sst.config.ts).

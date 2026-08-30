@@ -174,7 +174,7 @@ async function startSessieActief() {
   background: none;
   padding: 0;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -183,13 +183,13 @@ async function startSessieActief() {
 .prep-error-state {
   padding: 3rem 1.5rem;
   text-align: center;
-  color: #4b5563;
+  color: var(--color-text-secondary);
 }
 
 .prep-not-found a {
   display: inline-block;
   margin-top: 0.5rem;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .prep-main-section {
@@ -208,7 +208,7 @@ async function startSessieActief() {
 .prep-task-subject {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .prep-task-name {
@@ -230,7 +230,7 @@ async function startSessieActief() {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .prep-start-button {
@@ -239,8 +239,8 @@ async function startSessieActief() {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }

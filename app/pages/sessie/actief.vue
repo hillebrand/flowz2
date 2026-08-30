@@ -313,21 +313,21 @@ onUnmounted(() => {
 }
 
 .active-timer--over {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .active-progress-indicator {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .active-pause-button {
   align-self: flex-start;
   padding: 0.5rem 1.25rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -335,8 +335,8 @@ onUnmounted(() => {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #dc2626;
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -351,7 +351,7 @@ onUnmounted(() => {
 .active-task-subject-fallback {
   margin: 0;
   font-size: 0.9375rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .active-task-name-fallback {
@@ -384,17 +384,17 @@ onUnmounted(() => {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
 
 .active-subtask-later-button {
   padding: 0.625rem 1.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 
@@ -409,7 +409,7 @@ onUnmounted(() => {
 }
 
 .active-leave-confirm-dialog {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 0.75rem;
   padding: 1.5rem;
   max-width: 22rem;
@@ -428,17 +428,17 @@ onUnmounted(() => {
   padding: 0.625rem 1.25rem;
   border: none;
   border-radius: 999px;
-  background: #dc2626;
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
 
 .active-leave-confirm-no {
   padding: 0.625rem 1.25rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
 }
 

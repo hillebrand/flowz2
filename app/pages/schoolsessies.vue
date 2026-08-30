@@ -664,7 +664,7 @@ onMounted(loadTodayTasks)
   border: none;
   padding: 0;
   font-size: 0.875rem;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
 }
 
@@ -676,17 +676,17 @@ onMounted(loadTodayTasks)
 .school-skeleton-row {
   height: 2.5rem;
   border-radius: 0.5rem;
-  background: #f3f4f6;
+  background: var(--color-surface-muted);
   margin-bottom: 0.75rem;
 }
 
 .school-status--error {
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .school-today-empty {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin: 0 0 1rem;
 }
 
@@ -702,7 +702,7 @@ onMounted(loadTodayTasks)
 .school-session-row {
   position: relative;
   padding: 0.75rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
 }
 
@@ -715,7 +715,7 @@ onMounted(loadTodayTasks)
 
 .school-session-task-subject {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .school-session-task-title {
@@ -724,19 +724,19 @@ onMounted(loadTodayTasks)
 }
 
 .school-session-row--completed {
-  background: #f9fafb;
+  background: var(--color-surface-muted);
 }
 
 .school-session-row--completed .school-session-task-title,
 .school-session-row--completed .school-session-task-subject {
-  color: #9ca3af;
+  color: var(--color-text-faint);
 }
 
 .school-completed-badge {
   margin-left: auto;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .school-session-row-fields {
@@ -760,7 +760,7 @@ onMounted(loadTodayTasks)
   border: none;
   font-size: 0.8125rem;
   line-height: 1;
-  color: #9ca3af;
+  color: var(--color-text-faint);
   cursor: pointer;
   padding: 0.25rem 0.375rem;
 }
@@ -774,20 +774,20 @@ onMounted(loadTodayTasks)
 .school-session-new-task-title-input {
   flex: 1;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
 .school-session-new-task-deadline-input {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
 .school-session-time-input {
   width: 6rem;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
@@ -800,7 +800,7 @@ onMounted(loadTodayTasks)
 
 .school-session-search-input {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
@@ -817,16 +817,16 @@ onMounted(loadTodayTasks)
   width: 100%;
   text-align: left;
   padding: 0.375rem 0.5rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 0.375rem;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   font-size: 0.875rem;
 }
 
 .school-search-empty {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .school-remaining-fields {
@@ -838,24 +838,24 @@ onMounted(loadTodayTasks)
 
 .school-remaining-label {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .school-remaining-input {
   width: 4.5rem;
   padding: 0.375rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
 }
 
 .school-remaining-separator {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .school-remaining-hint {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-faint);
 }
 
 .school-extra-buttons {
@@ -867,15 +867,15 @@ onMounted(loadTodayTasks)
 .school-session-add-row-button {
   flex: 1;
   background: none;
-  border: 1px dashed #d1d5db;
+  border: 1px dashed var(--color-border);
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
 }
 
 .school-error {
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.875rem;
   margin: 0 0 0.75rem;
 }
@@ -884,7 +884,7 @@ onMounted(loadTodayTasks)
   background: none;
   border: none;
   padding: 0;
-  color: #2563eb;
+  color: var(--color-accent);
   text-decoration: underline;
   cursor: pointer;
   font-size: inherit;
@@ -895,8 +895,8 @@ onMounted(loadTodayTasks)
   padding: 0.75rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }

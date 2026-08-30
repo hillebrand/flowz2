@@ -102,7 +102,7 @@ const googleLoginHref = computed(() =>
   align-items: center;
   justify-content: center;
   padding: var(--space-md);
-  background: linear-gradient(150deg, #eaf1fd 0%, #fbeff2 50%, #eef7f2 100%);
+  background: var(--color-login-gradient);
   font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
@@ -125,7 +125,7 @@ const googleLoginHref = computed(() =>
   height: 26rem;
   top: -8rem;
   left: -8rem;
-  background: #bfdbfe;
+  background: var(--color-accent-bg-subtle);
 }
 
 .login-blob--two {
@@ -133,7 +133,7 @@ const googleLoginHref = computed(() =>
   height: 22rem;
   bottom: -7rem;
   right: -7rem;
-  background: #bbf7d0;
+  background: var(--color-success-bg);
 }
 
 .login-card {
@@ -146,10 +146,10 @@ const googleLoginHref = computed(() =>
   max-width: 22rem;
   padding: 3rem var(--space-lg);
   border-radius: 1.75rem;
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--color-surface-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 20px 50px -20px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 20px 50px -20px rgba(var(--color-accent-rgb), 0.25);
   text-align: center;
 }
 
@@ -158,23 +158,23 @@ const googleLoginHref = computed(() =>
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .login-brand-dot {
-  color: #86efac;
+  color: var(--color-success);
 }
 
 .login-tagline {
   font-size: 0.9375rem;
   font-weight: 400;
   line-height: 1.5;
-  color: #7c7a85;
+  color: var(--color-text-muted);
   margin: 0 0 var(--space-sm);
 }
 
 .login-error {
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.875rem;
   font-weight: 500;
   margin: 0;
@@ -188,27 +188,29 @@ const googleLoginHref = computed(() =>
   margin-top: var(--space-sm);
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: 0 12px 25px -12px rgba(37, 99, 235, 0.55);
+  box-shadow: 0 12px 25px -12px rgba(var(--color-accent-rgb), 0.55);
   transition: transform 250ms ease, box-shadow 250ms ease, background 250ms ease;
 }
 
 .login-google-button .login-google-icon {
+  /* Blijft altijd wit: de Google "G" (hierboven, eigen brand-kleuren) heeft een lichte
+     achtergrond nodig om leesbaar te blijven, ongeacht het gekozen kleurthema. */
   background: #fff;
   border-radius: 50%;
   padding: 3px;
 }
 
 .login-google-button:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-strong);
   transform: translateY(-1px);
-  box-shadow: 0 14px 28px -12px rgba(37, 99, 235, 0.6);
+  box-shadow: 0 14px 28px -12px rgba(var(--color-accent-rgb), 0.6);
 }
 
 .login-google-button:active {
@@ -216,7 +218,7 @@ const googleLoginHref = computed(() =>
 }
 
 .login-google-button:focus-visible {
-  outline: 2px solid #a7f3d0;
+  outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
 }
 
@@ -227,7 +229,7 @@ const googleLoginHref = computed(() =>
   margin-top: var(--space-sm);
   font-size: 0.8125rem;
   font-weight: 400;
-  color: #7c7a85;
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
@@ -235,7 +237,7 @@ const googleLoginHref = computed(() =>
   width: 1rem;
   height: 1rem;
   cursor: pointer;
-  accent-color: #2563eb;
+  accent-color: var(--color-accent);
 }
 
 /* Page state "Bezig" (5.1-spec): tijdens de redirect naar Google is de knop inactief,

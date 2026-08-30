@@ -183,7 +183,7 @@ async function bevestigen() {
 }
 
 .reason-back-link {
-  color: #4b5563;
+  color: var(--color-text-secondary);
   text-decoration: none;
   font-weight: 500;
 }
@@ -210,17 +210,17 @@ async function bevestigen() {
   align-items: flex-start;
   gap: 0.375rem;
   padding: 1.25rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   text-align: left;
   font-family: inherit;
 }
 
 .reason-card--selected {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px #2563eb;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .reason-card-icon {
@@ -233,7 +233,7 @@ async function bevestigen() {
 
 .reason-card-subtitle {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .reason-time-section {
@@ -258,13 +258,13 @@ async function bevestigen() {
 
 .reason-time-field-label {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .reason-time-input {
   width: 6rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   font-family: inherit;
   font-size: 0.9375rem;
@@ -272,7 +272,7 @@ async function bevestigen() {
 
 .reason-error {
   margin: 0.5rem 0 0;
-  color: #b45309;
+  color: var(--color-warning-text);
   font-size: 0.8125rem;
 }
 
@@ -291,8 +291,8 @@ async function bevestigen() {
   padding: 0.625rem 1.5rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
@@ -306,7 +306,7 @@ async function bevestigen() {
   width: 0.875rem;
   height: 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
+  border-top-color: var(--color-accent-contrast);
   border-radius: 999px;
   animation: reason-spin 700ms linear infinite;
 }

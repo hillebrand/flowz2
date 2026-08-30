@@ -1,0 +1,126 @@
+/*
+ * Kleurthema's (gemeld door Hillebrand, 2026-08-30): 3 accentkleuren (blauw/groen/paars),
+ * elk met een lichte en donkere modus. `blauw` + `licht` is bewust identiek aan de kleuren
+ * die tot nu toe overal hardcoded stonden, zodat de standaardweergave niet verandert.
+ *
+ * Twee onafhankelijke attributen op <html>, gezet door het blocking init-script in
+ * nuxt.config.ts (`app.head.script`, vóór hydratie, tegen een flits van het verkeerde
+ * thema) en daarna beheerd door app/composables/useTheme.ts:
+ *   data-theme-color="blauw|groen|paars"
+ *   data-theme-mode="licht|donker"        (afgeleid van de opgeslagen voorkeur
+ *                                           licht/donker/systeem — "systeem" zelf komt
+ *                                           hier nooit in terecht, zie useTheme.ts)
+ *
+ * Alleen de accentkleur is aan de kleurkeuze gekoppeld; status-kleuren (succes/waarschuwing/
+ * fout) en de neutrale schaal (achtergrond/rand/tekst) zijn gelijk voor alle 3 kleurthema's
+ * en wisselen alleen mee met licht/donker.
+ */
+
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
+  --color-border: #d1d5db;
+  --color-border-subtle: #e5e7eb;
+  --color-text: #374151;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+  --color-skeleton: #e5e7eb;
+
+  --color-success: #16a34a;
+  --color-success-bg: #a7f3d0;
+  --color-success-tint-bg: #dcfce7;
+  --color-success-tint-text: #166534;
+  --color-warning-text: #b45309;
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+
+  --color-accent-contrast: #ffffff;
+
+  /* Alleen voor inloggen.vue: het lichte glas-kaarteffect (rgba-achtergrond) en de
+     decoratieve pagina-achtergrond achter de kaart, per modus (niet per kleurthema). */
+  --color-surface-glass: rgb(255 255 255 / 70%);
+  --color-login-gradient: linear-gradient(150deg, #eaf1fd 0%, #fbeff2 50%, #eef7f2 100%);
+}
+
+html[data-theme-mode='donker'] {
+  --color-bg: #111827;
+  --color-surface: #1f2937;
+  --color-surface-muted: #24303f;
+  --color-border: #374151;
+  --color-border-subtle: #374151;
+  --color-text: #f3f4f6;
+  --color-text-secondary: #d1d5db;
+  --color-text-muted: #9ca3af;
+  --color-text-faint: #6b7280;
+  --color-skeleton: #374151;
+
+  --color-success: #4ade80;
+  --color-success-bg: #14532d;
+  --color-success-tint-bg: #14532d;
+  --color-success-tint-text: #bbf7d0;
+  --color-warning-text: #fbbf24;
+  --color-danger: #f87171;
+  --color-danger-strong: #ef4444;
+
+  --color-surface-glass: rgb(31 41 55 / 70%);
+  --color-login-gradient: linear-gradient(150deg, #111827 0%, #1a1f2e 50%, #10151f 100%);
+}
+
+/* Blauw (standaard) — licht = de originele, tot nu toe hardcoded kleuren.
+   --color-accent-rgb is de "r, g, b"-vorm van --color-accent, nodig voor rgba()-gebruik
+   (bv. box-shadows) waar een CSS-variabele niet direct binnen rgba() kan staan. */
+html[data-theme-color='blauw'] {
+  --color-accent: #2563eb;
+  --color-accent-rgb: 37, 99, 235;
+  --color-accent-strong: #1d4ed8;
+  --color-accent-bg-subtle: #dbeafe;
+  --color-accent-text-strong: #1e3a8a;
+}
+
+html[data-theme-color='blauw'][data-theme-mode='donker'] {
+  --color-accent: #3b82f6;
+  --color-accent-rgb: 59, 130, 246;
+  --color-accent-strong: #60a5fa;
+  --color-accent-bg-subtle: #1e3a8a;
+  --color-accent-text-strong: #bfdbfe;
+}
+
+html[data-theme-color='groen'] {
+  --color-accent: #16a34a;
+  --color-accent-rgb: 22, 163, 74;
+  --color-accent-strong: #15803d;
+  --color-accent-bg-subtle: #dcfce7;
+  --color-accent-text-strong: #166534;
+}
+
+html[data-theme-color='groen'][data-theme-mode='donker'] {
+  --color-accent: #22c55e;
+  --color-accent-rgb: 34, 197, 94;
+  --color-accent-strong: #4ade80;
+  --color-accent-bg-subtle: #14532d;
+  --color-accent-text-strong: #bbf7d0;
+}
+
+html[data-theme-color='paars'] {
+  --color-accent: #7c3aed;
+  --color-accent-rgb: 124, 58, 237;
+  --color-accent-strong: #6d28d9;
+  --color-accent-bg-subtle: #ede9fe;
+  --color-accent-text-strong: #4c1d95;
+}
+
+html[data-theme-color='paars'][data-theme-mode='donker'] {
+  --color-accent: #a78bfa;
+  --color-accent-rgb: 167, 139, 250;
+  --color-accent-strong: #c4b5fd;
+  --color-accent-bg-subtle: #4c1d95;
+  --color-accent-text-strong: #ddd6fe;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}

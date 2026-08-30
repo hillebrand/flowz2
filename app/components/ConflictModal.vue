@@ -110,7 +110,7 @@ onUnmounted(() => {
   max-width: 24rem;
   padding: 1.5rem;
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--color-surface);
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -125,13 +125,13 @@ onUnmounted(() => {
 .conflict-description {
   margin: 0;
   font-size: 0.9375rem;
-  color: #374151;
+  color: var(--color-text);
 }
 
 .conflict-modal-error {
   margin: 0;
   font-size: 0.8125rem;
-  color: #b45309;
+  color: var(--color-warning-text);
 }
 
 .conflict-modal-actions {
@@ -144,7 +144,7 @@ onUnmounted(() => {
 .conflict-not-applicable-button {
   border: none;
   background: none;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   text-decoration: underline;
   cursor: pointer;
@@ -155,8 +155,8 @@ onUnmounted(() => {
   padding: 0.625rem 1.25rem;
   border: none;
   border-radius: 999px;
-  background: #2563eb;
-  color: #fff;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
 }
