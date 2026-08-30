@@ -419,14 +419,7 @@ async function versturen() {
   }
 }
 
-function terug() {
-  const router = useRouter()
-  if (window.history.length > 1) {
-    router.back()
-  } else {
-    navigateTo('/')
-  }
-}
+const terug = useTerug('/')
 
 onMounted(loadTodayTasks)
 </script>

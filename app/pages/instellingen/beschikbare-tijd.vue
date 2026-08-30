@@ -33,18 +33,11 @@ function formatDuur(minuten: number): string {
   return `${uren}u ${rest}m`
 }
 
-const router = useRouter()
-function terug() {
-  // Fallback nodig (code review Story 2.1): er is nog geen hamburgermenu, dus een
-  // directe URL-navigatie is momenteel de enige manier om hier te komen — dan bestaat
-  // er geen browser-historie om naar terug te gaan. `history.state.back` is wat
-  // vue-router zelf bijhoudt voor "is er een vorige entry in déze SPA-sessie".
-  if (history.state?.back) {
-    router.back()
-  } else {
-    router.push('/')
-  }
-}
+// Fallback nodig (code review Story 2.1): er is nog geen hamburgermenu, dus een
+// directe URL-navigatie is momenteel de enige manier om hier te komen — dan bestaat
+// er geen browser-historie om naar terug te gaan. `history.state.back` is wat
+// vue-router zelf bijhoudt voor "is er een vorige entry in déze SPA-sessie".
+const terug = useTerug('/')
 
 function is401(fout: unknown): boolean {
   return (fout as FetchError | undefined)?.statusCode === 401

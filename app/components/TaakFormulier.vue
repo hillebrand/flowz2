@@ -605,7 +605,10 @@ async function onSubmit() {
       // is altijd 6.1-takenoverzicht (vast doel), niet de pagina van herkomst.
       const flashMessageState = useState<string | null>('flash-message', () => null)
       flashMessageState.value = 'Taak bijgewerkt'
-      await navigateTo('/taken')
+      // `replace: true` (code review 2026-08-30) — een gewone push liet dit bewerkformulier
+      // "vooruit" in de geschiedenis staan, bereikbaar via /taken's terug-knop; je landde
+      // dan weer op het net-opgeslagen formulier i.p.v. op het takenoverzicht.
+      await navigateTo('/taken', { replace: true })
       return
     }
 

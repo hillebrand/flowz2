@@ -87,16 +87,9 @@ const tierLabels: Record<NonNullable<WeekDayDto['suggestion']>['tier'], string> 
   vervallen: 'Niet doen'
 }
 
-function terug() {
-  const router = useRouter()
-  // Browser-history-gedrag per UX-spec ("geen vaste terug-bestemming") — valt terug op
-  // Home als er geen vorige pagina binnen de app-geschiedenis is (bv. direct geopend).
-  if (window.history.length > 1) {
-    router.back()
-  } else {
-    navigateTo('/')
-  }
-}
+// Browser-history-gedrag per UX-spec ("geen vaste terug-bestemming") — valt terug op
+// Home als er geen vorige pagina binnen déze SPA-sessie is (bv. direct geopend).
+const terug = useTerug('/')
 
 onMounted(loadWeek)
 </script>

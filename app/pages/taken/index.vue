@@ -7,7 +7,7 @@ const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
   await navigateTo('/inloggen')
 }
-const router = useRouter()
+const terug = useTerug('/')
 
 useHead({ title: 'Takenoverzicht' })
 
@@ -108,7 +108,7 @@ onMounted(() => {
 <template>
   <main v-if="loggedIn" class="tasks-page">
     <header id="tasks-header-section" class="tasks-header-section">
-      <button id="tasks-back-link" type="button" class="tasks-back-link" aria-label="Terug" @click="router.back()">← Terug</button>
+      <button id="tasks-back-link" type="button" class="tasks-back-link" aria-label="Terug" @click="terug">← Terug</button>
       <NuxtLink id="tasks-new-button" to="/taak/nieuw" class="tasks-new-button" aria-label="Nieuwe taak aanmaken">+ Nieuwe taak</NuxtLink>
     </header>
 
