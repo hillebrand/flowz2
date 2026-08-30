@@ -905,4 +905,21 @@ onMounted(loadTodayTasks)
   opacity: 0.6;
   cursor: default;
 }
+
+@media (min-width: 1024px) {
+  .school-page {
+    max-width: 56rem;
+  }
+
+  .school-sessions-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .school-sessions-confirm-button {
+    max-width: 20rem;
+    margin: 0 auto;
+  }
+}
 </style>

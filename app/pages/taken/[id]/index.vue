@@ -347,4 +347,11 @@ async function bevestigVerwijderen() {
   font-weight: 600;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  .detail-page {
+    max-width: 44rem;
+    padding: 2rem 1rem;
+  }
+}
 </style>

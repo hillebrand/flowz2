@@ -327,4 +327,16 @@ function terugNaarHome() {
   font-weight: 600;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  .wrap-page {
+    max-width: 40rem;
+    padding: 2.5rem 1rem;
+  }
+
+  .wrap-overview-section {
+    flex-direction: row;
+    gap: 1.5rem;
+  }
+}
 </style>

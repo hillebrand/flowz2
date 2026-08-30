@@ -160,4 +160,11 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  .conflict-modal {
+    max-width: 28rem;
+    padding: 2rem;
+  }
+}
 </style>

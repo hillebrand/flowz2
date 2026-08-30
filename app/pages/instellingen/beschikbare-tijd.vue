@@ -868,4 +868,39 @@ async function wijzigHomeworkColor(event: Event) {
   color: #b45309;
   font-size: 0.8125rem;
 }
+
+@media (min-width: 1024px) {
+  .avail-page {
+    max-width: 64rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 2rem;
+  }
+
+  .avail-back-section,
+  .avail-skeleton,
+  .avail-load-error {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .avail-week-section {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .avail-calendar-section {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .avail-homework-sync-section {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .avail-calendar {
+    max-width: 24rem;
+  }
+}
 </style>

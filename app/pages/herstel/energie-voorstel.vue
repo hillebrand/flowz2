@@ -275,4 +275,16 @@ onUnmounted(() => {
   color: #b45309;
   font-size: 0.8125rem;
 }
+
+@media (min-width: 1024px) {
+  .energy-page {
+    max-width: 64rem;
+  }
+
+  .energy-change-groups {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem 2rem;
+  }
+}
 </style>

@@ -357,4 +357,16 @@ onMounted(loadWeek)
     animation: none;
   }
 }
+
+@media (min-width: 1024px) {
+  .week-page {
+    max-width: 72rem;
+  }
+
+  .week-days {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    gap: 1.5rem;
+  }
+}
 </style>

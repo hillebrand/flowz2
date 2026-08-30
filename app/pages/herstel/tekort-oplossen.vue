@@ -356,4 +356,16 @@ onMounted(loadShortfall)
   color: #b45309;
   font-size: 0.8125rem;
 }
+
+@media (min-width: 1024px) {
+  .shortfall-page {
+    max-width: 64rem;
+  }
+
+  .shortfall-recommendations {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1rem;
+  }
+}
 </style>

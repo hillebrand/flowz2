@@ -1366,4 +1366,36 @@ async function onSubmit() {
 .taak-needs-text-input:focus {
   outline: none;
 }
+
+@media (min-width: 1024px) {
+  .taak-page {
+    max-width: 60rem;
+  }
+
+  .taak-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'core scope'
+      'core extra'
+      'action action';
+    column-gap: 2rem;
+  }
+
+  .taak-core-section {
+    grid-area: core;
+  }
+
+  .taak-scope-section {
+    grid-area: scope;
+  }
+
+  .taak-extra-section {
+    grid-area: extra;
+  }
+
+  .taak-action-section {
+    grid-area: action;
+  }
+}
 </style>

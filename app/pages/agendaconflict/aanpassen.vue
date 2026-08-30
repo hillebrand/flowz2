@@ -322,4 +322,11 @@ onMounted(laadVoorstel)
 .conflict-summary-bottleneck-warning:focus-visible {
   text-decoration: underline;
 }
+
+@media (min-width: 1024px) {
+  .conflict-page {
+    max-width: 36rem;
+    padding: 2rem 1rem;
+  }
+}
 </style>

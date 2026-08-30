@@ -321,4 +321,20 @@ onMounted(() => {
   font-size: 0.8125rem;
   color: #6b7280;
 }
+
+@media (min-width: 1024px) {
+  .tasks-page {
+    max-width: 64rem;
+  }
+
+  .tasks-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .tasks-group-heading {
+    grid-column: 1 / -1;
+  }
+}
 </style>

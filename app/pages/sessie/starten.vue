@@ -244,4 +244,11 @@ async function startSessieActief() {
   font-weight: 600;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  .prep-page {
+    max-width: 36rem;
+    padding: 2rem 1rem;
+  }
+}
 </style>

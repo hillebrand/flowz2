@@ -322,4 +322,22 @@ async function bevestigen() {
     animation: none;
   }
 }
+
+@media (min-width: 1024px) {
+  .reason-page {
+    max-width: 40rem;
+  }
+
+  .reason-cards {
+    gap: 1.5rem;
+  }
+
+  .reason-card {
+    padding: 1.75rem;
+  }
+
+  .reason-card-icon {
+    font-size: 2rem;
+  }
+}
 </style>

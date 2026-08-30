@@ -610,4 +610,22 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
     animation: none;
   }
 }
+
+@media (min-width: 1024px) {
+  .home-page {
+    max-width: 75rem;
+  }
+
+  .home-task-card {
+    padding: 2rem;
+  }
+
+  .home-later-list {
+    max-height: 28rem;
+  }
+
+  .home-calendar-dayview {
+    height: 28rem;
+  }
+}
 </style>

@@ -441,4 +441,19 @@ onUnmounted(() => {
   background: #fff;
   cursor: pointer;
 }
+
+@media (min-width: 1024px) {
+  .active-page {
+    max-width: 48rem;
+  }
+
+  .active-timer {
+    font-size: 2.5rem;
+  }
+
+  .active-task-name-fallback,
+  .active-subtask-name {
+    font-size: 2.25rem;
+  }
+}
 </style>
