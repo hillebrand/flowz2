@@ -169,7 +169,7 @@ onMounted(loadWeek)
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-text-secondary);
+  color: var(--color-accent);
   text-decoration: none;
   font-weight: 500;
   font: inherit;

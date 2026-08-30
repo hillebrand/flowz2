@@ -174,7 +174,7 @@ async function startSessieActief() {
   background: none;
   padding: 0;
   font-size: 0.9375rem;
-  color: var(--color-text);
+  color: var(--color-accent);
   cursor: pointer;
 }
 

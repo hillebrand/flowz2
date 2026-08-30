@@ -11,15 +11,17 @@
  *                                           licht/donker/systeem — "systeem" zelf komt
  *                                           hier nooit in terecht, zie useTheme.ts)
  *
- * Alleen de accentkleur is aan de kleurkeuze gekoppeld; status-kleuren (succes/waarschuwing/
- * fout) en de neutrale schaal (achtergrond/rand/tekst) zijn gelijk voor alle 3 kleurthema's
- * en wisselen alleen mee met licht/donker.
+ * Alleen de paginabackground/subtiele-vlakken (--color-bg / --color-surface-muted) en de
+ * accentkleur zelf zijn aan de kleurkeuze gekoppeld — zo blijft het effect van het wisselen
+ * van kleur niet beperkt tot losse knopjes (gemeld door Hillebrand, 2026-08-30: "bij het
+ * wisselen van kleur moet ook de achtergrondkleur wisselen"). Kaartoppervlakken
+ * (--color-surface), randen, tekst en statuskleuren blijven bewust neutraal/gelijk over de
+ * 3 kleurthema's — anders zou tekst-op-kaart bij elk thema opnieuw op contrast gecheckt
+ * moeten worden — en wisselen alleen mee met licht/donker.
  */
 
 :root {
-  --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-muted: #f3f4f6;
   --color-border: #d1d5db;
   --color-border-subtle: #e5e7eb;
   --color-text: #374151;
@@ -45,9 +47,7 @@
 }
 
 html[data-theme-mode='donker'] {
-  --color-bg: #111827;
   --color-surface: #1f2937;
-  --color-surface-muted: #24303f;
   --color-border: #374151;
   --color-border-subtle: #374151;
   --color-text: #f3f4f6;
@@ -72,6 +72,8 @@ html[data-theme-mode='donker'] {
    --color-accent-rgb is de "r, g, b"-vorm van --color-accent, nodig voor rgba()-gebruik
    (bv. box-shadows) waar een CSS-variabele niet direct binnen rgba() kan staan. */
 html[data-theme-color='blauw'] {
+  --color-bg: #f5f8ff;
+  --color-surface-muted: #eef3fc;
   --color-accent: #2563eb;
   --color-accent-rgb: 37, 99, 235;
   --color-accent-strong: #1d4ed8;
@@ -80,6 +82,8 @@ html[data-theme-color='blauw'] {
 }
 
 html[data-theme-color='blauw'][data-theme-mode='donker'] {
+  --color-bg: #0d1420;
+  --color-surface-muted: #182337;
   --color-accent: #3b82f6;
   --color-accent-rgb: 59, 130, 246;
   --color-accent-strong: #60a5fa;
@@ -88,6 +92,8 @@ html[data-theme-color='blauw'][data-theme-mode='donker'] {
 }
 
 html[data-theme-color='groen'] {
+  --color-bg: #f4faf6;
+  --color-surface-muted: #eaf6ee;
   --color-accent: #16a34a;
   --color-accent-rgb: 22, 163, 74;
   --color-accent-strong: #15803d;
@@ -96,6 +102,8 @@ html[data-theme-color='groen'] {
 }
 
 html[data-theme-color='groen'][data-theme-mode='donker'] {
+  --color-bg: #0d1712;
+  --color-surface-muted: #16261c;
   --color-accent: #22c55e;
   --color-accent-rgb: 34, 197, 94;
   --color-accent-strong: #4ade80;
@@ -104,6 +112,8 @@ html[data-theme-color='groen'][data-theme-mode='donker'] {
 }
 
 html[data-theme-color='paars'] {
+  --color-bg: #f8f6fe;
+  --color-surface-muted: #f1ecfc;
   --color-accent: #7c3aed;
   --color-accent-rgb: 124, 58, 237;
   --color-accent-strong: #6d28d9;
@@ -112,6 +122,8 @@ html[data-theme-color='paars'] {
 }
 
 html[data-theme-color='paars'][data-theme-mode='donker'] {
+  --color-bg: #13101f;
+  --color-surface-muted: #201a33;
   --color-accent: #a78bfa;
   --color-accent-rgb: 167, 139, 250;
   --color-accent-strong: #c4b5fd;
@@ -121,6 +133,8 @@ html[data-theme-color='paars'][data-theme-mode='donker'] {
 
 html,
 body {
-  background: var(--color-bg);
+  /* Fallback voor de (zeer korte) periode vóór het blocking init-script in nuxt.config.ts
+     data-theme-color heeft gezet, of wanneer JavaScript uitstaat. */
+  background: var(--color-bg, #ffffff);
   color: var(--color-text);
 }

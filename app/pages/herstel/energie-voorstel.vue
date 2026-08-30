@@ -155,7 +155,7 @@ onUnmounted(() => {
 }
 
 .energy-back-link {
-  color: var(--color-text-secondary);
+  color: var(--color-accent);
   text-decoration: none;
   font-weight: 500;
 }

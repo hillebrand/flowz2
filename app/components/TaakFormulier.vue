@@ -1021,6 +1021,7 @@ async function onSubmit() {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -1067,6 +1068,7 @@ async function onSubmit() {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -1091,6 +1093,7 @@ async function onSubmit() {
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.875rem;
@@ -1137,6 +1140,11 @@ async function onSubmit() {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
+  /* Net als knoppen erven <input>/<select>/<textarea> hun achtergrond/tekstkleur niet
+     automatisch van een voorouder — zonder dit expliciet bleven deze velden een wit vak
+     met zwarte tekst, los van de gekozen modus. */
+  background: var(--color-surface);
+  color: var(--color-text);
   font-family: inherit;
   font-size: 0.9375rem;
 }
@@ -1176,6 +1184,7 @@ async function onSubmit() {
   border: 1px solid var(--color-border);
   border-radius: 999px;
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   font-family: inherit;
   font-size: 0.875rem;
@@ -1300,6 +1309,7 @@ async function onSubmit() {
   border-radius: 0.5rem;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -1360,6 +1370,8 @@ async function onSubmit() {
   flex: 1;
   min-width: 8rem;
   border: none;
+  background: transparent;
+  color: var(--color-text);
   padding: 0.25rem;
 }
 

@@ -237,6 +237,7 @@ onMounted(laadVoorstel)
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   font-size: 1.125rem;
   cursor: pointer;
 }

@@ -776,12 +776,16 @@ onMounted(loadTodayTasks)
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .school-session-new-task-deadline-input {
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .school-session-time-input {
@@ -789,6 +793,8 @@ onMounted(loadTodayTasks)
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .school-search-fields {
@@ -802,6 +808,8 @@ onMounted(loadTodayTasks)
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .school-search-results {
@@ -820,6 +828,7 @@ onMounted(loadTodayTasks)
   border: 1px solid var(--color-border-subtle);
   border-radius: 0.375rem;
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   font-size: 0.875rem;
 }
@@ -846,6 +855,8 @@ onMounted(loadTodayTasks)
   padding: 0.375rem;
   border: 1px solid var(--color-border);
   border-radius: 0.375rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .school-remaining-separator {

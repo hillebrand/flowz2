@@ -277,6 +277,7 @@ onMounted(() => {
   border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 

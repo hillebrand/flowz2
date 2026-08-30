@@ -183,7 +183,7 @@ async function bevestigen() {
 }
 
 .reason-back-link {
-  color: var(--color-text-secondary);
+  color: var(--color-accent);
   text-decoration: none;
   font-weight: 500;
 }
@@ -213,6 +213,7 @@ async function bevestigen() {
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   text-align: left;
   font-family: inherit;
@@ -266,6 +267,8 @@ async function bevestigen() {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-text);
   font-family: inherit;
   font-size: 0.9375rem;
 }

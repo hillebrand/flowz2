@@ -621,6 +621,7 @@ async function wijzigHomeworkColor(event: Event) {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   font-size: 1.125rem;
   line-height: 1;
   cursor: pointer;
@@ -696,6 +697,7 @@ async function wijzigHomeworkColor(event: Event) {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   font-size: 1.125rem;
   line-height: 1;
   cursor: pointer;
@@ -734,6 +736,11 @@ async function wijzigHomeworkColor(event: Event) {
   border: none;
   border-radius: 0.5rem;
   background: transparent;
+  /* Review-patch (gemeld door Hillebrand, 2026-08-30): een <button> erft `color` niet
+     automatisch van een voorouder (UA-stylesheet geeft 'm een eigen systeemkleur) — zonder
+     dit expliciet te zetten bleven de dagcijfers zwart in de donkere modus, bijna
+     onleesbaar tegen de donkere achtergrond. */
+  color: var(--color-text);
   cursor: pointer;
   font-size: 0.875rem;
   position: relative;
@@ -794,6 +801,7 @@ async function wijzigHomeworkColor(event: Event) {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -849,6 +857,7 @@ async function wijzigHomeworkColor(event: Event) {
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface);
+  color: var(--color-text);
   font-family: inherit;
   font-size: 0.875rem;
 }
