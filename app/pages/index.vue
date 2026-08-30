@@ -119,18 +119,45 @@ function isAllDayEvent(event: { startsAt: string }): boolean {
 // Review-patch: null bij een onparseerbaar tijdstip i.p.v. te crashen — Intl.DateTimeFormat
 // gooit een RangeError op een ongeldige Date, wat anders de hele calendarBlocks-computed
 // (en daarmee de rest van de pagina) zou laten crashen op één corrupte Calendar-respons.
-function amsterdamMinutesSinceMidnight(iso: string): number | null {
+function amsterdamDateTimeParts(iso: string): { minutes: number, dateKey: string } | null {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Amsterdam',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23'
   }).formatToParts(date)
-  const hour = Number(parts.find(part => part.type === 'hour')?.value ?? 0)
-  const minute = Number(parts.find(part => part.type === 'minute')?.value ?? 0)
-  return hour * 60 + minute
+  const get = (type: string): string => parts.find(part => part.type === type)?.value ?? '0'
+  return {
+    minutes: Number(get('hour')) * 60 + Number(get('minute')),
+    dateKey: `${get('year')}-${get('month')}-${get('day')}`
+  }
+}
+
+function daysBetweenDateKeys(fromKey: string, toKey: string): number {
+  const toUtcMillis = (key: string): number => {
+    const [year = 0, month = 0, day = 0] = key.split('-').map(Number)
+    return Date.UTC(year, month - 1, day)
+  }
+  return Math.round((toUtcMillis(toKey) - toUtcMillis(fromKey)) / 86_400_000)
+}
+
+// Review-patch (gemeld door Hillebrand, 2026-08-30): een dag-overschrijdend event (bv.
+// 'Slaapritme' 20:15-07:00 de volgende ochtend) kreeg met alleen "minuten sinds
+// middernacht" een eindtijd die vóór de begintijd léék te liggen (07:00 < 20:15), en werd
+// daardoor als 'ongeldig' weggefilterd — ook al begint het event ruim binnen het
+// 07:00-22:00-venster. Corrigeert de eindtijd met het aantal dagen verschil t.o.v. de
+// startdag, zodat zo'n event een correcte positieve duur krijgt.
+function eventMinutesRange(event: { startsAt: string, endsAt: string }): { start: number, end: number } | null {
+  const startParts = amsterdamDateTimeParts(event.startsAt)
+  const endParts = amsterdamDateTimeParts(event.endsAt)
+  if (!startParts || !endParts) return null
+  const dayOffset = daysBetweenDateKeys(startParts.dateKey, endParts.dateKey)
+  return { start: startParts.minutes, end: endParts.minutes + dayOffset * 1440 }
 }
 
 function formatTimeAmsterdam(iso: string): string {
@@ -175,22 +202,20 @@ interface CalendarBlock {
 // venster hanteert) — gemeld door Hillebrand (2026-08-30): events buiten 07:00-22:00
 // ontbraken stilzwijgend op de homepage terwijl het weekoverzicht ze wél toonde.
 function isOutsideWindow(event: { startsAt: string, endsAt: string }): boolean {
-  const rawStart = amsterdamMinutesSinceMidnight(event.startsAt)
-  const rawEnd = amsterdamMinutesSinceMidnight(event.endsAt)
-  if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return false
-  return rawEnd <= WINDOW_START_HOUR * 60 || rawStart >= WINDOW_END_HOUR * 60
+  const range = eventMinutesRange(event)
+  if (!range || range.end <= range.start) return false
+  return range.end <= WINDOW_START_HOUR * 60 || range.start >= WINDOW_END_HOUR * 60
 }
 
 const calendarBlocks = computed<CalendarBlock[]>(() =>
   (plan.value?.calendarDayEvents ?? [])
     .filter(event => !isAllDayEvent(event) && !isOutsideWindow(event))
     .flatMap((event) => {
-      const rawStart = amsterdamMinutesSinceMidnight(event.startsAt)
-      const rawEnd = amsterdamMinutesSinceMidnight(event.endsAt)
-      if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return []
+      const range = eventMinutesRange(event)
+      if (!range || range.end <= range.start) return []
 
-      const startMinutes = clamp(rawStart - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
-      const endMinutes = clamp(rawEnd - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
+      const startMinutes = clamp(range.start - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
+      const endMinutes = clamp(range.end - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
       return [{
         title: event.title,
         tooltip: `${formatTimeAmsterdam(event.startsAt)}–${formatTimeAmsterdam(event.endsAt)} ${event.title}`,
