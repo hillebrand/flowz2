@@ -169,15 +169,25 @@ interface CalendarBlock {
 
 // Review-patch: events volledig buiten 07:00-22:00 (of met een ongeldig/negatief
 // tijdsverschil, bv. door een dag-overschrijdend event) worden hier weggefilterd i.p.v.
-// als een misleidend 2%-fantoomblokje aan de venstergrens te renderen.
+// als een misleidend 2%-fantoomblokje aan de venstergrens te renderen. Ze verdwijnen
+// niet uit beeld: home-calendar-outside-window (hieronder) toont ze alsnog als tekst,
+// zodat de homepage-agenda dezelfde events bevat als het weekoverzicht (dat geen
+// venster hanteert) — gemeld door Hillebrand (2026-08-30): events buiten 07:00-22:00
+// ontbraken stilzwijgend op de homepage terwijl het weekoverzicht ze wél toonde.
+function isOutsideWindow(event: { startsAt: string, endsAt: string }): boolean {
+  const rawStart = amsterdamMinutesSinceMidnight(event.startsAt)
+  const rawEnd = amsterdamMinutesSinceMidnight(event.endsAt)
+  if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return false
+  return rawEnd <= WINDOW_START_HOUR * 60 || rawStart >= WINDOW_END_HOUR * 60
+}
+
 const calendarBlocks = computed<CalendarBlock[]>(() =>
   (plan.value?.calendarDayEvents ?? [])
-    .filter(event => !isAllDayEvent(event))
+    .filter(event => !isAllDayEvent(event) && !isOutsideWindow(event))
     .flatMap((event) => {
       const rawStart = amsterdamMinutesSinceMidnight(event.startsAt)
       const rawEnd = amsterdamMinutesSinceMidnight(event.endsAt)
       if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return []
-      if (rawEnd <= WINDOW_START_HOUR * 60 || rawStart >= WINDOW_END_HOUR * 60) return []
 
       const startMinutes = clamp(rawStart - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
       const endMinutes = clamp(rawEnd - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
@@ -188,6 +198,10 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
         heightPercent: Math.max(2, ((endMinutes - startMinutes) / WINDOW_MINUTES) * 100)
       }]
     })
+)
+
+const outsideWindowCalendarEvents = computed(() =>
+  (plan.value?.calendarDayEvents ?? []).filter(event => !isAllDayEvent(event) && isOutsideWindow(event))
 )
 </script>
 
@@ -287,6 +301,9 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
           <template v-else>
             <p v-if="allDayCalendarEvents.length > 0" class="home-calendar-all-day">
               Hele dag: {{ allDayCalendarEvents.map(event => event.title).join(', ') }}
+            </p>
+            <p v-if="outsideWindowCalendarEvents.length > 0" id="home-calendar-outside-window" class="home-calendar-outside-window">
+              Buiten 07:00–22:00: {{ outsideWindowCalendarEvents.map(event => `${formatTimeAmsterdam(event.startsAt)}–${formatTimeAmsterdam(event.endsAt)} ${event.title}`).join(', ') }}
             </p>
             <div id="home-calendar-dayview" class="home-calendar-dayview">
               <span
@@ -556,6 +573,12 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
 }
 
 .home-calendar-all-day {
+  margin: 0 0 0.375rem;
+  font-size: 0.6875rem;
+  color: #6b7280;
+}
+
+.home-calendar-outside-window {
   margin: 0 0 0.375rem;
   font-size: 0.6875rem;
   color: #6b7280;
