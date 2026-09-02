@@ -22,7 +22,9 @@ const ITEMS: { label: string, to: string }[] = [
 const COLOR_OPTIONS: { value: ThemeColor, label: string, swatch: string }[] = [
   { value: 'blauw', label: 'Blauw', swatch: '#2563eb' },
   { value: 'groen', label: 'Groen', swatch: '#16a34a' },
-  { value: 'paars', label: 'Paars', swatch: '#7c3aed' }
+  { value: 'paars', label: 'Paars', swatch: '#7c3aed' },
+  { value: 'geel', label: 'Geel', swatch: '#ca8a04' },
+  { value: 'roze', label: 'Roze', swatch: '#db2777' }
 ]
 const MODE_OPTIONS: { value: ThemeMode, label: string }[] = [
   { value: 'licht', label: 'Licht' },

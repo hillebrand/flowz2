@@ -1,12 +1,13 @@
 /*
- * Kleurthema's (gemeld door Hillebrand, 2026-08-30): 3 accentkleuren (blauw/groen/paars),
- * elk met een lichte en donkere modus. `blauw` + `licht` is bewust identiek aan de kleuren
- * die tot nu toe overal hardcoded stonden, zodat de standaardweergave niet verandert.
+ * Kleurthema's (gemeld door Hillebrand, 2026-08-30; geel/roze toegevoegd 2026-09-02):
+ * 5 accentkleuren (blauw/groen/paars/geel/roze), elk met een lichte en donkere modus.
+ * `blauw` + `licht` is bewust identiek aan de kleuren die tot nu toe overal hardcoded
+ * stonden, zodat de standaardweergave niet verandert.
  *
  * Twee onafhankelijke attributen op <html>, gezet door het blocking init-script in
  * nuxt.config.ts (`app.head.script`, vóór hydratie, tegen een flits van het verkeerde
  * thema) en daarna beheerd door app/composables/useTheme.ts:
- *   data-theme-color="blauw|groen|paars"
+ *   data-theme-color="blauw|groen|paars|geel|roze"
  *   data-theme-mode="licht|donker"        (afgeleid van de opgeslagen voorkeur
  *                                           licht/donker/systeem — "systeem" zelf komt
  *                                           hier nooit in terecht, zie useTheme.ts)
@@ -16,7 +17,7 @@
  * van kleur niet beperkt tot losse knopjes (gemeld door Hillebrand, 2026-08-30: "bij het
  * wisselen van kleur moet ook de achtergrondkleur wisselen"). Kaartoppervlakken
  * (--color-surface), randen, tekst en statuskleuren blijven bewust neutraal/gelijk over de
- * 3 kleurthema's — anders zou tekst-op-kaart bij elk thema opnieuw op contrast gecheckt
+ * 5 kleurthema's — anders zou tekst-op-kaart bij elk thema opnieuw op contrast gecheckt
  * moeten worden — en wisselen alleen mee met licht/donker.
  */
 
@@ -129,6 +130,51 @@ html[data-theme-color='paars'][data-theme-mode='donker'] {
   --color-accent-strong: #c4b5fd;
   --color-accent-bg-subtle: #4c1d95;
   --color-accent-text-strong: #ddd6fe;
+}
+
+/* Geel — enige kleurthema dat --color-accent-contrast overschrijft: geel is te licht voor
+   de standaard witte knoptekst (--color-accent-contrast in :root hierboven), dus deze twee
+   blokken zetten 'm terug naar donkere tekst, in zowel licht als donker. */
+html[data-theme-color='geel'] {
+  --color-bg: #fefce8;
+  --color-surface-muted: #fef9c3;
+  --color-accent: #ca8a04;
+  --color-accent-rgb: 202, 138, 4;
+  --color-accent-strong: #a16207;
+  --color-accent-bg-subtle: #fef08a;
+  --color-accent-text-strong: #713f12;
+  --color-accent-contrast: #1f2937;
+}
+
+html[data-theme-color='geel'][data-theme-mode='donker'] {
+  --color-bg: #1a1606;
+  --color-surface-muted: #292008;
+  --color-accent: #eab308;
+  --color-accent-rgb: 234, 179, 8;
+  --color-accent-strong: #facc15;
+  --color-accent-bg-subtle: #713f12;
+  --color-accent-text-strong: #fef08a;
+  --color-accent-contrast: #1f2937;
+}
+
+html[data-theme-color='roze'] {
+  --color-bg: #fdf2f8;
+  --color-surface-muted: #fce7f3;
+  --color-accent: #db2777;
+  --color-accent-rgb: 219, 39, 119;
+  --color-accent-strong: #be185d;
+  --color-accent-bg-subtle: #fbcfe8;
+  --color-accent-text-strong: #831843;
+}
+
+html[data-theme-color='roze'][data-theme-mode='donker'] {
+  --color-bg: #1f0a15;
+  --color-surface-muted: #3b0b24;
+  --color-accent: #f472b6;
+  --color-accent-rgb: 244, 114, 182;
+  --color-accent-strong: #f9a8d4;
+  --color-accent-bg-subtle: #831843;
+  --color-accent-text-strong: #fbcfe8;
 }
 
 html,

@@ -1,4 +1,4 @@
-export type ThemeColor = 'blauw' | 'groen' | 'paars'
+export type ThemeColor = 'blauw' | 'groen' | 'paars' | 'geel' | 'roze'
 export type ThemeMode = 'licht' | 'donker' | 'systeem'
 
 const STORAGE_KEY_COLOR = 'flowz-theme-color'
@@ -43,7 +43,7 @@ export function useTheme() {
 
     const storedColor = window.localStorage.getItem(STORAGE_KEY_COLOR)
     const storedMode = window.localStorage.getItem(STORAGE_KEY_MODE)
-    if (storedColor === 'blauw' || storedColor === 'groen' || storedColor === 'paars') color.value = storedColor
+    if (storedColor === 'blauw' || storedColor === 'groen' || storedColor === 'paars' || storedColor === 'geel' || storedColor === 'roze') color.value = storedColor
     if (storedMode === 'licht' || storedMode === 'donker' || storedMode === 'systeem') mode.value = storedMode
 
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
