@@ -419,15 +419,13 @@ async function versturen() {
   }
 }
 
-const terug = useTerug('/')
-
 onMounted(loadTodayTasks)
 </script>
 
 <template>
   <main class="school-page">
     <section id="school-header-section" class="school-header-section">
-      <button id="school-back-link" type="button" class="school-back-link" aria-label="Terug" @click="terug">← Terug</button>
+      <HamburgerMenu />
       <h1 id="school-page-heading" class="school-page-heading">Schoolsessies invoeren</h1>
     </section>
 
@@ -656,21 +654,15 @@ onMounted(loadTodayTasks)
 }
 
 .school-header-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 1rem 0 1.5rem;
-}
-
-.school-back-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 0.875rem;
-  color: var(--color-accent);
-  cursor: pointer;
 }
 
 .school-page-heading {
   font-size: 1.25rem;
-  margin: 0.5rem 0 0;
+  margin: 0;
 }
 
 .school-skeleton-row {

@@ -135,6 +135,7 @@ function terugNaarHome() {
 <template>
   <main v-if="loggedIn && log" class="wrap-page">
     <header id="wrap-heading-section" class="wrap-heading-section">
+      <HamburgerMenu />
       <h1 id="wrap-page-heading" class="wrap-page-heading">Sessie afgerond</h1>
     </header>
 
@@ -226,6 +227,12 @@ function terugNaarHome() {
   flex-direction: column;
   gap: 1.5rem;
   font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.wrap-heading-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .wrap-page-heading {

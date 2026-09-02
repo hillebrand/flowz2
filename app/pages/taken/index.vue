@@ -7,8 +7,6 @@ const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
   await navigateTo('/inloggen')
 }
-const terug = useTerug('/')
-
 useHead({ title: 'Takenoverzicht' })
 
 function is401(fout: unknown): boolean {
@@ -108,7 +106,7 @@ onMounted(() => {
 <template>
   <main v-if="loggedIn" class="tasks-page">
     <header id="tasks-header-section" class="tasks-header-section">
-      <button id="tasks-back-link" type="button" class="tasks-back-link" aria-label="Terug" @click="terug">← Terug</button>
+      <HamburgerMenu />
       <NuxtLink id="tasks-new-button" to="/taak/nieuw" class="tasks-new-button" aria-label="Nieuwe taak aanmaken">+ Nieuwe taak</NuxtLink>
     </header>
 
@@ -172,21 +170,10 @@ onMounted(() => {
   padding: 1.5rem 1rem;
 }
 
-.tasks-back-link,
 .tasks-new-button {
   font-size: 0.875rem;
   text-decoration: none;
   color: var(--color-accent);
-}
-
-.tasks-back-link {
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.tasks-new-button {
   padding: 0.5rem 1rem;
   border: 1px solid var(--color-accent);
   border-radius: 999px;

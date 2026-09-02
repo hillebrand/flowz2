@@ -83,7 +83,7 @@ async function bevestigen() {
 <template>
   <main class="reason-page">
     <section id="reason-back-section" class="reason-back-section">
-      <NuxtLink id="reason-back-link" to="/" class="reason-back-link" aria-label="Terug naar hoofdscherm">← Terug</NuxtLink>
+      <HamburgerMenu />
     </section>
 
     <section id="reason-choice-section" class="reason-choice-section">
@@ -180,12 +180,6 @@ async function bevestigen() {
 
 .reason-back-section {
   padding: 1rem 0;
-}
-
-.reason-back-link {
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 500;
 }
 
 .reason-choice-section {

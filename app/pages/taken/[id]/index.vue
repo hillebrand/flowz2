@@ -75,9 +75,6 @@ function progressPercentage(done: number, total: number): number {
   return Math.min(100, Math.max(0, (done / total) * 100))
 }
 
-function terugNaarOverzicht() {
-  navigateTo('/taken')
-}
 function bewerken() {
   navigateTo(`/taken/${encodeURIComponent(taskId.value)}/bewerken`)
 }
@@ -126,7 +123,7 @@ async function bevestigVerwijderen() {
 <template>
   <main v-if="loggedIn" class="detail-page">
     <header id="detail-back-section" class="detail-back-section">
-      <button id="detail-back-link" type="button" class="detail-back-link" aria-label="Terug naar takenoverzicht" @click="terugNaarOverzicht">← Terug</button>
+      <HamburgerMenu />
     </header>
 
     <div v-if="isLoading" id="detail-skeleton" class="detail-skeleton" aria-hidden="true">
@@ -189,16 +186,6 @@ async function bevestigVerwijderen() {
 
 .detail-back-section {
   padding: 1.5rem 1rem;
-}
-
-.detail-back-link {
-  font-size: 0.875rem;
-  text-decoration: none;
-  color: var(--color-accent);
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
 }
 
 .detail-skeleton {

@@ -128,6 +128,10 @@ onMounted(laadVoorstel)
 
 <template>
   <main class="conflict-page">
+    <header id="conflict-header-section" class="conflict-header-section">
+      <HamburgerMenu />
+    </header>
+
     <section v-if="!done" id="conflict-adjust-section" class="conflict-adjust-section">
       <h1 id="conflict-adjust-page-heading" class="conflict-page-heading">Beschikbare tijd aanpassen</h1>
 
@@ -193,6 +197,10 @@ onMounted(laadVoorstel)
   margin: 0 auto;
   padding: 1.5rem 1rem;
   font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.conflict-header-section {
+  margin-bottom: 1rem;
 }
 
 .conflict-page-heading {

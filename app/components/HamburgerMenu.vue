@@ -9,7 +9,11 @@
 // zelf — die drie zijn nu tabbladen op /instellingen (zie app/pages/instellingen/index.vue
 // en de InstellingenBeschikbareTijd/InstellingenVerborgenAgendaItems/InstellingenUiterlijk-
 // paneelcomponenten).
+// "Home" toegevoegd (2026-09-02, zelfde aanleiding): nu dit menu overal de "← Terug"-links
+// vervangt, is dit de enige overgebleven weg terug naar de homepage vanaf de meeste
+// pagina's — zonder dit item zou die bestemming nergens meer bereikbaar zijn.
 const ITEMS: { label: string, to: string }[] = [
+  { label: 'Home', to: '/' },
   { label: 'Takenoverzicht', to: '/taken' },
   { label: 'Weekoverzicht', to: '/week' },
   { label: 'Instellingen', to: '/instellingen' },

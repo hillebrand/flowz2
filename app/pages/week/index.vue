@@ -87,17 +87,13 @@ const tierLabels: Record<NonNullable<WeekDayDto['suggestion']>['tier'], string> 
   vervallen: 'Niet doen'
 }
 
-// Browser-history-gedrag per UX-spec ("geen vaste terug-bestemming") — valt terug op
-// Home als er geen vorige pagina binnen déze SPA-sessie is (bv. direct geopend).
-const terug = useTerug('/')
-
 onMounted(loadWeek)
 </script>
 
 <template>
   <main class="week-page">
     <section id="week-header-section" class="week-header-section">
-      <button id="week-back-link" type="button" class="week-back-link" aria-label="Terug" @click="terug">← Terug</button>
+      <HamburgerMenu />
       <h1 id="week-page-heading" class="week-page-heading">Weekoverzicht</h1>
     </section>
 
@@ -160,20 +156,10 @@ onMounted(loadWeek)
 }
 
 .week-header-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 1rem 0 1.5rem;
-}
-
-.week-back-link {
-  display: block;
-  margin-bottom: 1rem;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 500;
-  font: inherit;
-  cursor: pointer;
 }
 
 .week-page-heading {

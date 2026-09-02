@@ -68,10 +68,6 @@ const taak = computed<Omit<PrepTaak, 'subtasks' | 'sessionId'> | null>(() => {
   return heeftDirecteData.value ? sessieStartTaak.value : null
 })
 
-function terugNaarHome() {
-  navigateTo('/')
-}
-
 // prep-start-button (AC #2) — nieuwe useState-key (niet dezelfde als 'sessie-start-taak',
 // dat blijft 1.1's eigen doorgeefkanaal), met een vers starttijdstip voor Story 4.4's
 // timer. Route/veldnamen: zie de story's Open Question #4 (nog niet bevestigd door 1.3's
@@ -112,13 +108,7 @@ async function startSessieActief() {
 <template>
   <main v-if="loggedIn" class="prep-page">
     <header id="prep-back-section" class="prep-back-section">
-      <button
-        id="prep-back-link"
-        type="button"
-        class="prep-back-link"
-        aria-label="Terug naar hoofdscherm"
-        @click="terugNaarHome"
-      >← Terug</button>
+      <HamburgerMenu />
     </header>
 
     <p v-if="isLoading" class="prep-loading">Laden…</p>
@@ -167,15 +157,6 @@ async function startSessieActief() {
 
 .prep-back-section {
   padding: 1.5rem 1rem;
-}
-
-.prep-back-link {
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 0.9375rem;
-  color: var(--color-accent);
-  cursor: pointer;
 }
 
 .prep-loading,

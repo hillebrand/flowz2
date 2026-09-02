@@ -84,7 +84,7 @@ onUnmounted(() => {
 <template>
   <main class="energy-page">
     <section v-if="!done" id="energy-back-section" class="energy-back-section">
-      <NuxtLink id="energy-back-link" to="/" class="energy-back-link" aria-label="Terug naar hoofdscherm, voorstel niet toepassen">← Terug</NuxtLink>
+      <HamburgerMenu />
     </section>
 
     <p v-if="isLoading" class="energy-status">Bezig met laden...</p>
@@ -152,12 +152,6 @@ onUnmounted(() => {
 
 .energy-back-section {
   padding: 1rem 0;
-}
-
-.energy-back-link {
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 500;
 }
 
 .energy-status {

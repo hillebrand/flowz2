@@ -6,8 +6,6 @@ if (!loggedIn.value) {
 
 useHead({ title: 'Instellingen' })
 
-const terug = useTerug('/')
-
 // Eén instellingenscherm (2026-09-02, samengevoegd op verzoek van Hillebrand): voorheen
 // stonden Beschikbare tijd en Verborgen agenda-items als losse pagina's in het
 // hamburgermenu, en kleur/modus rechtstreeks in het menu zelf. Alle drie zijn nu tabbladen
@@ -26,17 +24,10 @@ const activeTab = ref<TabKey>('beschikbare-tijd')
 
 <template>
   <main v-if="loggedIn" class="settings-page">
-    <section id="settings-back-section" class="settings-back-section">
-      <button
-        id="settings-back-link"
-        type="button"
-        aria-label="Terug"
-        class="settings-back-link"
-        @click="terug"
-      >← Terug</button>
+    <section id="settings-header-section" class="settings-header-section">
+      <HamburgerMenu />
+      <h1 id="settings-page-heading" class="settings-page-heading">Instellingen</h1>
     </section>
-
-    <h1 id="settings-page-heading" class="settings-page-heading">Instellingen</h1>
 
     <div class="settings-layout">
       <nav id="settings-nav" class="settings-nav" aria-label="Instellingen-onderdelen">
@@ -69,30 +60,15 @@ const activeTab = ref<TabKey>('beschikbare-tijd')
   font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-.settings-back-section {
-  padding: 1.5rem 1rem 0;
-}
-
-.settings-back-link {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 1rem;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.settings-back-link:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
+.settings-header-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
 }
 
 .settings-page-heading {
-  margin: 1rem 0 1.5rem;
-  padding: 0 1rem;
+  margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
 }
