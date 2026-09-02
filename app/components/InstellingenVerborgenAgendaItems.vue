@@ -2,20 +2,15 @@
 import type { FetchError } from 'ofetch'
 import type { HiddenCalendarTitlesResponse } from '#shared/types/settings'
 
-const { loggedIn } = useUserSession()
-if (!loggedIn.value) {
-  await navigateTo('/inloggen')
-}
-
-useHead({ title: 'Verborgen agenda-items' })
-
-const terug = useTerug('/')
+// Paneel binnen /instellingen (2026-09-02, samengevoegd uit de losse
+// instellingen/verborgen-agenda-items.vue-pagina) — logica ongewijzigd, alleen de
+// paginachrome (terug-knop, eigen <main>-wrapper) is eruit.
 
 function is401(fout: unknown): boolean {
   return (fout as FetchError | undefined)?.statusCode === 401
 }
 
-// `server: false`, zelfde reden als beschikbare-tijd.vue: authenticated/privé
+// `server: false`, zelfde reden als InstellingenBeschikbareTijd.vue: authenticated/privé
 // instellingenpagina, SSR-snelheid is hier niet relevant.
 const { data, error } = await useFetch<HiddenCalendarTitlesResponse>('/api/settings/hidden-calendar-titles', {
   server: false
@@ -25,7 +20,7 @@ watch(error, (waarde) => {
   if (is401(waarde)) navigateTo('/inloggen')
 }, { immediate: true })
 
-// Lokale kopie, zelfde precedent als beschikbare-tijd.vue's `pattern`: elke
+// Lokale kopie, zelfde precedent als InstellingenBeschikbareTijd.vue's `pattern`: elke
 // toevoeg-/verwijderrespons werkt hierna gericht bij, geen volledige herfetch nodig.
 const titles = ref<string[]>([])
 watch(data, (waarde) => {
@@ -86,17 +81,7 @@ async function verwijderen(titel: string) {
 </script>
 
 <template>
-  <main v-if="loggedIn" class="hidden-titles-page">
-    <section id="hidden-titles-back-section" class="hidden-titles-back-section">
-      <button
-        id="hidden-titles-back-link"
-        type="button"
-        aria-label="Terug"
-        class="hidden-titles-back-link"
-        @click="terug"
-      >← Terug</button>
-    </section>
-
+  <div class="hidden-titles-panel">
     <div v-if="!data && !error" class="hidden-titles-skeleton" aria-hidden="true">
       <div v-for="n in 3" :key="n" class="hidden-titles-skeleton-row" />
     </div>
@@ -105,8 +90,7 @@ async function verwijderen(titel: string) {
       Kon de instellingen niet laden. Probeer de pagina te verversen.
     </p>
 
-    <section v-else id="hidden-titles-section" class="hidden-titles-section">
-      <h1 id="hidden-titles-page-heading" class="hidden-titles-page-heading">Verborgen agenda-items</h1>
+    <div v-else id="hidden-titles-section">
       <p class="hidden-titles-explanation">
         Agenda-items met een titel uit deze lijst worden niet getoond in het weekoverzicht.
         Ze tellen wel gewoon mee voor beschikbare tijd en de planning op de homepage.
@@ -143,53 +127,14 @@ async function verwijderen(titel: string) {
         >Toevoegen</button>
       </form>
       <p v-if="addError" class="hidden-titles-add-error" role="alert">{{ addError }}</p>
-    </section>
-  </main>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.hidden-titles-page {
-  max-width: 32rem;
-  margin: 0 auto;
-  padding: 1rem;
-  font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
-
-.hidden-titles-back-section {
-  padding: 1.5rem 1rem;
-}
-
-.hidden-titles-back-link {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 1rem;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.hidden-titles-back-link:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
-}
-
 .hidden-titles-load-error {
-  padding: 1.5rem;
   color: var(--color-warning-text);
   font-weight: 500;
-}
-
-.hidden-titles-section {
-  padding: 1.5rem;
-}
-
-.hidden-titles-page-heading {
-  margin: 0 0 0.75rem;
-  font-size: 1.5rem;
-  font-weight: 700;
 }
 
 .hidden-titles-explanation {
@@ -290,7 +235,6 @@ async function verwijderen(titel: string) {
 }
 
 .hidden-titles-skeleton {
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;

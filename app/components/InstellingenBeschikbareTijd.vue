@@ -10,7 +10,10 @@ import type {
 import type { HomeworkCalendarColorState, UpdateHomeworkCalendarColorResponse } from '#shared/types/settings'
 import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '#shared/utils/availability'
 
-useHead({ title: 'Beschikbare tijd' })
+// Paneel binnen /instellingen (2026-09-02, samengevoegd uit de losse
+// instellingen/beschikbare-tijd.vue-pagina) — logica ongewijzigd overgenomen, alleen de
+// paginachrome (terug-knop, eigen <main>-wrapper, bredere 2-koloms-lay-out vanaf 1024px)
+// is eruit: dat hoort nu bij de gedeelde /instellingen-shell, niet bij dit paneel.
 
 // Dutch UI-labels blijven lokaal (puur presentatie); het `Weekday`-type zelf komt uit
 // shared/types/availability.d.ts — voorheen hier los gedefinieerd met de onjuiste
@@ -32,12 +35,6 @@ function formatDuur(minuten: number): string {
   const rest = minuten % 60
   return `${uren}u ${rest}m`
 }
-
-// Fallback nodig (code review Story 2.1): er is nog geen hamburgermenu, dus een
-// directe URL-navigatie is momenteel de enige manier om hier te komen — dan bestaat
-// er geen browser-historie om naar terug te gaan. `history.state.back` is wat
-// vue-router zelf bijhoudt voor "is er een vorige entry in déze SPA-sessie".
-const terug = useTerug('/')
 
 function is401(fout: unknown): boolean {
   return (fout as FetchError | undefined)?.statusCode === 401
@@ -347,17 +344,7 @@ async function wijzigHomeworkColor(event: Event) {
 </script>
 
 <template>
-  <main class="avail-page">
-    <section id="avail-back-section" class="avail-back-section">
-      <button
-        id="avail-back-link"
-        type="button"
-        aria-label="Terug"
-        class="avail-back-link"
-        @click="terug"
-      >← Terug</button>
-    </section>
-
+  <div class="avail-panel">
     <div v-if="!pattern && !error" class="avail-skeleton" aria-hidden="true">
       <div v-for="n in 7" :key="n" class="avail-skeleton-row" />
     </div>
@@ -368,7 +355,6 @@ async function wijzigHomeworkColor(event: Event) {
 
     <template v-else>
       <section id="avail-week-section" class="avail-week-section">
-        <h1 id="avail-page-heading" class="avail-page-heading">Beschikbare tijd</h1>
         <h2 id="avail-week-heading" class="avail-week-heading">Weekpatroon</h2>
 
         <div id="avail-week-list" class="avail-week-list">
@@ -407,9 +393,6 @@ async function wijzigHomeworkColor(event: Event) {
         </div>
       </section>
 
-      <!-- Zusje van avail-week-section, niet er ouder-kind mee (code review Story 2.2:
-           stond hier eerst genest, wat de kopjes-hiërarchie voor screenreaders verkeerd
-           voorstelde — "Afwijkingen..." leek een sub-onderdeel van "Weekpatroon"). -->
       <section id="avail-calendar-section" class="avail-calendar-section">
         <h2 id="avail-calendar-heading" class="avail-calendar-heading">Afwijkingen voor specifieke dagen</h2>
 
@@ -497,8 +480,6 @@ async function wijzigHomeworkColor(event: Event) {
         </div>
       </section>
 
-      <!-- Zusje van avail-calendar-section, niet er ouder-kind mee (Story 2.2's code
-           review vond precies deze nestingsfout bij de vorige sectie-toevoeging). -->
       <section id="avail-homework-sync-section" class="avail-homework-sync-section">
         <h2 id="avail-homework-sync-heading" class="avail-homework-sync-heading">Huiswerk in je agenda</h2>
         <p id="avail-homework-sync-description" class="avail-homework-sync-description">
@@ -538,52 +519,19 @@ async function wijzigHomeworkColor(event: Event) {
         </p>
       </section>
     </template>
-  </main>
+  </div>
 </template>
 
 <style scoped>
-.avail-page {
-  max-width: 32rem;
-  margin: 0 auto;
-  padding: 1rem;
-  font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
-
-.avail-back-section {
-  padding: 1.5rem 1rem;
-}
-
-.avail-back-link {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 1rem;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.avail-back-link:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
+.avail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .avail-load-error {
-  padding: 1.5rem;
   color: var(--color-warning-text);
   font-weight: 500;
-}
-
-.avail-week-section {
-  padding: 1.5rem;
-}
-
-.avail-page-heading {
-  margin: 0 0 1.5rem;
-  font-size: 1.5rem;
-  font-weight: 700;
 }
 
 .avail-week-heading {
@@ -638,7 +586,6 @@ async function wijzigHomeworkColor(event: Event) {
 }
 
 .avail-skeleton {
-  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -663,10 +610,6 @@ async function wijzigHomeworkColor(event: Event) {
   }
 }
 
-.avail-calendar-section {
-  padding: 1.5rem;
-}
-
 .avail-calendar-heading {
   margin: 0 0 1rem;
   font-size: 1rem;
@@ -677,6 +620,7 @@ async function wijzigHomeworkColor(event: Event) {
   border: 1px solid var(--color-border-subtle);
   border-radius: 0.75rem;
   padding: 1rem;
+  max-width: 24rem;
 }
 
 .avail-calendar-nav {
@@ -817,10 +761,6 @@ async function wijzigHomeworkColor(event: Event) {
   gap: 0.75rem;
 }
 
-.avail-homework-sync-section {
-  padding: 1.5rem;
-}
-
 .avail-homework-sync-heading {
   margin: 0 0 0.5rem;
   font-size: 1rem;
@@ -876,40 +816,5 @@ async function wijzigHomeworkColor(event: Event) {
   margin: 0.5rem 0 0;
   color: var(--color-warning-text);
   font-size: 0.8125rem;
-}
-
-@media (min-width: 1024px) {
-  .avail-page {
-    max-width: 64rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0 2rem;
-  }
-
-  .avail-back-section,
-  .avail-skeleton,
-  .avail-load-error {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .avail-week-section {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .avail-calendar-section {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .avail-homework-sync-section {
-    grid-column: 1 / -1;
-    grid-row: 3;
-  }
-
-  .avail-calendar {
-    max-width: 24rem;
-  }
 }
 </style>
