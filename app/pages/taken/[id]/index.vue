@@ -42,7 +42,10 @@ watch(error, (waarde) => {
   if (is401(waarde)) navigateTo('/inloggen')
   else if (waarde) {
     flashMessageState.value = 'Deze taak kon niet worden gevonden.'
-    navigateTo('/taken')
+    // `replace: true` (zelfde reden als `bevestigVerwijderen` hieronder): deze ongeldige
+    // taakdetailpagina mag geen geldig terug-doel blijven, anders blijft de terug-knop op
+    // /taken hierheen wijzen en lijkt hij niets te doen.
+    navigateTo('/taken', { replace: true })
   }
 }, { immediate: true })
 
@@ -102,7 +105,12 @@ async function bevestigVerwijderen() {
   try {
     await $fetch<{ ok: true }>(`/api/tasks/${encodeURIComponent(taskId.value)}`, { method: 'DELETE' })
     flashMessageState.value = 'Taak verwijderd'
-    await navigateTo('/taken')
+    // `replace: true` (zelfde bugfix als TaakFormulier.vue's opslaan-navigatie, code review
+    // 2026-08-30): een gewone push liet deze nu-verwijderde taakdetailpagina "vooruit" in de
+    // geschiedenis staan, bereikbaar via /taken's terug-knop — die probeerde de taak dan
+    // opnieuw te laden, kreeg een 404, en stuurde je stilzwijgend weer terug naar /taken,
+    // wat aanvoelde alsof de terug-knop niets deed.
+    await navigateTo('/taken', { replace: true })
   } catch (fout) {
     if (is401(fout)) {
       await navigateTo('/inloggen')
