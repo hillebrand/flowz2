@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `hidden_calendar_titles` text DEFAULT '[]' NOT NULL;

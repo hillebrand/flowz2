@@ -14,6 +14,7 @@ const ITEMS: { label: string, to: string }[] = [
   { label: 'Takenoverzicht', to: '/taken' },
   { label: 'Weekoverzicht', to: '/week' },
   { label: 'Beschikbare tijd', to: '/instellingen/beschikbare-tijd' },
+  { label: 'Verborgen agenda-items', to: '/instellingen/verborgen-agenda-items' },
   { label: 'Schoolsessies invoeren', to: '/schoolsessies' }
 ]
 

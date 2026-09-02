@@ -17,3 +17,12 @@ export interface HomeworkCalendarColorState {
   colorId: number | null
   hasCalendarWriteScope: boolean
 }
+
+// Weekoverzicht-only agenda-titelfilter (2026-09-02) — zie schema.ts's
+// `users.hiddenCalendarTitles` en server/domain/scheduling/week-overview.ts voor de
+// exacte-match-toepassing. GET/POST/DELETE geven allemaal de volledige, actuele lijst
+// terug (zelfde "server is gezaghebbend"-precedent als elders), zodat de client nooit
+// zelf een optimistische lijst hoeft te reconstrueren.
+export interface HiddenCalendarTitlesResponse {
+  titles: string[]
+}

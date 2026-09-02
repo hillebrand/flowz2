@@ -1,4 +1,4 @@
-import { getUserById, updateHomeworkCalendarColorId, upsertUserByGoogleSubjectId } from '../../data/users'
+import { addHiddenCalendarTitle, getUserById, removeHiddenCalendarTitle, updateHomeworkCalendarColorId, upsertUserByGoogleSubjectId } from '../../data/users'
 import type { User } from '../../data/schema'
 
 // Mutatie-ownership-regel (Consistency Conventions), hier op User toegepast:
@@ -51,4 +51,20 @@ export interface HomeworkCalendarColorState {
 export async function getHomeworkCalendarColorFor(userId: string): Promise<HomeworkCalendarColorState> {
   const user = await getUserById(userId)
   return { colorId: user.homeworkCalendarColorId, hasCalendarWriteScope: Boolean(user.hasCalendarWriteScope) }
+}
+
+// Weekoverzicht-only agenda-titelfilter (2026-09-02) — hier ondergebracht om dezelfde
+// reden als `setHomeworkCalendarColorFor` hierboven: een pure User-veldmutatie, geen
+// calendar-sync-aanroep.
+export async function getHiddenCalendarTitlesFor(userId: string): Promise<string[]> {
+  const user = await getUserById(userId)
+  return user.hiddenCalendarTitles
+}
+
+export async function addHiddenCalendarTitleFor(userId: string, title: string): Promise<string[]> {
+  return addHiddenCalendarTitle(userId, title)
+}
+
+export async function removeHiddenCalendarTitleFor(userId: string, title: string): Promise<string[]> {
+  return removeHiddenCalendarTitle(userId, title)
 }

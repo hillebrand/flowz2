@@ -23,6 +23,15 @@ export const users = sqliteTable('users', {
   // Afgeleid uit de daadwerkelijk door Google toegekende `tokens.scope` bij login/
   // her-consent (Story 2.3) — nooit uit wat er slechts is aangevraagd.
   hasCalendarWriteScope: integer('has_calendar_write_scope').notNull().default(0),
+  // Weekoverzicht-only agenda-titelfilter (gemeld door Hillebrand, 2026-09-02: Evelien wil
+  // terugkerende agenda-items als "Slaapritme"/"Ochtendroutine" niet in 7.1-weekoverzicht's
+  // agenda-lijst zien, maar wél laten meetellen voor beschikbare tijd/knelpunt-detectie/
+  // homepage-dagplanning). Bewust géén aparte tabel: dit is een simpele, kleine, puur-
+  // presentationele lijst zonder eigen velden buiten de titel zelf — zelfde argumentatie als
+  // `tasks.needs` hieronder. Matching is exact + case-insensitive + getrimd (zie
+  // `week-overview.ts`), niet "bevat", om te voorkomen dat een toekomstig event met een
+  // deels overlappende titel er ook per ongeluk mee verdwijnt.
+  hiddenCalendarTitles: text('hidden_calendar_titles', { mode: 'json' }).$type<string[]>().notNull().default([]),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

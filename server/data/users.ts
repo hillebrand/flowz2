@@ -87,6 +87,38 @@ export async function updateHomeworkCalendarColorId(userId: string, colorId: num
   return toDomainUser(user)
 }
 
+// Weekoverzicht-only agenda-titelfilter (2026-09-02) — toevoegen is idempotent
+// (case-insensitief/getrimd gededupliceerd), zodat twee keer dezelfde titel indienen geen
+// dubbele rij oplevert. Geen lock rond deze read-modify-write (in tegenstelling tot bv.
+// `updateTaskAndSubtasks`): dit is een klein, persoonlijk instellingenlijstje bewerkt vanaf
+// één scherm tegelijk, niet een gedeelde scheduling-resource met bewezen concurrency (zie
+// die functies' Story 3.5-precedent) — een race hier verliest hooguit één toevoeging.
+export async function addHiddenCalendarTitle(userId: string, title: string): Promise<string[]> {
+  const trimmed = title.trim()
+  const user = await getUserById(userId)
+  const alreadyPresent = user.hiddenCalendarTitles.some(existing => existing.toLowerCase() === trimmed.toLowerCase())
+  const titles = alreadyPresent ? user.hiddenCalendarTitles : [...user.hiddenCalendarTitles, trimmed]
+
+  await getDb()
+    .update(users)
+    .set({ hiddenCalendarTitles: titles, updatedAt: new Date().toISOString() })
+    .where(eq(users.id, userId))
+
+  return titles
+}
+
+export async function removeHiddenCalendarTitle(userId: string, title: string): Promise<string[]> {
+  const user = await getUserById(userId)
+  const titles = user.hiddenCalendarTitles.filter(existing => existing.toLowerCase() !== title.trim().toLowerCase())
+
+  await getDb()
+    .update(users)
+    .set({ hiddenCalendarTitles: titles, updatedAt: new Date().toISOString() })
+    .where(eq(users.id, userId))
+
+  return titles
+}
+
 // Task 5 (token-refresh): een ververst access-token gaat via dezelfde encrypt-laag de
 // database in als de bestaande tokens — nooit in platte tekst opslaan (Story 1.2-precedent).
 // `calendarRefreshToken` blijft ongemoeid: Google geeft bij een refresh-grant normaliter

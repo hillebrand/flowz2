@@ -2,6 +2,7 @@ import { detectShortfallForDate, generateShortfallRecommendations } from './shor
 import { availableMinutesForDate } from './doelmoment'
 import { getTasksWithSessionOnDate } from '../../data/tasks'
 import { getTodayEvents } from '../calendar-sync/day-events'
+import { getHiddenCalendarTitlesFor } from '../auth/users'
 import type { WeekDayDto } from '../../../shared/types/week'
 
 // Story 6.5 — bouwt de weekoverzicht-data voor één dag. Gedeeld tussen `week.get.ts`
@@ -23,8 +24,19 @@ export async function buildWeekDay(userId: string, date: string): Promise<WeekDa
     }
   }
 
+  // Weekoverzicht-only titelfilter (2026-09-02) — beïnvloedt uitsluitend déze weergavelijst.
+  // `availableMinutesForDate`/`detectShortfallForDate` hierboven doen hun eigen, ongefilterde
+  // `getTodayEvents`-aanroep, dus verborgen events blijven daar en op de homepage-dagplanning
+  // gewoon meetellen. Exact + case-insensitief + getrimd (geen "bevat"): een toekomstig event
+  // met een deels overlappende titel mag niet per ongeluk ook verdwijnen.
   const result = await getTodayEvents(userId, date)
-  const calendarItems = result ? result.events.map(e => ({ title: e.title, startsAt: e.startsAt, endsAt: e.endsAt })) : null
+  const hiddenTitles = await getHiddenCalendarTitlesFor(userId)
+  const hiddenTitlesLower = new Set(hiddenTitles.map(t => t.trim().toLowerCase()))
+  const calendarItems = result
+    ? result.events
+        .filter(e => !hiddenTitlesLower.has(e.title.trim().toLowerCase()))
+        .map(e => ({ title: e.title, startsAt: e.startsAt, endsAt: e.endsAt }))
+    : null
 
   return { date, availableMinutes, neededMinutes, tasks, calendarItems, suggestion }
 }
