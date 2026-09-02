@@ -88,13 +88,17 @@ export async function createTaskAndSession(input: CreateTaskAndSessionInput): Pr
 // transactie hierboven alsnog faalt, is er geen manier om die transactie zelf terug te
 // draaien (de HTTP-call naar Google valt erbuiten) — dus expliciet opruimen i.p.v. een
 // weeskind-Task/Session/Subtask achter te laten. Geen `onDelete: 'cascade'` op enige FK in
-// dit schema, dus alle drie tabellen expliciet, niet alleen sessions/tasks (Story 3.2 —
-// zonder deze uitbreiding zouden Subtask-rijen alsnog een weeskind worden).
+// dit schema, dus alle tabellen met een `taskId`-FK expliciet, niet alleen sessions/tasks
+// (Story 3.2 — zonder deze uitbreiding zouden Subtask-rijen alsnog een weeskind worden).
 export async function deleteTaskAndSession(taskId: string, sessionId: string): Promise<void> {
   // In één transactie (code review 2026-08-01): drie losse deletes lieten een venster open
   // waarin een gelijktijdige lezer (of een crash halverwege) een deels opgeruimde Task/
   // Session/Subtask-combinatie kon zien — dezelfde atomiciteitseis als `createTaskAndSession`.
   await getDb().transaction(async (tx) => {
+    // Bugfix (2026-09-02): `sessionLogs.taskId` (Story 4.7, ná deze functie geschreven)
+    // verwijst ook naar `tasks.id` — zonder deze delete faalde élke taakverwijdering met
+    // een FOREIGN KEY constraint-fout zodra de taak ooit gelogde sessietijd had.
+    await tx.delete(sessionLogs).where(eq(sessionLogs.taskId, taskId))
     await tx.delete(subtasks).where(eq(subtasks.taskId, taskId))
     await tx.delete(sessions).where(eq(sessions.id, sessionId))
     await tx.delete(tasks).where(eq(tasks.id, taskId))
