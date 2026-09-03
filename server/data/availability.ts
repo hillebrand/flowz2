@@ -1,6 +1,6 @@
-import { and, eq, gte, lt, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getDb } from './db'
-import { availabilityWriteLocks, availableTimeExceptions, availableTimePatterns, type AvailableTimePattern, type Weekday } from './schema'
+import { availabilityWriteLocks, availableTimeExceptions, availableTimePatterns, type AvailableTimePattern } from './schema'
 import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '../../shared/utils/availability'
 
 const DELTA_MINUTES = 15
@@ -49,68 +49,13 @@ export async function getOrCreateWeekPattern(userId: string): Promise<AvailableT
   return row
 }
 
-// Server-side clamp op 0 én op 24 uur, niet optioneel: dit is de enige plek die beide
-// grenzen écht afdwingt. De disabled-state op de client is UX-feedback, geen vangnet —
-// een rechtstreekse PATCH-call zou anders de tijd negatief of boven de 1440 minuten
-// kunnen maken (Story 2.1 Dev Notes voor de 0-ondergrens; de 24-uursgrens is later
-// toegevoegd, zie MAX_MINUTES_PER_DAY in shared/utils/availability.ts).
-//
-// Atomair op SQL-niveau i.p.v. lees-dan-schrijf in JavaScript (code review Story 2.1):
-// de vorige versie berekende de nieuwe waarde in JS uit een eerder gelezen snapshot,
-// waardoor twee gelijktijdige PATCH-calls op dezelfde dag (twee tabbladen, twee
-// apparaten) elkaars increment konden overschrijven — beide lazen bijvoorbeeld 60,
-// beide schreven 75, en één +15 verdween. Nu berekent de database de nieuwe waarde
-// binnen dezelfde statement als de write, dus er is geen venster tussen lezen en
-// schrijven waarin dat kan gebeuren.
-export async function updateWeekPatternDay(
-  userId: string,
-  day: Weekday,
-  direction: 'increase' | 'decrease'
-): Promise<AvailableTimePattern> {
-  await getOrCreateWeekPattern(userId)
-
-  const column = availableTimePatterns[day]
-  const next = direction === 'increase'
-    ? sql`MIN(${MAX_MINUTES_PER_DAY}, ${column} + ${DELTA_MINUTES})`
-    : sql`MAX(0, ${column} - ${DELTA_MINUTES})`
-
-  const [updated] = await getDb()
-    .update(availableTimePatterns)
-    .set({ [day]: next, updatedAt: new Date().toISOString() })
-    .where(eq(availableTimePatterns.userId, userId))
-    .returning()
-
-  // Was hier een `updated!`-assertie (code review Story 2.1) — zie getOrCreateWeekPattern
-  // hierboven voor dezelfde redenering.
-  if (!updated) {
-    throw new Error(`AvailableTimePattern voor user ${userId} kon niet worden bijgewerkt.`)
-  }
-
-  return updated
-}
-
-export interface ExceptionRow {
-  date: string
-  minutes: number
-}
-
-export async function getExceptionsForMonth(userId: string, month: string): Promise<ExceptionRow[]> {
-  const start = `${month}-01`
-  const [year, monthNum] = month.split('-').map(Number)
-  // Eerste dag van de volgende maand als exclusieve bovengrens — een lexicografische
-  // string-vergelijking op 'YYYY-MM' volstaat niet om "de rest van deze maand" af te
-  // bakenen, dus reken de echte datumgrens uit.
-  const nextMonthStart = new Date(Date.UTC(year!, monthNum!, 1)).toISOString().slice(0, 10)
-
-  return getDb()
-    .select({ date: availableTimeExceptions.date, minutes: availableTimeExceptions.minutes })
-    .from(availableTimeExceptions)
-    .where(and(
-      eq(availableTimeExceptions.userId, userId),
-      gte(availableTimeExceptions.date, start),
-      lt(availableTimeExceptions.date, nextMonthStart)
-    ))
-}
+// [Verificatieronde 2, code review 2026-09-02] `updateWeekPatternDay` en
+// `getExceptionsForMonth` zijn hier verwijderd: hun enige aanroepers waren
+// `server/domain/availability/week-pattern.ts`'s inmiddels al verwijderde
+// `updateWeekPatternDayFor`/`getExceptionsForMonth`-wrappers, zelf zonder aanroepers meer
+// sinds Story 2.1's herziene UI (agenda-koppeling i.p.v. weekpatroon). `getOrCreateWeekPattern`
+// hierboven blijft ongewijzigd bestaan: de scheduling-engine (`doelmoment.ts`) roept die nog
+// rechtstreeks aan.
 
 export interface UpdateExceptionResult {
   date: string
@@ -143,8 +88,12 @@ export async function updateExceptionForDate(
   await acquireAvailabilityWriteLock(userId, date)
   try {
     // Defensief op 0 in plaats van getOrCreateWeekPattern hier aan te roepen — in de
-    // praktijk bestaat de rij altijd al (dezelfde pagina haalt bij het laden eerst
-    // /api/availability/week op, wat 'm lazy aanmaakt), dus dit pad is een vangnet, geen
+    // praktijk bestaat de rij altijd al, want de scheduling-engine roept `getOrCreateWeekPattern`
+    // (via `doelmoment.ts`) bij elke planningsberekening aan, wat de rij lazy aanmaakt.
+    // [Bijgewerkt 2026-09-02, code review verificatieronde 2 — verwees eerst naar Story
+    // 2.1's inmiddels verwijderde /api/availability/week-pagina als lazy-maker, maar díe
+    // was zelf ook al maar een doorgeefluik naar `getOrCreateWeekPattern`; de daadwerkelijk
+    // levende aanroeper is de scheduling-engine.] Dit pad blijft dus een vangnet, geen
     // verwacht scenario.
     const [pattern] = await getDb()
       .select()

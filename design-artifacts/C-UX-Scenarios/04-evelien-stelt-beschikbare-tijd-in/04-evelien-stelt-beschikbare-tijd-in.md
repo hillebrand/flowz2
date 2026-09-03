@@ -14,7 +14,7 @@ design_status: not-started
 ## Transaction (Q1)
 
 **What this scenario covers:**
-Evelien legt vast hoeveel tijd ze structureel per weekdag beschikbaar heeft voor huiswerk, en wijkt daar voor specifieke dagen vanaf, zodat de motor daarmee realistisch kan plannen.
+Evelien wijst een Google Calendar-agenda aan die ze zelf beheert met tijdblokken voor huiswerk, zodat de motor met haar echte, actuele beschikbare tijd rekent. [HERZIEN 2026-09-02, Correct Course — vervangt het eerdere weekpatroon+dag-afwijkingen-ontwerp, zie AD-10 en sprint-change-proposal-2026-09-02.md]
 
 ---
 
@@ -50,7 +50,7 @@ Evelien legt vast hoeveel tijd ze structureel per weekdag beschikbaar heeft voor
 ## Best Outcome (Q7)
 
 **User Success:**
-Weekpatroon (ma-zo) en eventuele dag-specifieke afwijkingen staan correct ingesteld; ze vertrouwt erop dat de motor daarmee rekent.
+Een beschikbare-tijd-agenda is gekoppeld; ze vertrouwt erop dat de motor met de blokken uit die agenda rekent, en beheert de blokken zelf verder gewoon in Google Calendar.
 
 **Business Success:**
 De motor beschikt over accurate beschikbare-tijd-data voor doelmoment/buffer-berekening én tijdgebrek-detectie (UJ-6).
@@ -59,9 +59,9 @@ De motor beschikt over accurate beschikbare-tijd-data voor doelmoment/buffer-ber
 
 ## Shortest Path (Q8)
 
-1. **Beschikbare tijd instellen** — past het weekpatroon aan met +/- knoppen en/of stelt via de kalender een dag-specifieke afwijking in; wijzigingen direct verwerkt ✓
+1. **Beschikbare-tijd-agenda koppelen** — kiest een Google Calendar-agenda in de dropdown; koppeling direct verwerkt ✓
 
-*Eén stap — de PRD noemt geen aparte opslaan-actie voor dit scherm; de +/- knoppen passen vermoedelijk direct toe (aanname, te bevestigen bij Phase 4).*
+*Eén stap — geen aparte opslaan-actie, de select past direct toe (zelfde patroon als voorheen bij de +/- knoppen).*
 
 ---
 
@@ -81,7 +81,7 @@ De motor beschikt over accurate beschikbare-tijd-data voor doelmoment/buffer-ber
 
 | Step | Folder | Purpose | Exit Action |
 |------|--------|---------|-------------|
-| 4.1 | `4.1-beschikbare-tijd-instellen/` | Weekpatroon en dag-specifieke afwijkingen instellen | Wijzigingen direct verwerkt — scenario succes ✓ |
+| 4.1 | `4.1-beschikbare-tijd-instellen/` | Beschikbare-tijd-agenda koppelen | Koppeling direct verwerkt — scenario succes ✓ |
 
 **First step** (4.1) includes full entry context (Q3 + Q4 + Q5 + Q6).
 **On-step interactions** (that don't leave the step) are documented as storyboard items within each page spec.

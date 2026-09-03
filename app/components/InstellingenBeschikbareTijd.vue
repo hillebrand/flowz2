@@ -1,245 +1,121 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type {
-  ExceptionsResponse,
-  UpdateExceptionResponse,
-  UpdateWeekPatternDayResponse,
-  WeekPatternResponse,
-  Weekday
-} from '#shared/types/availability'
-import type { HomeworkCalendarColorState, UpdateHomeworkCalendarColorResponse } from '#shared/types/settings'
-import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '#shared/utils/availability'
+  AvailabilityCalendarState,
+  HomeworkCalendarColorState,
+  UpdateAvailabilityCalendarResponse,
+  UpdateHomeworkCalendarColorResponse
+} from '#shared/types/settings'
 
 // Paneel binnen /instellingen (2026-09-02, samengevoegd uit de losse
 // instellingen/beschikbare-tijd.vue-pagina) — logica ongewijzigd overgenomen, alleen de
 // paginachrome (terug-knop, eigen <main>-wrapper, bredere 2-koloms-lay-out vanaf 1024px)
 // is eruit: dat hoort nu bij de gedeelde /instellingen-shell, niet bij dit paneel.
 
-// Dutch UI-labels blijven lokaal (puur presentatie); het `Weekday`-type zelf komt uit
-// shared/types/availability.d.ts — voorheen hier los gedefinieerd met de onjuiste
-// aanname dat `app/` geen types uit `server/` mag importeren (code review Story 2.1:
-// de mutatie-ownership-regel gaat over runtime-aanroepen, niet over compile-time-types,
-// en dit project heeft `shared/` al precies voor dit doel).
-const DAYS: { key: Weekday, label: string }[] = [
-  { key: 'monday', label: 'Maandag' },
-  { key: 'tuesday', label: 'Dinsdag' },
-  { key: 'wednesday', label: 'Woensdag' },
-  { key: 'thursday', label: 'Donderdag' },
-  { key: 'friday', label: 'Vrijdag' },
-  { key: 'saturday', label: 'Zaterdag' },
-  { key: 'sunday', label: 'Zondag' }
-]
-
-function formatDuur(minuten: number): string {
-  const uren = Math.floor(minuten / 60)
-  const rest = minuten % 60
-  return `${uren}u ${rest}m`
-}
-
 function is401(fout: unknown): boolean {
   return (fout as FetchError | undefined)?.statusCode === 401
 }
 
-// `server: false`: bewust geen SSR-fetch voor déze data — dit is een authenticated/
-// privé instellingenpagina, SEO/SSR-snelheid is hier irrelevant (4.1-spec: "SEO/Meta
-// content: n.v.t."). De skeleton-zichtbaarheid hangt hierna niet meer af van Nuxt's
-// interne `pending`/`status`-timing (die tijdens SSR met `server:false` nooit op
-// "pending" komt, waardoor de skeleton bij een eerdere versie ná i.p.v. vóór de content
-// verscheen — code review Story 2.1) maar rechtstreeks op `pattern === null`.
-const { data, error } = await useFetch<WeekPatternResponse>('/api/availability/week', {
-  server: false
-})
-
-// Een verlopen sessie tijdens dit bezoek is niet hypothetisch — dit is exact het
-// scenario waar Story 1.3 voor gebouwd is, en dit is de eerste geauthenticeerde
-// API-call in de app die het kan blootleggen (code review Story 2.1). `server/
-// middleware/session.ts` stuurt alleen bij `Accept: text/html` een redirect naar
-// /inloggen; `useFetch`/`$fetch` sturen `Accept: */*`, dus die vangt dit hier niet af.
-watch(error, (waarde) => {
-  if (is401(waarde)) {
-    navigateTo('/inloggen')
-  }
-}, { immediate: true })
-
-// Lokale, muteerbare kopie i.p.v. rechtstreeks op `data` schrijven: `useFetch`'s
-// `data` is voor deze pagina alleen de initiële laad-bron, niet de bron van waarheid
-// na een klik — elke PATCH-respons (`{ day, minutes }`) werkt hierna gericht bij,
-// zonder de hele week opnieuw te hoeven ophalen.
-const pattern = ref<Record<Weekday, number> | null>(null)
-watch(data, (waarde) => {
-  if (waarde) pattern.value = { ...waarde.pattern }
-}, { immediate: true })
-
-// Per dag bijgehouden i.p.v. één globale vlag: voorkomt dat twee snel na elkaar
-// verstuurde klikken op dezelfde dag elkaars respons inhalen en de UI een verouderde
-// waarde laat zien (de UX-spec verbiedt debounce/batching expliciet, dit is geen
-// debounce — de request gaat nog steeds direct weg, alleen de knoppen voor díe dag
-// pauzeren tot het antwoord er is).
-const pendingDays = ref<Set<Weekday>>(new Set())
-
-async function wijzig(day: Weekday, direction: 'increase' | 'decrease') {
-  if (pendingDays.value.has(day)) return
-
-  pendingDays.value.add(day)
-  try {
-    const resultaat = await $fetch<UpdateWeekPatternDayResponse>(`/api/availability/week/${day}`, {
-      method: 'PATCH',
-      body: { direction }
-    })
-    if (pattern.value) {
-      pattern.value[resultaat.day] = resultaat.minutes
-    }
-  } catch (fout) {
-    if (is401(fout)) {
-      await navigateTo('/inloggen')
-      return
-    }
-    console.error('[beschikbare-tijd] Kon dag niet aanpassen:', fout)
-  } finally {
-    pendingDays.value.delete(day)
-  }
+// Losse, lokale vorm i.p.v. een import uit server/domain/errors.ts — dat bestand hoort
+// niet tot shared/ en app/ importeert alleen typedefinities uit shared/ (zelfde grens als
+// elders in dit project).
+interface ErrorEnvelopeBody {
+  error?: { code?: string, message?: string }
 }
 
-// --- Dag-specifieke afwijkingen (Story 2.2) ---
-
-const MONTH_LABELS = [
-  'januari', 'februari', 'maart', 'april', 'mei', 'juni',
-  'juli', 'augustus', 'september', 'oktober', 'november', 'december'
-]
-const WEEKDAY_HEADER_LABELS = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
-
-// Lokale tijd, bewust géén `toISOString()` (code review Story 2.2): "de huidige maand"
-// is voor Evelien een lokaal begrip (Europe/Amsterdam), niet UTC — met UTC opende de
-// kalender rond lokale middernacht op een maandgrens de verkéérde maand (om 00:30 CEST
-// op 1 augustus is het pas 22:30 UTC op 31 juli). De opgeslagen datumstrings zelf
-// blijven wél UTC, dat is een ander concern (Consistency Conventions, data-laag).
-function formatMonth(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-const viewMonth = ref(formatMonth(new Date())) // 'YYYY-MM', start = huidige maand
-
-const viewMonthLabel = computed(() => {
-  const [year, month] = viewMonth.value.split('-').map(Number)
-  return `${MONTH_LABELS[month! - 1]} ${year}`
-})
-
-function shiftMonth(delta: number) {
-  const [year, month] = viewMonth.value.split('-').map(Number)
-  const next = new Date(Date.UTC(year!, month! - 1 + delta, 1))
-  viewMonth.value = next.toISOString().slice(0, 7)
-  // Sluit het paneel bij maandwissel (code review Story 2.2): zonder dit bleef het
-  // paneel een datum uit de vorige maand tonen, en omdat `exceptionsByDate` daarna
-  // volledig door de nieuwe maand vervangen wordt, viel de getoonde waarde stilzwijgend
-  // terug op het weekpatroon i.p.v. de echte, nog bestaande exceptie.
-  selectedDate.value = null
-}
-
-interface CalendarDay {
-  date: string
-  dayOfMonth: number
-}
-
-// Maandag-gebaseerde week (ma..zo, per de 4.1-mockup) — `.getUTCDay()` geeft
-// 0=zondag..6=zaterdag, dus zondag moet 6 leidende lege cellen geven, niet 0.
-const calendarLeadingBlanks = computed(() => {
-  const [year, month] = viewMonth.value.split('-').map(Number)
-  const firstWeekday = new Date(Date.UTC(year!, month! - 1, 1)).getUTCDay()
-  return (firstWeekday + 6) % 7
-})
-
-const calendarDays = computed<CalendarDay[]>(() => {
-  const [year, month] = viewMonth.value.split('-').map(Number)
-  const daysInMonth = new Date(Date.UTC(year!, month!, 0)).getUTCDate()
-  return Array.from({ length: daysInMonth }, (_, i) => {
-    const dayOfMonth = i + 1
-    return { date: `${viewMonth.value}-${String(dayOfMonth).padStart(2, '0')}`, dayOfMonth }
-  })
-})
-
-// `server:false`, zelfde reden als de weekpatroon-fetch hierboven. Reactief op
-// `viewMonth` — Nuxt herhaalt de fetch automatisch zodra de query-waarde wijzigt.
-const { data: exceptionsData, error: exceptionsError, status: exceptionsStatus } = await useFetch<ExceptionsResponse>(
-  '/api/availability/exceptions',
-  { server: false, query: { month: viewMonth } }
+// --- Beschikbare-tijd-agenda (Story 2.1, herzien 2026-09-02, Correct Course, AD-10) ---
+// Vervangt het eerdere weekpatroon (+/- per weekdag) en de dag-specifieke-afwijkingen-
+// kalender volledig — Evelien beheert die blokken voortaan zelf in Google Calendar; dit
+// paneel doet alleen nog de koppeling. `server: false`, zelfde reden als voorheen: dit is
+// een authenticated/privé instellingenpagina, SEO/SSR-snelheid is hier irrelevant.
+const { data: calendarData, error: calendarError } = await useFetch<AvailabilityCalendarState>(
+  '/api/settings/availability-calendar',
+  { server: false }
 )
 
-watch(exceptionsError, (waarde) => {
+watch(calendarError, (waarde) => {
   if (is401(waarde)) {
     navigateTo('/inloggen')
   }
 }, { immediate: true })
 
-// `status === 'pending'` is hier wél veilig te gebruiken (in tegenstelling tot de
-// skeleton-gate hierboven): dit is een zuiver client-getriggerde herfetch bij het
-// wisselen van maand, nooit onderdeel van een SSR-eerste-paint, dus de
-// `pendingWhenIdle`/`server:false`-timingvalkuil die de skeleton-bug veroorzaakte
-// speelt hier niet. Gebruikt alleen om de maand-navigatieknoppen kort te pauzeren.
-const monthLoading = computed(() => exceptionsStatus.value === 'pending')
-
-const exceptionsByDate = ref<Record<string, number>>({})
-watch(exceptionsData, (waarde) => {
+const availabilityCalendarId = ref<string | null>(null)
+const availabilityCalendarOptions = ref<{ id: string, name: string }[] | null>(null)
+watch(calendarData, (waarde) => {
   if (!waarde) return
-  const map: Record<string, number> = {}
-  for (const entry of waarde.exceptions) map[entry.date] = entry.minutes
-  exceptionsByDate.value = map
+  availabilityCalendarId.value = waarde.calendarId
+  availabilityCalendarOptions.value = waarde.options
 }, { immediate: true })
 
-function effectiveMinutesFor(date: string): number | null {
-  if (date in exceptionsByDate.value) return exceptionsByDate.value[date]!
-  if (!pattern.value) return null
-  return pattern.value[weekdayFromDate(date)]
+const availabilityCalendarPending = ref(false)
+const availabilityCalendarSaveError = ref<string | null>(null)
+
+// Toont wanneer de agenda-lijst zelf niet opgehaald kon worden (GET geeft dan
+// `options: null` terug — de fail-safe uit calendar-source.ts), i.p.v. dit stilzwijgend
+// als "geen agenda's" te tonen (code review 2026-09-02, high finding — AD-6 verbiedt een
+// stille terugval). [Verificatieronde 2] Dit mag géén andere content vervangen (AC #3
+// eist dat de select + de "geen agenda"-melding altijd samen renderen) — daarom hierna
+// puur als extra, onafhankelijke waarschuwing gebruikt, niet als v-else-gate.
+const availabilityCalendarListUnavailable = computed(() => availabilityCalendarOptions.value === null)
+
+// Een succesvol opgehaalde, maar lege agenda-lijst — ander scenario dan hierboven (geen
+// fout, gewoon niets te kiezen). Verificatieronde 2, medium finding: had voorheen dezelfde
+// onuitvoerbare "kies hierboven" tekst als de normale lege-selectie-toestand.
+const availabilityCalendarNoOptions = computed(() =>
+  availabilityCalendarOptions.value !== null && availabilityCalendarOptions.value.length === 0
+)
+
+// Een eerder gekozen agenda die niet meer in de (wél geladen) lijst voorkomt — verwijderd,
+// of in Google zelf uitgevinkt/niet meer gedeeld. Zonder deze check toont de select
+// gewoon niets geselecteerd, zonder uitleg (code review 2026-09-02, high finding).
+const selectedCalendarMissing = computed(() =>
+  availabilityCalendarId.value !== null
+  && availabilityCalendarOptions.value !== null
+  && !availabilityCalendarOptions.value.some(option => option.id === availabilityCalendarId.value)
+)
+
+// Server-message doorgeven i.p.v. altijd dezelfde generieke tekst (verificatieronde 2,
+// medium finding): de PATCH-validatiefouten (verkeerde/verdwenen agenda, huiswerk-agenda
+// gekozen) hebben elk hun eigen, bruikbare boodschap — "probeer het opnieuw" is bij zo'n
+// fout misleidend, opnieuw proberen faalt gegarandeerd weer.
+function foutmeldingUit(fout: unknown, fallback: string): string {
+  const data = (fout as FetchError<ErrorEnvelopeBody> | undefined)?.data
+  return data?.error?.message ?? fallback
 }
 
-const selectedDate = ref<string | null>(null)
+async function wijzigAvailabilityCalendar(event: Event) {
+  const select = event.target as HTMLSelectElement
 
-function selecteerDag(date: string) {
-  selectedDate.value = date
-}
+  // Defensieve guard, in de praktijk onbereikbaar zolang `:disabled="availabilityCalendarPending"`
+  // op de select staat (een disabled <select> vuurt geen `change`) — maar goedkoop om hier
+  // toch expliciet te herstellen mocht die binding ooit verdwijnen of een `change` er
+  // programmatisch omheen komen (code review 2026-09-02, verificatieronde 2: het eerdere
+  // commentaar presenteerde dit ten onrechte als de oplossing van een echte desync).
+  if (availabilityCalendarPending.value) {
+    select.value = availabilityCalendarId.value ?? ''
+    return
+  }
 
-function sluitPaneel() {
-  selectedDate.value = null
-}
+  const waarde = select.value
+  availabilityCalendarSaveError.value = null
 
-const selectedDateLabel = computed(() => {
-  if (!selectedDate.value) return ''
-  const weekday = weekdayFromDate(selectedDate.value)
-  const label = DAYS.find(d => d.key === weekday)?.label ?? ''
-  const dayOfMonth = Number(selectedDate.value.slice(8, 10))
-  const [year, month] = selectedDate.value.split('-').map(Number)
-  return `${label} ${dayOfMonth} ${MONTH_LABELS[month! - 1]}`
-})
-
-const pendingExceptionDates = ref<Set<string>>(new Set())
-
-async function wijzigExceptie(date: string, direction: 'increase' | 'decrease') {
-  if (pendingExceptionDates.value.has(date)) return
-
-  pendingExceptionDates.value.add(date)
+  availabilityCalendarPending.value = true
   try {
-    const resultaat = await $fetch<UpdateExceptionResponse>(`/api/availability/exceptions/${date}`, {
+    const resultaat = await $fetch<UpdateAvailabilityCalendarResponse>('/api/settings/availability-calendar', {
       method: 'PATCH',
-      body: { direction }
+      body: { calendarId: waarde }
     })
-    // Guard tegen een maandwissel die plaatsvond terwijl deze PATCH onderweg was (code
-    // review Story 2.2): zonder deze check zou het resultaat de state van een inmiddels
-    // andere, zichtbare maand vervuilen met een datum die daar niet in thuishoort.
-    if (resultaat.date.startsWith(viewMonth.value)) {
-      exceptionsByDate.value = { ...exceptionsByDate.value }
-      if (resultaat.active) {
-        exceptionsByDate.value[resultaat.date] = resultaat.minutes
-      } else {
-        delete exceptionsByDate.value[resultaat.date]
-      }
-    }
+    availabilityCalendarId.value = resultaat.calendarId
   } catch (fout) {
     if (is401(fout)) {
       await navigateTo('/inloggen')
       return
     }
-    console.error('[beschikbare-tijd] Kon exceptie niet aanpassen:', fout)
+    select.value = availabilityCalendarId.value ?? ''
+    availabilityCalendarSaveError.value = foutmeldingUit(fout, 'Kon de agenda niet opslaan. Probeer het opnieuw.')
+    console.error('[beschikbare-tijd] Kon beschikbare-tijd-agenda niet opslaan:', fout)
   } finally {
-    pendingExceptionDates.value.delete(date)
+    availabilityCalendarPending.value = false
   }
 }
 
@@ -345,180 +221,108 @@ async function wijzigHomeworkColor(event: Event) {
 
 <template>
   <div class="avail-panel">
-    <div v-if="!pattern && !error" class="avail-skeleton" aria-hidden="true">
-      <div v-for="n in 7" :key="n" class="avail-skeleton-row" />
-    </div>
+    <!-- Eigen laad-/foutstate, losstaand van avail-homework-sync-section hieronder — een
+         mislukte agenda-fetch mag die onafhankelijke sectie niet meeverbergen (code review
+         2026-09-02, medium finding). -->
+    <section id="avail-calendar-select-section" class="avail-calendar-select-section">
+      <div v-if="!calendarData && !calendarError" class="avail-skeleton" aria-hidden="true">
+        <div v-for="n in 3" :key="n" class="avail-skeleton-row" />
+      </div>
 
-    <p v-else-if="error" class="avail-load-error" role="alert">
-      Kon de beschikbare tijd niet laden. Probeer de pagina te verversen.
-    </p>
+      <p v-else-if="calendarError" class="avail-load-error" role="alert">
+        Kon de beschikbare tijd niet laden. Probeer de pagina te verversen.
+      </p>
 
-    <template v-else>
-      <section id="avail-week-section" class="avail-week-section">
-        <h2 id="avail-week-heading" class="avail-week-heading">Weekpatroon</h2>
-
-        <div id="avail-week-list" class="avail-week-list">
-          <div
-            v-for="day in DAYS"
-            :id="`avail-day-row-${day.key}`"
-            :key="day.key"
-            class="avail-day-row"
-          >
-            <span :id="`avail-day-label-${day.key}`" class="avail-day-label">{{ day.label }}</span>
-
-            <button
-              :id="`avail-day-minus-button-${day.key}`"
-              type="button"
-              class="avail-day-button"
-              :aria-label="`Minder tijd op ${day.label}`"
-              :disabled="!pattern || pattern[day.key] <= 0 || pendingDays.has(day.key)"
-              @click="wijzig(day.key, 'decrease')"
-            >−</button>
-
-            <span
-              :id="`avail-day-time-${day.key}`"
-              class="avail-day-time"
-              aria-live="polite"
-            >{{ pattern ? formatDuur(pattern[day.key]) : '' }}</span>
-
-            <button
-              :id="`avail-day-plus-button-${day.key}`"
-              type="button"
-              class="avail-day-button"
-              :aria-label="`Meer tijd op ${day.label}`"
-              :disabled="!pattern || pattern[day.key] >= MAX_MINUTES_PER_DAY || pendingDays.has(day.key)"
-              @click="wijzig(day.key, 'increase')"
-            >+</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="avail-calendar-section" class="avail-calendar-section">
-        <h2 id="avail-calendar-heading" class="avail-calendar-heading">Afwijkingen voor specifieke dagen</h2>
-
-        <p v-if="exceptionsError" class="avail-load-error" role="alert">
-          Kon de afwijkingen niet laden. Probeer de pagina te verversen.
+      <template v-else>
+        <!-- Geen eigen paginakop hier — de /instellingen-shell rendert al de paginabrede
+             h1 ("Instellingen"); zelfde precedent als InstellingenUiterlijk.vue en
+             InstellingenVerborgenAgendaItems.vue, die ook geen eigen h1 hebben. -->
+        <h2 id="avail-calendar-select-heading" class="avail-calendar-select-heading">Jouw beschikbare-tijd-agenda</h2>
+        <p id="avail-calendar-select-description" class="avail-calendar-select-description">
+          Wijs de Google Calendar-agenda aan waarin je zelf tijdblokken voor huiswerk beheert — om je rooster,
+          afspraken en eten heen. Flowz plant sessies alleen binnen die blokken. Wil je meer of minder tijd, pas dan
+          de blokken rechtstreeks in Google Calendar aan.
         </p>
 
-        <div v-else id="avail-calendar" class="avail-calendar">
-          <div class="avail-calendar-nav">
-            <button
-              id="avail-calendar-prev-month-button"
-              type="button"
-              class="avail-calendar-nav-button"
-              aria-label="Vorige maand"
-              :disabled="monthLoading"
-              @click="shiftMonth(-1)"
-            >‹</button>
-            <span class="avail-calendar-month-label">{{ viewMonthLabel }}</span>
-            <button
-              id="avail-calendar-next-month-button"
-              type="button"
-              class="avail-calendar-nav-button"
-              aria-label="Volgende maand"
-              :disabled="monthLoading"
-              @click="shiftMonth(1)"
-            >›</button>
-          </div>
-
-          <div class="avail-calendar-weekday-header">
-            <span v-for="label in WEEKDAY_HEADER_LABELS" :key="label">{{ label }}</span>
-          </div>
-
-          <div class="avail-calendar-grid">
-            <div v-for="n in calendarLeadingBlanks" :key="`blank-${n}`" class="avail-calendar-blank" aria-hidden="true" />
-            <button
-              v-for="day in calendarDays"
-              :key="day.date"
-              type="button"
-              class="avail-calendar-day"
-              :class="{
-                'avail-calendar-day--selected': selectedDate === day.date,
-                'avail-calendar-day--exception': day.date in exceptionsByDate
-              }"
-              :aria-label="`${day.dayOfMonth} ${viewMonthLabel}${day.date in exceptionsByDate ? ', met afwijking' : ''}`"
-              @click="selecteerDag(day.date)"
-            >{{ day.dayOfMonth }}</button>
-          </div>
-        </div>
-
-        <div v-if="selectedDate" id="avail-exception-panel" class="avail-exception-panel">
-          <div class="avail-exception-panel-header">
-            <span id="avail-exception-date" class="avail-exception-date">{{ selectedDateLabel }}</span>
-            <button
-              id="avail-exception-close-button"
-              type="button"
-              class="avail-exception-close-button"
-              aria-label="Paneel sluiten"
-              @click="sluitPaneel"
-            >✕</button>
-          </div>
-
-          <div class="avail-exception-controls">
-            <button
-              id="avail-exception-minus-button"
-              type="button"
-              class="avail-day-button"
-              :aria-label="`Minder tijd op ${selectedDateLabel}`"
-              :disabled="effectiveMinutesFor(selectedDate) === null || effectiveMinutesFor(selectedDate)! <= 0 || pendingExceptionDates.has(selectedDate)"
-              @click="wijzigExceptie(selectedDate, 'decrease')"
-            >−</button>
-
-            <span id="avail-exception-time" class="avail-day-time" aria-live="polite">
-              {{ effectiveMinutesFor(selectedDate) !== null ? formatDuur(effectiveMinutesFor(selectedDate)!) : '' }}
-            </span>
-
-            <button
-              id="avail-exception-plus-button"
-              type="button"
-              class="avail-day-button"
-              :aria-label="`Meer tijd op ${selectedDateLabel}`"
-              :disabled="effectiveMinutesFor(selectedDate) === null || effectiveMinutesFor(selectedDate)! >= MAX_MINUTES_PER_DAY || pendingExceptionDates.has(selectedDate)"
-              @click="wijzigExceptie(selectedDate, 'increase')"
-            >+</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="avail-homework-sync-section" class="avail-homework-sync-section">
-        <h2 id="avail-homework-sync-heading" class="avail-homework-sync-heading">Huiswerk in je agenda</h2>
-        <p id="avail-homework-sync-description" class="avail-homework-sync-description">
-          Kies een kleur voor je huiswerk-afspraken. Flowz zet geplande sessies met die kleur in je Google Calendar,
-          en herkent ze dan automatisch — zodat je nooit meer een melding krijgt over een conflict dat er eigenlijk
-          geen is.
+        <!-- [Verificatieronde 2, medium finding] `availabilityCalendarListUnavailable` is
+             hier een extra, onafhankelijke waarschuwing — geen v-else-gate meer. AC #3
+             eist dat de select + de "geen agenda"-melding altijd samen zichtbaar zijn,
+             ook als de Calendar-lijst zelf niet opgehaald kon worden (dan is de select
+             leeg op de placeholder na, maar wél aanwezig). -->
+        <p v-if="availabilityCalendarListUnavailable" id="avail-calendar-list-error" class="avail-load-error" role="alert">
+          Kon je Google Calendar-agenda's niet ophalen. Probeer het later opnieuw.
         </p>
 
-        <div class="avail-homework-color-row">
-          <span
-            v-if="homeworkColorSwatch"
-            class="avail-homework-color-swatch"
-            :style="{ backgroundColor: homeworkColorSwatch }"
-            aria-hidden="true"
-          />
-          <label for="avail-homework-color-select" class="avail-homework-color-label">Kleur voor huiswerk</label>
-          <select
-            id="avail-homework-color-select"
-            class="avail-homework-color-select"
-            :disabled="homeworkColorPending"
-            :value="homeworkColorId === null ? '' : String(homeworkColorId)"
-            @change="wijzigHomeworkColor"
-          >
-            <!-- Kleur is verplicht (2026-08-01): geen "Geen kleur"-optie meer. Deze
-                 placeholder is disabled en dus nooit een geldige, aanklikbare keuze — hij
-                 verschijnt alleen zolang homeworkColorId nog null is (rehydratie loopt nog,
-                 of eerste bezoek ooit). -->
-            <option value="" disabled>Kies een kleur</option>
-            <option v-for="color in HOMEWORK_COLORS" :key="color.id" :value="String(color.id)">
-              {{ color.label }}
-            </option>
-          </select>
-        </div>
+        <label for="avail-calendar-select" class="avail-calendar-select-label">Beschikbare-tijd-agenda</label>
+        <select
+          id="avail-calendar-select"
+          class="avail-calendar-select"
+          :disabled="availabilityCalendarPending"
+          :value="availabilityCalendarId ?? ''"
+          @change="wijzigAvailabilityCalendar"
+        >
+          <option value="" disabled>Kies een agenda</option>
+          <option v-for="option in availabilityCalendarOptions ?? []" :key="option.id" :value="option.id">
+            {{ option.name }}
+          </option>
+        </select>
 
-        <p v-if="homeworkColorError" id="avail-homework-color-error" class="avail-homework-color-error" role="alert">
-          {{ homeworkColorError }}
+        <!-- [Verificatieronde 2, medium finding] Een succesvol lege lijst is geen
+             uitvoerbare "kies hierboven"-instructie — eigen tekst die de oorzaak noemt. -->
+        <p v-if="availabilityCalendarId === null && availabilityCalendarNoOptions" id="avail-no-calendar-notice" class="avail-no-calendar-notice" aria-live="polite">
+          Je hebt geen zichtbare agenda's in Google Calendar. Maak er eerst een aan.
         </p>
-      </section>
-    </template>
+        <p v-else-if="availabilityCalendarId === null" id="avail-no-calendar-notice" class="avail-no-calendar-notice" aria-live="polite">
+          Kies hierboven een agenda, anders kan Flowz nog geen planning maken.
+        </p>
+        <p v-else-if="selectedCalendarMissing" id="avail-calendar-missing-notice" class="avail-no-calendar-notice" aria-live="polite">
+          De eerder gekozen agenda is niet meer beschikbaar. Kies hierboven een andere agenda.
+        </p>
+
+        <p v-if="availabilityCalendarSaveError" class="avail-load-error" role="alert">
+          {{ availabilityCalendarSaveError }}
+        </p>
+      </template>
+    </section>
+
+    <section id="avail-homework-sync-section" class="avail-homework-sync-section">
+      <h2 id="avail-homework-sync-heading" class="avail-homework-sync-heading">Huiswerk in je agenda</h2>
+      <p id="avail-homework-sync-description" class="avail-homework-sync-description">
+        Kies een kleur voor je huiswerk-afspraken. Flowz zet geplande sessies met die kleur in je Google Calendar,
+        en herkent ze dan automatisch — zodat je nooit meer een melding krijgt over een conflict dat er eigenlijk
+        geen is.
+      </p>
+
+      <div class="avail-homework-color-row">
+        <span
+          v-if="homeworkColorSwatch"
+          class="avail-homework-color-swatch"
+          :style="{ backgroundColor: homeworkColorSwatch }"
+          aria-hidden="true"
+        />
+        <label for="avail-homework-color-select" class="avail-homework-color-label">Kleur voor huiswerk</label>
+        <select
+          id="avail-homework-color-select"
+          class="avail-homework-color-select"
+          :disabled="homeworkColorPending"
+          :value="homeworkColorId === null ? '' : String(homeworkColorId)"
+          @change="wijzigHomeworkColor"
+        >
+          <!-- Kleur is verplicht (2026-08-01): geen "Geen kleur"-optie meer. Deze
+               placeholder is disabled en dus nooit een geldige, aanklikbare keuze — hij
+               verschijnt alleen zolang homeworkColorId nog null is (rehydratie loopt nog,
+               of eerste bezoek ooit). -->
+          <option value="" disabled>Kies een kleur</option>
+          <option v-for="color in HOMEWORK_COLORS" :key="color.id" :value="String(color.id)">
+            {{ color.label }}
+          </option>
+        </select>
+      </div>
+
+      <p v-if="homeworkColorError" id="avail-homework-color-error" class="avail-homework-color-error" role="alert">
+        {{ homeworkColorError }}
+      </p>
+    </section>
   </div>
 </template>
 
@@ -534,55 +338,51 @@ async function wijzigHomeworkColor(event: Event) {
   font-weight: 500;
 }
 
-.avail-week-heading {
-  margin: 0 0 1rem;
+.avail-calendar-select-heading {
+  margin: 0 0 0.5rem;
   font-size: 1rem;
   font-weight: 600;
 }
 
-.avail-week-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.avail-calendar-select-description {
+  margin: 0 0 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
-.avail-day-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+.avail-calendar-select-label {
+  display: block;
+  margin: 0 0 0.375rem;
+  font-size: 0.875rem;
 }
 
-.avail-day-label {
-  flex: 1;
-}
-
-.avail-day-time {
-  min-width: 4.5rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.avail-day-button {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
+.avail-calendar-select {
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 1.125rem;
-  line-height: 1;
-  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  max-width: 24rem;
+  width: 100%;
 }
 
-.avail-day-button:disabled {
-  opacity: 0.4;
+.avail-calendar-select:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.avail-day-button:focus-visible {
+.avail-calendar-select:focus-visible {
   outline: 2px solid var(--color-success-bg);
   outline-offset: 2px;
+}
+
+.avail-no-calendar-notice {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
 }
 
 .avail-skeleton {
@@ -608,157 +408,6 @@ async function wijzigHomeworkColor(event: Event) {
   .avail-skeleton-row {
     animation: none;
   }
-}
-
-.avail-calendar-heading {
-  margin: 0 0 1rem;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.avail-calendar {
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  max-width: 24rem;
-}
-
-.avail-calendar-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.avail-calendar-month-label {
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.avail-calendar-nav-button {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 1.125rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.avail-calendar-nav-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.avail-calendar-nav-button:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
-}
-
-.avail-calendar-weekday-header,
-.avail-calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.25rem;
-}
-
-.avail-calendar-weekday-header {
-  margin-bottom: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.avail-calendar-day,
-.avail-calendar-blank {
-  aspect-ratio: 1;
-}
-
-.avail-calendar-day {
-  border: none;
-  border-radius: 0.5rem;
-  background: transparent;
-  /* Review-patch (gemeld door Hillebrand, 2026-08-30): een <button> erft `color` niet
-     automatisch van een voorouder (UA-stylesheet geeft 'm een eigen systeemkleur) — zonder
-     dit expliciet te zetten bleven de dagcijfers zwart in de donkere modus, bijna
-     onleesbaar tegen de donkere achtergrond. */
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.875rem;
-  position: relative;
-}
-
-.avail-calendar-day:hover {
-  background: var(--color-surface-muted);
-}
-
-.avail-calendar-day--selected {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-}
-
-.avail-calendar-day--exception::after {
-  content: '';
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--color-success);
-}
-
-.avail-calendar-day--selected.avail-calendar-day--exception::after {
-  background: var(--color-surface);
-}
-
-.avail-calendar-day:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
-}
-
-.avail-exception-panel {
-  margin-top: 0.75rem;
-  padding: 1rem;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 0.75rem;
-}
-
-.avail-exception-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.avail-exception-date {
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.avail-exception-close-button {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.avail-exception-close-button:focus-visible {
-  outline: 2px solid var(--color-success-bg);
-  outline-offset: 2px;
-}
-
-.avail-exception-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
 }
 
 .avail-homework-sync-heading {

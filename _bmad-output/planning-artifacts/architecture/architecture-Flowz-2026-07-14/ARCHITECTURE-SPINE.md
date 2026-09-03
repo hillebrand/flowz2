@@ -7,9 +7,9 @@ paradigm: 'Layered modular monolith (Nuxt fullstack on Lambda)'
 scope: 'Flowz v1 — hobby, single-user greenfield (UJ-1 t/m UJ-10 uit prd.md)'
 status: final
 created: '2026-07-14'
-updated: '2026-08-23'
+updated: '2026-09-02'
 binds: [UJ-1, UJ-2, UJ-3, UJ-4, UJ-5, UJ-6, UJ-7, UJ-8, UJ-9, UJ-10]
-sources: ['_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/addendum.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/reconcile-brief.md', '_bmad-output/planning-artifacts/research/technical-magister-api-integratie-en-microsoft-sso-research-2026-07-10.md']
+sources: ['_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/addendum.md', '_bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/reconcile-brief.md', '_bmad-output/planning-artifacts/research/technical-magister-api-integratie-en-microsoft-sso-research-2026-07-10.md', '_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md']
 companions: []
 ---
 
@@ -56,6 +56,7 @@ graph LR
 - **Prevents:** een webhook-abonnement, cron-job of proactieve achtergrond-notificatie die de huidige request-gedreven Lambda-deployment niet draait
 - **Rule:** Calendar-data wordt live opgehaald op het request-pad (app-start, relevante schermweergave), nooit langer dan één request gecached, nooit via push/webhook ontvangen. Elke vorm van achtergrondverwerking (bv. proactieve push-meldingen) is expliciet uitgesteld — zie Deferred.
 - **Verduidelijking [TOEGEVOEGD 2026-08-26, Correct Course]:** "Calendar-data" omvat alle voor de gebruiker zichtbare/geabonneerde agenda's (via `calendarList.list`, zelfde `calendar.readonly`-scope), niet alleen de primary-agenda — zie Epic 2, Story 2.4. Geen wijziging aan de pull-only-regel zelf, alleen aan het aantal agenda's dat per request bevraagd wordt.
+- **Verduidelijking [TOEGEVOEGD 2026-09-02, Correct Course, AD-10]:** pull-only geldt vanaf AD-10 niet meer alleen voor weergaveschermen maar ook voor de scheduling-engine zelf — elke doelmoment-/volgorde-berekening en elke herplanning haalt de beschikbare-tijd-agenda live op. Geen wijziging aan de pull-only-regel zelf, wel een uitbreiding van waar hij wordt toegepast.
 
 ### AD-5 — Secrets nooit in de repo
 
@@ -90,11 +91,18 @@ graph LR
 - **Prevents:** dat een implementatie de inactiviteitstimeout via de cookie's eigen (vaste, voor élke sessie gelijke) Max-Age probeert te regelen — dat kan niet per sessie variëren — of een aparte serverside sessietabel introduceert waar er nu bewust geen is
 - **Rule:** de bestaande auth (`server/routes/auth/google.get.ts`) gebruikt een stateless, sealed session-cookie (`nuxt-session`, via `nuxt-auth-utils`) zonder serverside sessietabel; `UserSession` staat willekeurige top-level velden toe (index signature), dus geen aparte tabel nodig. Het "dit is een openbare computer"-vinkje bij inloggen wordt als extra top-level sessieveld opgeslagen (`isPublicComputer`, naast het bestaande `user`-veld — niet genest onder een `.data`-object, dat bestaat niet in deze library). De Nitro-middleware die de sessie al valideert (`server/middleware/session.ts`) houdt daarnaast een top-level `lastActivity`-veld bij en vernieuwt die bij elke geauthenticeerde request (sliding window, via `setUserSession`); zodra `isPublicComputer=true` én er meer dan 30 minuten tussen zit, verklaart diezelfde middleware de sessie serverside ongeldig (`clearUserSession`) — dit is onafhankelijk van en aanvullend op h3's eigen `maxAge` (die absoluut is, gebaseerd op `createdAt`, en identiek voor élke sessie geldt — zie de 7-dagen-instelling in `nuxt.config.ts`, AD-2/NFR5). Sessies zonder het vinkje krijgen geen inactiviteitstimeout — alleen die bestaande 7-dagen refresh-token-vervaldatum blijft daar gelden. Een expliciete uitlog-route (nieuw, roept het al bestaande `clearUserSession` aan) is beschikbaar voor elke sessie, niet alleen publieke-computer-sessies.
 
+### AD-10 — Beschikbare tijd wordt live afgeleid uit een aangewezen Google Calendar-agenda, niet meer opgeslagen [TOEGEVOEGD 2026-09-02, Correct Course]
+
+- **Binds:** UJ-3, UJ-6, UJ-7, AD-1, AD-4
+- **Prevents:** dat een implementatie beschikbare tijd alsnog als eigen, met Calendar te synchroniseren datamodel behandelt (het eerdere `AvailableTimePattern`/`AvailableTimeException`-ontwerp) — wat opnieuw een dubbele, uit de pas lopende bron van waarheid zou creëren; en dat de scheduling-engine stilzwijgend op verouderde blokken blijft draaien als de Calendar-read faalt, zonder dat te signaleren
+- **Rule:** `User.availabilityCalendarId` wijst naar de door Evelien aangewezen Google Calendar-agenda. `server/domain/availability/` berekent, live en on-demand (AD-4's pull-only-regel, nu ook van toepassing op de scheduling-engine zelf, niet alleen weergaveschermen), de beschikbare tijd per dag als de tijdblokken uit die agenda. Dit is de enige bron voor beschikbare tijd; er is geen aparte tabel meer. De scheduling-engine (AD-1) gebruikt deze live blokken zowel voor doelmoment-/volgorde-berekening als voor sessieplaatsing. Faalt de Calendar-read, dan kan die aanroep geen scheduling-berekening uitvoeren — dit resulteert in een expliciete, schuldvrije Notification (AD-6), nooit in een stille terugval op verouderde of aangenomen beschikbaarheid.
+- **Herkomst:** productbeslissing van Hillebrand na live gebruik (Correct Course, 2026-09-02) — vervangt het Flowz-eigen weekpatroon+afwijkingen-ontwerp (voorheen Epic 2, Story 2.1/2.2) volledig.
+
 ## Consistency Conventions
 
 | Concern | Convention |
 | --- | --- |
-| Naming (entities, files) | `Task`, `Session`, `Subtask`, `AvailableTimePattern`, `AvailableTimeException`, `User`. PRD-termen (`studiedruk`, `doelmoment`) blijven ongewijzigd als code-namen, zodat PRD en code herleidbaar blijven. |
+| Naming (entities, files) | `Task`, `Session`, `Subtask`, `User`. PRD-termen (`studiedruk`, `doelmoment`) blijven ongewijzigd als code-namen, zodat PRD en code herleidbaar blijven. Beschikbare tijd heeft geen eigen entiteit meer — `User.availabilityCalendarId` wijst naar de bron-agenda; `server/domain/availability/` berekent blokken live uit Calendar-data (AD-10). |
 | Data & formats | Datums/tijden ISO 8601 UTC in de data-laag; duur altijd in minuten (integer) — ook de werkelijk bestede sessietijd wordt bij afronden afgerond op minuten opgeslagen, niet als los start-/eindtijdstempel-paar; ids zijn door Drizzle gegenereerde UUID's. |
 | State & cross-cutting | Elke mutatie op Task/Session/Subtask loopt via `server/domain/`-services — nooit directe DB-writes vanuit `server/api/`-handlers. `Session` heeft gescheiden schrijfpaden voor geplande velden (door de scheduler, `server/domain/scheduling/`) en werkelijke velden (door de sessie-runner tijdens UJ-1); geen van beide overschrijft het domein van de ander. `AvailableTimeException` heeft één schrijfpad (het UJ-3-scherm), ongeacht of de waarde handmatig ingevuld is of via UJ-7 voorgevuld. Auth via Google OAuth-sessiecookie, gevalideerd in Nitro-middleware. Technische errors als vaste envelope: `{ error: { code, message } }`, met een gedeelde error-code-vocabulaire in `server/domain/errors.ts` (geen endpoint verzint een eigen `code`). Gebruikersgerichte meldingen (UJ-6/7/8) volgen in plaats daarvan AD-6's `Notification`-shape. |
 
@@ -123,6 +131,7 @@ flowz/
       tasks/        # Task/Session/Subtask CRUD + mutatie-ownership
       scheduling/    # scheduling engine, escalatielogica (UJ-6/7/8)
       calendar-sync/ # Google Calendar pull + conflict-detectie (UJ-7); synchrone write-sync van huiswerk-events (AD-7)
+      availability/  # beschikbare-tijd-blokken live afgeleid uit de aangewezen Calendar-agenda (UJ-3, AD-10), gebruikt door scheduling/
     data/           # Drizzle schema + repositories (Turso)
   sst.config.ts     # infra-as-code: Lambda, stages, secrets
 ```
@@ -130,8 +139,6 @@ flowz/
 ```mermaid
 erDiagram
     USER ||--o{ TASK : heeft
-    USER ||--|| AVAILABLE_TIME_PATTERN : heeft
-    USER ||--o{ AVAILABLE_TIME_EXCEPTION : heeft
     TASK ||--o{ SESSION : heeft
     TASK ||--o{ SUBTASK : heeft
 ```
@@ -157,11 +164,11 @@ SST's `sst.aws.Nuxt`-component zet deze driedeling (S3 + CloudFront + Lambda) au
 | --- | --- | --- |
 | UJ-1 werksessie | `app/` sessiescherm + `server/domain/scheduling` (voortgang) | AD-1, AD-3 |
 | UJ-2 taak aanmaken | `app/` formulier + `server/api/tasks` + `server/domain/tasks` (CRUD) + `server/domain/scheduling` (initiële plaatsing) | AD-1, AD-3, AD-7 |
-| UJ-3 beschikbare tijd | `server/data` AvailableTimePattern/Exception | AD-3 |
+| UJ-3 beschikbare tijd | `server/domain/availability` (live Calendar-afgeleid) + `User.availabilityCalendarId` | AD-4, AD-10 |
 | UJ-4 takenoverzicht | `app/` + `server/api/tasks` + `server/domain/tasks` (CRUD) | AD-3 |
 | UJ-5 weekplanning | `server/domain/scheduling` (read, incl. knelpunt-signalering) + Calendar pull | AD-3, AD-4 |
-| UJ-6 tijdgebrek | `server/domain/scheduling` escalatieketen | AD-1, AD-7 |
-| UJ-7 agendaconflict bij opstarten | `server/domain/calendar-sync` + escalatieketen | AD-1, AD-4, AD-7 |
+| UJ-6 tijdgebrek | `server/domain/scheduling` escalatieketen + `server/domain/availability` | AD-1, AD-7, AD-10 |
+| UJ-7 opstart-check: planning vs. beschikbare tijd | `server/domain/availability` + `server/domain/scheduling` (stille herplanning) + escalatieketen | AD-1, AD-4, AD-7, AD-10 |
 | UJ-8 dag niet volgens plan | `server/domain/scheduling` escalatie (tijd/energie) | AD-1, AD-7 |
 | UJ-9 schoolsessies invoeren (papier) | `app/` verzamelscherm + bestaande `server/domain/tasks`/`server/domain/scheduling` (afronden-pad, taak-defaults) | AD-1, AD-3 |
 | UJ-10 schoollaptop-toegang | `app/` (identiek aan UJ-1 op de laptop) + `server/routes/auth` (login-vinkje, uitlog-route, inactiviteitstimeout) | AD-2, AD-9 |

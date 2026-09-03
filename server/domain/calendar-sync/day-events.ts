@@ -46,6 +46,7 @@ interface GoogleCalendarListResponse {
     summary?: string
     selected?: boolean
     hidden?: boolean
+    primary?: boolean
   }[]
 }
 
@@ -81,14 +82,20 @@ async function calendarGetMetVerversing(userId: string, accessToken: string, url
 // default false) en niet expliciet uitgevinkt voor weergave (`selected`, ontbrekend of
 // `true` telt mee — alleen expliciet `false` sluit uit). `null` = calendarList.list zelf
 // mislukte (AC #3's buitenste fail-safe-laag); lege array = geldig, geen agenda's.
-async function getVisibleCalendars(userId: string, accessToken: string): Promise<{ id: string, name: string }[] | null> {
+// [Bijgewerkt 2026-09-02, code review verificatieronde 2] `primary` wordt nu meegegeven
+// in het resultaat: Google levert de hoofdagenda in déze lijst onder het account-
+// e-mailadres als `id`, nooit onder de string `'primary'` — dat is uitsluitend een
+// URL-alias (zie homework-events.ts). Consumenten die de hoofdagenda moeten uitsluiten
+// (bv. server/domain/availability/calendar-source.ts) moeten daarom op dit boolean-veld
+// filteren, niet op `id === 'primary'`.
+export async function getVisibleCalendars(userId: string, accessToken: string): Promise<{ id: string, name: string, primary: boolean }[] | null> {
   const response = await calendarGetMetVerversing(userId, accessToken, CALENDAR_LIST_URL)
   if (!response.ok) return null
 
   const body = await response.json() as GoogleCalendarListResponse
   return (body.items ?? [])
-    .filter((item): item is { id: string, summary?: string, selected?: boolean, hidden?: boolean } => !!item.id && item.hidden !== true && item.selected !== false)
-    .map(item => ({ id: item.id, name: item.summary ?? item.id }))
+    .filter((item): item is { id: string, summary?: string, selected?: boolean, hidden?: boolean, primary?: boolean } => !!item.id && item.hidden !== true && item.selected !== false)
+    .map(item => ({ id: item.id, name: item.summary ?? item.id, primary: item.primary === true }))
 }
 
 async function getEventsForCalendar(

@@ -30,6 +30,8 @@
 - [ ] **Code-review Story 1.1 — volgende sessie, bij voorkeur ander model dan de implementatie deed**
 - [ ] www.flowz.fyi-redirect verifiëren (waarschijnlijk alleen nog DNS-propagatie, zie Story 1.1 Completion Notes)
 - [ ] Story 1.2 (Google OAuth Login met Calendar-consent) — volgende story van Epic 1
+- [x] Correct Course-update: 4.1/3.2/7.1 herzien voor beschikbare-tijd-via-Calendar-agenda (AD-10) — 2026-09-02
+- [x] wds-3-scenarios: scenario 08 (Evelien Lost een Agendaconflict Op) vervallen verklaard, vervangen door de herziene UJ-7-opstart-check-flow (1.1-hoofdscherm + bestaand scenario 03) — 2026-09-02
 
 ---
 
@@ -81,6 +83,11 @@
 | 08-evelien-lost-een-agendaconflict-op | 8.2 | beschikbare-tijd-aanpassen | specified | 2026-07-26 |
 | 03-eveliens-schuldvrije-herstel | 3.3 | energie-voorstel | outlined | 2026-08-17 |
 | 03-eveliens-schuldvrije-herstel | 3.3 | energie-voorstel | specified | 2026-08-17 |
+| 04-evelien-stelt-beschikbare-tijd-in | 4.1 | beschikbare-tijd-instellen | specified | 2026-09-02 |
+| 03-eveliens-schuldvrije-herstel | 3.2 | tekort-oplossen | specified | 2026-09-02 |
+| 07-evelien-bekijkt-de-weekplanning | 7.1 | weekoverzicht | specified | 2026-09-02 |
+| 08-evelien-lost-een-agendaconflict-op | 8.1 | conflictmelding | removed | 2026-09-02 |
+| 08-evelien-lost-een-agendaconflict-op | 8.2 | beschikbare-tijd-aanpassen | removed | 2026-09-02 |
 
 **Status values:** `discussed` → `wireframed` → `specified` → `explored` → `building` → `built` → `approved` | `removed`
 
@@ -91,6 +98,17 @@
 ---
 
 ## Log
+
+### 2026-09-02 — Correct Course: beschikbare tijd via Google Calendar-agenda (Phase 4 update)
+
+**Aanleiding:** `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md` — beschikbare tijd wordt niet meer handmatig ingesteld (weekpatroon+afwijkingen), maar afgeleid uit tijdblokken in een door Evelien aangewezen Google Calendar-agenda (AD-10). PRD (UJ-3/UJ-6/UJ-7) en architectuur (AD-10) al bijgewerkt in eerdere stappen van dezelfde sessie.
+
+**Bijgewerkte pagespecs:**
+- `4.1-beschikbare-tijd-instellen` — sterk vereenvoudigd: agenda-select (`avail-calendar-select`) i.p.v. weekpatroon+kalender-met-afwijkingen. Scenario 04-samenvatting (Q1/Q7/Q8/Scenario Steps) meebijgewerkt.
+- `3.2-tekort-oplossen` — nieuwe `shortfall-recommendation-recheck-button`-variant voor het "Tijd verruimen"-niveau (i.p.v. `shortfall-recommendation-accept-button`), nieuw endpoint `/recheck`.
+- `7.1-weekoverzicht` — zelfde recheck-patroon toegepast op `week-day-suggestion-card` voor "Tijd verruimen"-suggesties.
+
+**Vervolg (zelfde sessie, via `wds-3-scenarios`):** scenario 08 (`08-evelien-lost-een-agendaconflict-op`) vervallen verklaard — `design_status: vervallen`, waarschuwingsbanner in scenario- en beide page-specs, `00-ux-scenarios.md` bijgewerkt (tabel, scenariodetail, page-index: 13/13 actieve pagina's i.p.v. 15/15). Vervangen door: (1) een stille opstart-check op `1.1-hoofdscherm` (nieuwe Technical Note + Open Question over laadgedrag t.o.v. NFR1), (2) escalatie naar het bestaande scenario 03/3.2 als stil herplannen niet volstaat. Geen nieuwe pagina's aangemaakt — bewuste keuze, het normale pad heeft geen zichtbare UI nodig.
 
 ### 2026-07-16 — Alignment & Signoff (Phase 0)
 - Situatie: consultant richting klant

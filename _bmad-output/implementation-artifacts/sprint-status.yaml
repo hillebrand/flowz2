@@ -41,7 +41,14 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-08-26
+last_updated: 2026-09-03
+
+# Correct Course (2026-09-02, sprint-change-proposal-2026-09-02.md): beschikbare tijd komt
+# voortaan uit een door Evelien aangewezen Google Calendar-agenda (AD-10) i.p.v. een
+# Flowz-eigen weekpatroon+afwijkingen-instelling. Reopent 2-1 (herzien), verwijdert 2-2 en
+# 6-6, herschrijft 6-7. Epic 2/3/6 terug naar in-progress. Zie PRD/architectuur/epics.md/
+# design-artifacts voor de volledige, al goedgekeurde en doorgevoerde wijzigingen — alleen
+# de code (app/, server/) moet dit nog inhalen, te beginnen bij Story 2-1.
 
 # Story 2.4 review-toevoeging (2026-08-26): tijdens live-verificatie bleek dat
 # dagvullende, informatieve afspraken uit nieuw-toegevoegde agenda's (die in Google
@@ -66,19 +73,19 @@ development_status:
   epic-1-retrospective: optional
 
   epic-2: done
-  2-1-weekpatroon-instellen: done
-  2-2-dag-specifieke-afwijkingen-instellen: done
-  2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: done
+  2-1-beschikbare-tijd-agenda-koppelen: done # herzien 2026-09-02, Correct Course; vervangt 2-1-weekpatroon-instellen. Code review + verificatieronde 2 (Opus 5) beide doorgevoerd + akkoord Hillebrand 2026-09-03, zie de story se Review Findings
+  # 2-2-dag-specifieke-afwijkingen-instellen: VERVALLEN 2026-09-02, Correct Course (AD-10) — geen Flowz-eigen exceptie-UI meer
+  2-3-huiswerk-kleur-kiezen-calendar-write-sync-service: done # AC-toevoeging 2026-09-02 (schrijf-scheiding van agenda's) alsnog geïmplementeerd bij 2-1's dev-story (is_homework_calendar-guard in calendar-source.ts)
   2-4-alle-geabonneerde-agendas-meenemen-bij-calendar-lezen: done
-  2-5-samenvattende-huiswerk-blokken-per-dag: done
+  2-5-samenvattende-huiswerk-blokken-per-dag: done # implementation-note toegevoegd 2026-09-02 (plaatsing begrensd door blokken) — raakt Epic 3, niet deze story zelf
   epic-2-retrospective: optional
 
-  epic-3: done
-  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done
+  epic-3: in-progress
+  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done # implementation-note 2026-09-02: bron voor beschikbare tijd wordt server/domain/availability (AD-10) — nog te herbouwen, volgt na 2-1
   3-2-deeltaken-automatische-tijdsom: done
   3-3-benodigdheden-met-auto-suggestie-per-vak: done
-  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done
-  3-5-idempotente-herberekening-bij-wijzigingen: done
+  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done # implementation-note 2026-09-02: zelfde als 3-1, nog te herbouwen
+  3-5-idempotente-herberekening-bij-wijzigingen: done # nieuwe AC 2026-09-02: app-open als triggermoment — nog te implementeren, volgt bij 6-7
   epic-3-retrospective: optional
 
   epic-4: done
@@ -97,14 +104,14 @@ development_status:
   5-3-taak-bewerken-hergebruik-taak-formulier: done
   epic-5-retrospective: optional
 
-  epic-6: done
-  6-1-tijdgebrek-detectie-escalatie-service: done
-  6-2-tekort-oplossen-scherm: done
+  epic-6: in-progress
+  6-1-tijdgebrek-detectie-escalatie-service: done # herzien 2026-09-02: "tijd verruimen"-stap + recheck-actie — nog te implementeren
+  6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — nog te implementeren
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
-  6-5-weekoverzicht-met-knelpunt-signalering: done
-  6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: done
-  6-7-agendaconflict-detectie-bij-opstarten: done
+  6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — nog te implementeren
+  # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
+  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: backlog # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten
   epic-6-retrospective: optional
 
   epic-7: done

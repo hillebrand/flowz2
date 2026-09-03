@@ -13,24 +13,11 @@ export type Weekday =
   | 'saturday'
   | 'sunday'
 
-export interface WeekPatternResponse {
-  pattern: Record<Weekday, number>
-}
-
-export interface UpdateWeekPatternDayResponse {
-  day: Weekday
-  minutes: number
-}
-
-export interface ExceptionEntry {
-  date: string
-  minutes: number
-}
-
-export interface ExceptionsResponse {
-  exceptions: ExceptionEntry[]
-}
-
+// `WeekPatternResponse`/`UpdateWeekPatternDayResponse`/`ExceptionEntry`/`ExceptionsResponse`
+// verwijderd (2026-09-02, code review) — hun enige consumenten (de nu verwijderde
+// `week.get.ts`/`week/[day].patch.ts`/`exceptions.get.ts`) bestaan niet meer sinds Story
+// 2.1's herziening. `UpdateExceptionResponse` hieronder blijft: `exceptions/[date].patch.ts`
+// wordt nog gebruikt door `agendaconflict/aanpassen.vue` (scenario 08, nog niet vervangen).
 export interface UpdateExceptionResponse {
   date: string
   minutes: number

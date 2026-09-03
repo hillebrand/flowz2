@@ -2,7 +2,7 @@
 title: PRD: Flowz
 status: final
 created: 2026-07-11
-updated: 2026-08-23
+updated: 2026-09-02
 ---
 
 # PRD: Flowz
@@ -60,12 +60,13 @@ Vanaf elke pagina in Flowz tikt Evelien op de **+ knop** en opent een formulier 
 
 Bij opslaan verschijnt een bevestiging, wordt de dagplanning direct bijgewerkt volgens de automatische tijdsverdeling (de taak kan zo nodig nog dezelfde dag meetellen), en keert ze terug naar de pagina van waaruit ze het taak-toevoegen-formulier opende.
 
-### UJ-3: Evelien stelt beschikbare tijd voor huiswerk in
+### UJ-3: Evelien koppelt haar beschikbare-tijd-agenda
 
 Via het **hamburgermenu** opent Evelien de instellingenpagina voor beschikbare tijd.
 
-- Bovenaan staan de dagen **maandag t/m zondag**, elk met een beschikbare tijd die ze met **+ en -** knoppen aanpast — dit vormt het terugkerende weekpatroon.
-- Daaronder staat een **kalender** waarin ze voor specifieke dagen een afwijkende beschikbare tijd kan instellen, met dezelfde +/- knoppen, als uitzondering op het weekpatroon.
+- Ze wijst één van haar Google Calendar-agenda's aan als **beschikbare-tijd-agenda**: een agenda die ze zelf beheert met tijdblokken voor huiswerk, om haar rooster, persoonlijke afspraken, eten e.d. heen.
+- Flowz leest de tijdblokken uit die agenda en gebruikt die als beschikbare tijd voor huiswerk — er is geen apart weekpatroon of losse afwijkingen-instelling meer in Flowz zelf.
+- Wil Evelien meer of minder tijd beschikbaar maken, dan past ze de blokken rechtstreeks in Google Calendar aan; Flowz leest dit bij de eerstvolgende (her)berekening automatisch mee.
 
 ### UJ-4: Evelien beheert het takenoverzicht
 
@@ -96,19 +97,18 @@ Flowz merkt zelf op wanneer de benodigde tijd niet meer past binnen de beschikba
 Dit is een blokkade die direct opgelost moet worden. Flowz doorloopt daarbij escalerend:
 
 1. **Herplannen** — eerst probeert Flowz sessies te verplaatsen naar andere dagen, binnen de grenzen van deadlines en de studiedruk op die dagen.
-2. **Tijd verruimen** — lukt dat niet (voldoende), dan doet Flowz concrete voorstellen om beschikbare tijd te verruimen (bijv. "maandag van 2u naar 2,5u"), met meerdere suggesties waar mogelijk (bijv. ook "dinsdag een half uur langer").
+2. **Tijd verruimen** — lukt dat niet (voldoende), dan doet Flowz een concrete suggestie om een beschikbare-tijd-blok te verruimen (bijv. "maandag van 2u naar 2,5u"), die Evelien zelf in haar beschikbare-tijd-agenda in Google Calendar doorvoert. Ze geeft vanuit Flowz aan dat ze dit heeft gedaan, waarna Flowz het tekort opnieuw berekent op basis van de actuele blokken.
 3. **Sessies inkorten/schrappen** — lukt ook dat niet voldoende, dan stelt Flowz voor om sessies in te korten of te schrappen, op basis van **Prioriteit** (laagste prioriteit eerst).
 
 Het scherm toont eerst hoeveel tijd er precies te weinig is. Evelien krijgt de voorstellen daaronder als **losse aanbevelingen**, elk apart te accepteren, met per aanbeveling hoeveel tijd die oplevert — zo kan ze bijvoorbeeld drie kleine aanpassingen accepteren, of in één keer één rigoureuze, tot het tekort is opgeheven.
 
-### UJ-7: Flowz signaleert een agendaconflict bij opstarten
+### UJ-7: Flowz controleert bij opstarten of de planning nog binnen de beschikbare tijd past
 
-Bij het **opstarten van de app** controleert Flowz of de ingestelde beschikbare tijd conflicteert met items uit Google Calendar: de tijd die op een dag niet is ingepland door agenda-items (de daadwerkelijk beschikbare tijd) kan lager uitvallen dan de ingestelde beschikbare tijd.
+Bij het **opstarten van de app** controleert Flowz of alle geplande sessies nog binnen de actuele beschikbare-tijd-blokken (UJ-3) vallen — Evelien kan die blokken op elk moment zelf hebben aangepast, buiten Flowz om.
 
-1. Bij het eerste conflict met een specifiek agenda-item toont Flowz een **melding**, die direct opgelost moet worden.
-2. Evelien kiest: **"dit conflicteert niet"** (het agenda-item is zelf haar huiswerktijd, bijv. "bibliotheek huiswerk maken"), of **beschikbare tijd aanpassen**.
-3. Bij aanpassen komt ze in hetzelfde scherm als UJ-3 (afwijkende beschikbare tijd voor die datum), met het veld **voorgevuld** met de daadwerkelijk beschikbare tijd (de tijd die die dag niet is ingepland door agenda-items) — zij kan dit nog wijzigen.
-4. Na bevestigen **herplant Flowz automatisch, volledig op de achtergrond**, de taken/sessies naar andere dagen — zonder tussenkomst of goedkeuring van Evelien.
+1. Vallen alle sessies nog binnen de blokken, dan gebeurt er niets zichtbaars.
+2. Past een sessie niet meer (blok verkleind/verplaatst, of een ander agenda-item overlapt nu een blok), dan **herplant Flowz eerst automatisch, volledig op de achtergrond** binnen de resterende ruimte — zonder tussenkomst van Evelien.
+3. Lukt herplannen niet genoeg (er is per saldo te weinig beschikbare tijd), dan volgt dezelfde escalatieketen als UJ-6, met een melding die direct opgelost moet worden.
 
 ### UJ-8: Evelien geeft aan dat een dag niet volgens plan gaat
 

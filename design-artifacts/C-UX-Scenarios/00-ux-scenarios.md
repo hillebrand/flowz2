@@ -76,16 +76,18 @@ C-UX-Scenarios/
 
 **Fase 3 (Scenario Outline) afgerond:** 8 scenario's, 15 pagina's, allemaal voor **Evelien (Primair)**. Danielle (Secundair) heeft bewust geen eigen scenario's — de Trigger Map concludeert dat haar kernbehoefte (rust bij spreiding) al "gratis" bediend wordt door dezelfde Evelien-gerichte features.
 
+**[BIJGEWERKT 2026-09-02, Correct Course]** Scenario 08 is vervallen — zie de scenario-detailsectie hieronder voor de vervanging.
+
 | ID | Scenario | Persona | Pagina's | Prioriteit | Status |
 |----|----------|---------|----------|------------|--------|
 | 01 | [Evelien's Werksessie](01-evelien-werksessie/01-evelien-werksessie.md) | Evelien (Primair) | 4 | ⭐ P1 | ✅ Uitgewerkt |
 | 02 | [Evelien Maakt een Taak Aan](02-evelien-taak-aanmaken/02-evelien-taak-aanmaken.md) | Evelien (Primair) | 1 | ⭐ P1 | ✅ Uitgewerkt |
 | 03 | [Evelien's Schuldvrije Herstel](03-eveliens-schuldvrije-herstel/03-eveliens-schuldvrije-herstel.md) | Evelien (Primair) | 2 | ⭐ P1 | ✅ Uitgewerkt |
-| 04 | [Evelien Stelt Beschikbare Tijd In](04-evelien-stelt-beschikbare-tijd-in/04-evelien-stelt-beschikbare-tijd-in.md) | Evelien (Primair) | 1 | P2 | ✅ Uitgewerkt |
+| 04 | [Evelien Stelt Beschikbare Tijd In](04-evelien-stelt-beschikbare-tijd-in/04-evelien-stelt-beschikbare-tijd-in.md) | Evelien (Primair) | 1 | P2 | ✅ Uitgewerkt (herzien 2026-09-02) |
 | 05 | [Evelien Start met Flowz](05-evelien-start-met-flowz/05-evelien-start-met-flowz.md) | Evelien (Primair) | 1 | P1* | ✅ Uitgewerkt |
 | 06 | [Evelien Beheert het Takenoverzicht](06-evelien-beheert-het-takenoverzicht/06-evelien-beheert-het-takenoverzicht.md) | Evelien (Primair) | 3 | P2 | ✅ Uitgewerkt |
-| 07 | [Evelien Bekijkt de Weekplanning](07-evelien-bekijkt-de-weekplanning/07-evelien-bekijkt-de-weekplanning.md) | Evelien (Primair) | 1 | P2 | ✅ Uitgewerkt |
-| 08 | [Evelien Lost een Agendaconflict Op](08-evelien-lost-een-agendaconflict-op/08-evelien-lost-een-agendaconflict-op.md) | Evelien (Primair) | 2 | P2 | ✅ Uitgewerkt |
+| 07 | [Evelien Bekijkt de Weekplanning](07-evelien-bekijkt-de-weekplanning/07-evelien-bekijkt-de-weekplanning.md) | Evelien (Primair) | 1 | P2 | ✅ Uitgewerkt (herzien 2026-09-02) |
+| 08 | ~~[Evelien Lost een Agendaconflict Op](08-evelien-lost-een-agendaconflict-op/08-evelien-lost-een-agendaconflict-op.md)~~ | Evelien (Primair) | 0 | — | ❌ Vervallen (2026-09-02) |
 
 *\* P1 ondanks lage drijfveer-score: harde technische randvoorwaarde voor UJ-1/UJ-5/UJ-7 (zie Feature Impact Analysis, "Bijzondere behandeling").*
 
@@ -145,35 +147,41 @@ C-UX-Scenarios/
 
 ---
 
-### [08: Evelien Lost een Agendaconflict Op](08-evelien-lost-een-agendaconflict-op/08-evelien-lost-een-agendaconflict-op.md)
-**Persona:** Evelien (Primair) — "Vertrouwen dat de automatische tijdsverdeling realistisch is"
-**Pagina's:** 8.1-conflictmelding, 8.2-beschikbare-tijd-aanpassen
-**User Value:** Een agendaconflict wordt automatisch opgelost, met een samenvatting die eventuele nieuwe knelpunten meteen meldt (geen verrassing achteraf).
-**Business Value:** Houdt beschikbare-tijd-data in lijn met de werkelijke agenda; voorkomt latere tijdgebrek-escalaties.
+### ~~08: Evelien Lost een Agendaconflict Op~~ [VERVALLEN 2026-09-02, Correct Course]
+
+**Was:** een aparte modal (8.1-conflictmelding) + exceptie-paneel-scherm (8.2-beschikbare-tijd-aanpassen) om een conflict tussen een Flowz-eigen ingestelde beschikbare tijd en Google Calendar-items op te lossen.
+
+**Waarom vervallen:** met AD-10 komt beschikbare tijd zelf uit een door Evelien aangewezen Google Calendar-agenda (zie herziene [Scenario 04](04-evelien-stelt-beschikbare-tijd-in/04-evelien-stelt-beschikbare-tijd-in.md)) — er is geen Flowz-eigen ingestelde tijd meer om mee te conflicteren. De onderliggende zorg ("klopt de planning nog met de agenda?") blijft bestaan, maar wordt nu stil en on-page opgelost op **1.1-Home**: bij elke app-opening controleert Flowz of geplande sessies nog binnen de actuele beschikbare-tijd-blokken vallen, en herplant zo nodig automatisch op de achtergrond (herziene PRD UJ-7, herziene Story 6.7 in `epics.md`). Er is geen aparte scherm/modal-interactie meer nodig voor het normale pad.
+
+**Als stil herplannen niet genoeg is** (per saldo te weinig beschikbare tijd), escaleert dezelfde flow naar het bestaande **Scenario 03: Evelien's Schuldvrije Herstel** (3.2-tekort-oplossen) — geen nieuw scherm, hergebruik van een bestaand scenario.
+
+**Pagina's 8.1-conflictmelding en 8.2-beschikbare-tijd-aanpassen:** blijven als historisch record staan in `08-evelien-lost-een-agendaconflict-op/`, gemarkeerd vervallen — niet verwijderd, niet langer onderdeel van de actieve pagina-dekking (zie Page Index hieronder).
+
+**Volledige rationale:** [sprint-change-proposal-2026-09-02.md](../../../_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md)
 
 ---
 
 ## Page Index
 
-**Pagina Dekkingsmatrix** — 15/15 pagina's toegewezen aan een scenario. Wordt tijdens Fase 4 uitgebreid met links naar de daadwerkelijke pagina-specificaties.
+**Pagina Dekkingsmatrix** — 13/13 actieve pagina's toegewezen aan een scenario (2 pagina's vervallen 2026-09-02, zie onder).
 
 | Pagina | Scenario | Doel in de Flow |
 |--------|----------|------------------|
-| 1.1-hoofdscherm | 01 | Ziet eerstvolgende taak, start sessie |
+| 1.1-hoofdscherm | 01 | Ziet eerstvolgende taak, start sessie; controleert bij openen stil of de planning nog binnen de beschikbare-tijd-blokken past (herziene UJ-7) |
 | 1.2-sessie-tussenscherm | 01 | Ziet benodigdheden, start timer |
 | 1.3-sessie-actief | 01 | Doorloopt subtaken, pauzeert/rondt af |
 | 1.4-sessie-afronden | 01 | Ziet overzicht gepland/besteed/resterend |
 | 2.1-taak-formulier | 02 | Vult taakgegevens in, slaat op |
 | 3.1-reden-kiezen | 03 | Kiest reden ("te weinig tijd"), vult beschikbare tijd in |
-| 3.2-tekort-oplossen | 03 | Ziet tekort, accepteert escalerende aanbevelingen |
-| 4.1-beschikbare-tijd-instellen | 04 | Stelt weekpatroon + dag-afwijkingen in |
+| 3.2-tekort-oplossen | 03 | Ziet tekort, accepteert escalerende aanbevelingen (incl. recheck-variant voor "tijd verruimen", herzien 2026-09-02) |
+| 4.1-beschikbare-tijd-instellen | 04 | Koppelt een beschikbare-tijd-agenda (herzien 2026-09-02 — was: weekpatroon + dag-afwijkingen) |
 | 5.1-inlogscherm | 05 | Logt in met Google (login + Calendar-toestemming) |
 | 6.1-takenoverzicht | 06 | Bekijkt alle taken, kiest een taak |
 | 6.2-taakdetail | 06 | Bekijkt details, kiest bewerken/verwijderen |
 | 6.3-bewerkformulier | 06 | Past taakgegevens aan (hergebruikt UJ-2-formulier) |
-| 7.1-weekoverzicht | 07 | Bekijkt week vooruit, ziet knelpunten + suggesties |
-| 8.1-conflictmelding | 08 | Ziet agendaconflict, kiest oplossingsroute |
-| 8.2-beschikbare-tijd-aanpassen | 08 | Bevestigt tijd, ziet herplan-samenvatting + knelpunt-waarschuwing |
+| 7.1-weekoverzicht | 07 | Bekijkt week vooruit, ziet knelpunten + suggesties (incl. recheck-variant voor "tijd verruimen", herzien 2026-09-02) |
+| ~~8.1-conflictmelding~~ | ~~08~~ | ❌ Vervallen 2026-09-02 — opgegaan in 1.1's stille opstart-check |
+| ~~8.2-beschikbare-tijd-aanpassen~~ | ~~08~~ | ❌ Vervallen 2026-09-02 — geen Flowz-eigen exceptie-paneel meer (AD-10) |
 
 ---
 

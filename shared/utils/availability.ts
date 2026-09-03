@@ -34,12 +34,3 @@ export function isValidCalendarDate(value: string): boolean {
   if (Number.isNaN(parsed.getTime())) return false
   return parsed.toISOString().slice(0, 10) === value
 }
-
-// Zelfde redenering als hierboven, voor de maand-queryparam (`2026-99` matchte
-// voorheen de losse regex en liet de datumgrens-berekening jaren uit de bocht vliegen).
-export function isValidMonth(value: string): boolean {
-  if (!/^\d{4}-\d{2}$/.test(value)) return false
-  const parsed = new Date(`${value}-01T00:00:00Z`)
-  if (Number.isNaN(parsed.getTime())) return false
-  return parsed.toISOString().slice(0, 7) === value
-}

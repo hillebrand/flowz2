@@ -87,6 +87,22 @@ export async function updateHomeworkCalendarColorId(userId: string, colorId: num
   return toDomainUser(user)
 }
 
+// Story 2.1 (herzien 2026-09-02, Correct Course, AD-10) — zelfde patroon als
+// `updateHomeworkCalendarColorId` hierboven.
+export async function updateAvailabilityCalendarId(userId: string, calendarId: string): Promise<User> {
+  const [user] = await getDb()
+    .update(users)
+    .set({ availabilityCalendarId: calendarId, updatedAt: new Date().toISOString() })
+    .where(eq(users.id, userId))
+    .returning()
+
+  if (!user) {
+    throw new Error(`User ${userId} bestaat niet.`)
+  }
+
+  return toDomainUser(user)
+}
+
 // Weekoverzicht-only agenda-titelfilter (2026-09-02) — toevoegen is idempotent
 // (case-insensitief/getrimd gededupliceerd), zodat twee keer dezelfde titel indienen geen
 // dubbele rij oplevert. Geen lock rond deze read-modify-write (in tegenstelling tot bv.

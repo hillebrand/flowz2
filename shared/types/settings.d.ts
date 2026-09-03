@@ -26,3 +26,15 @@ export interface HomeworkCalendarColorState {
 export interface HiddenCalendarTitlesResponse {
   titles: string[]
 }
+
+// Story 2.1 (herzien 2026-09-02, Correct Course, AD-10) — beschikbare-tijd-agenda-
+// koppeling. `options: null` betekent dat `calendarList.list` zelf mislukte (zelfde
+// fail-safe-contract als Story 2.4's `DayEventsResult`).
+export interface AvailabilityCalendarState {
+  calendarId: string | null
+  options: { id: string, name: string }[] | null
+}
+
+export interface UpdateAvailabilityCalendarResponse {
+  calendarId: string
+}

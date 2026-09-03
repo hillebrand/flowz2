@@ -32,6 +32,13 @@ export const users = sqliteTable('users', {
   // `week-overview.ts`), niet "bevat", om te voorkomen dat een toekomstig event met een
   // deels overlappende titel er ook per ongeluk mee verdwijnt.
   hiddenCalendarTitles: text('hidden_calendar_titles', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  // Story 2.1 (herzien 2026-09-02, Correct Course, AD-10) — Google Calendar-agenda-ID
+  // (`calendarList`-item-id) die Evelien zelf beheert met tijdblokken voor huiswerk. Bron
+  // van waarheid voor beschikbare tijd; vervangt op termijn `availableTimePatterns`/
+  // `availableTimeExceptions` (die blijven voorlopig bestaan, zie die tabellen se
+  // commentaar hieronder — de scheduling-engine leest ze nog totdat de Epic 3-
+  // vervolgstories dat ombouwen). Nullable: `null` = nog niet gekoppeld.
+  availabilityCalendarId: text('availability_calendar_id'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
@@ -47,6 +54,11 @@ export const WEEKDAYS: readonly Weekday[] = ['monday', 'tuesday', 'wednesday', '
 
 // Eén rij per user (User 1:1, letterlijk), zeven kolommen — geen aparte rij per weekdag.
 // Zie Story 2.1 Dev Notes voor de argumentatie tegen een User-1:N-tabel.
+// [TOEGEVOEGD 2026-09-02, Correct Course, AD-10] Deze tabel en `availableTimeExceptions`
+// hieronder zijn met de herziene Story 2.1 ("Beschikbare-tijd-agenda Koppelen",
+// `users.availabilityCalendarId` hierboven) op weg naar vervallen — de scheduling-engine
+// leest ze voorlopig nog, tot de Epic 3-vervolgstories (3.1/3.4/3.5) overstappen op live
+// Calendar-blokken. Niet verwijderen zonder die migratie eerst af te ronden.
 export const availableTimePatterns = sqliteTable('available_time_patterns', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   // Verwijst naar users.id (code review Story 2.1 — ontbrak eerst, liet wees-rijen

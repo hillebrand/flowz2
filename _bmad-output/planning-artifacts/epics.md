@@ -1,7 +1,9 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
+updated: 2026-09-02
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md
+  - _bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md
   - _bmad-output/planning-artifacts/architecture/architecture-Flowz-2026-07-14/ARCHITECTURE-SPINE.md
   - design-artifacts/C-UX-Scenarios/00-ux-scenarios.md
   - design-artifacts/C-UX-Scenarios/01-evelien-werksessie/01-evelien-werksessie.md
@@ -49,16 +51,16 @@ FR7: Bij het afronden van een sessie ziet Evelien een overzicht: totale geplande
 FR8: Na het afronden van een sessie keert Evelien terug naar het hoofdscherm, met de volgende taak prominent in beeld en de planning al bijgewerkt.
 FR9: Evelien kan vanaf elke pagina een nieuwe taak aanmaken via een "+"-knop en formulier met velden: vak, titel, soort taak, deadline, moeilijkheid, prioriteit, standaard sessieduur (allemaal verplicht), en optioneel: totale benodigde tijd (handmatig, leidend over een live berekende som van deeltaaktijden), omschrijving, deeltaken (met optioneel tijdveld per deeltaak), benodigdheden (met auto-suggestie per vak).
 FR10: Bij opslaan van een nieuwe taak verschijnt een bevestiging, wordt de dagplanning direct bijgewerkt volgens de automatische tijdsverdeling, en keert Evelien terug naar de pagina van waaruit ze het formulier opende.
-FR11: Via het hamburgermenu kan Evelien een instellingenpagina openen voor beschikbare tijd: een weekpatroon (ma-zo) met +/- knoppen per dag (15 min stappen), en een kalender voor dag-specifieke afwijkingen op dat patroon (automatisch opgeruimd zodra de waarde het weekpatroon weer evenaart).
+FR11: Via het hamburgermenu kan Evelien een instellingenpagina openen om een Google Calendar-agenda aan te wijzen als beschikbare-tijd-bron; Flowz leest de tijdblokken uit die agenda als beschikbare tijd voor huiswerk, per dag opnieuw berekend uit de actuele agenda-inhoud. [HERZIEN 2026-09-02, Correct Course — was: weekpatroon + dag-specifieke afwijkingen]
 FR12: Het takenoverzicht toont alle openstaande taken, gegroepeerd per week en gesorteerd op deadline, met per taak: vak, soort taak, titel, voortgangsbalkje; bevat een snelkoppeling om een nieuwe taak aan te maken.
 FR13: Evelien kan een taak selecteren om een detailweergave te zien, met opties om te bewerken (opent hetzelfde formulier als bij aanmaken, vooringevuld — afgeronde deeltaken read-only met een "Heropenen"-optie) of te verwijderen (met bevestiging).
 FR14: Via het hamburgermenu kan Evelien een weekoverzicht openen dat per dag (komende week) de beschikbare en benodigde tijd toont (in cijfers), de ingeplande taken/sessies mét geplande tijdsduur per sessie (zodat ze dit kan overnemen op papier, zie FR29), en waar mogelijk overige Google Calendar-items (indicatief, niet bewerkbaar op dit scherm); knelpuntdagen krijgen een directe, accepteerbare oplossingssuggestie.
 FR15: Flowz signaleert automatisch tijdgebrek (benodigde tijd > beschikbare tijd) bij: het aanmaken van een nieuwe taak, het aanpassen van beschikbare/benodigde tijd, en het aanpassen van resterende tijd na sessie-afronding.
 FR16: Bij tijdgebrek doorloopt Flowz een escalerende keten van oplossingen: (1) herplannen binnen deadline-grenzen, (2) tijd verruimen met concrete voorstellen, (3) sessies inkorten op prioriteit, (4) een taak volledig laten vervallen (laagste prioriteit eerst) als laatste, gegarandeerde redmiddel.
 FR17: Evelien ziet eerst hoeveel tijd er precies te weinig is, en krijgt een gecureerde set (max 3 tegelijk) losse, apart accepteerbare of afwijsbare aanbevelingen met per aanbeveling de tijdwinst, tot het tekort is opgeheven; afgewezen aanbevelingen komen terug als laatste redmiddel.
-FR18: Bij het opstarten van de app controleert Flowz of de ingestelde beschikbare tijd conflicteert met Google Calendar-items; bij het eerste conflict toont Flowz een melding (modal) die direct opgelost moet worden; kan meerdere conflicten na elkaar tonen.
-FR19: Evelien kiest bij een agendaconflict tussen "dit conflicteert niet" (nee, dit ís haar huiswerktijd) of "beschikbare tijd aanpassen"; bij aanpassen wordt hetzelfde scherm als beschikbare-tijd-instellen getoond, voorgevuld met de daadwerkelijk beschikbare tijd voor die dag.
-FR20: Na bevestigen van de aangepaste beschikbare tijd herplant Flowz automatisch (blokkerend, met samenvatting incl. eventuele knelpunt-waarschuwing voor andere dagen).
+FR18: [HERZIEN 2026-09-02, Correct Course] Bij het opstarten van de app controleert Flowz of alle geplande sessies nog binnen de actuele beschikbare-tijd-blokken vallen (AD-10); past een sessie niet meer, dan herplant Flowz eerst automatisch en stil op de achtergrond.
+FR19: [HERZIEN 2026-09-02, Correct Course] Lukt automatisch herplannen niet voldoende (per saldo te weinig beschikbare tijd), dan toont Flowz een melding die direct opgelost moet worden via dezelfde escalatieketen als FR15/16 — geen "dit conflicteert niet"-keuze meer, want er is geen Flowz-eigen ingestelde tijd meer om mee te conflicteren.
+FR20: [VERVALLEN 2026-09-02, Correct Course] Was: "Na bevestigen van de aangepaste beschikbare tijd herplant Flowz automatisch". Dit gedrag is opgegaan in het herziene FR18 (silent auto-herplanning is nu het standaardpad, geen aparte bevestigingsstap meer nodig).
 FR21: Op het hoofdscherm kan Evelien via de knop "Vandaag niet als gepland?" aangeven dat de dag niet volgens plan gaat, met reden "te weinig tijd" of "te weinig energie" (twee keuzekaarten).
 FR22: Bij "te weinig tijd" vraagt Flowz hoeveel tijd er die dag daadwerkelijk beschikbaar is en doorloopt dezelfde escalatieketen als tijdgebrek-signalering (herplannen → tijd verruimen → inkorten → laten vervallen).
 FR23: Bij "te weinig energie" verschuift Flowz moeilijke taken naar een andere dag, haalt eenvoudige taken eventueel naar voren, kort sessies alleen in als dat niet tot te hoge studiedruk elders leidt, en toont altijd een melding van wat is aangepast (ook als er bewust niets is ingekort).
@@ -89,7 +91,7 @@ NFR10: Een sessie met het openbare-computer-vinkje verloopt server-side na 30 mi
 
 - **Starter/structuur:** geen expliciete starter-template; Architecture beschrijft een "Structural Seed" map-structuur (`app/`, `server/api/`, `server/domain/{tasks,scheduling,calendar-sync}`, `server/data/`) die als startpunt voor Epic 1 Story 1 dient.
 - **Tech stack:** Nuxt 4.x, Nitro `aws-lambda`-preset, Vue 3.x, Node 24.x, Drizzle ORM (libSQL/Turso, migraties via `generate`+`migrate` niet `push`), SST v3/Ion, Google Calendar API v3.
-- **Datamodel:** `User`, `Task`, `Session`, `Subtask`, `AvailableTimePattern`, `AvailableTimeException` — User 1:1 AvailableTimePattern, User 1:N AvailableTimeException, Task 1:N Session, Task 1:N Subtask.
+- **Datamodel:** `User`, `Task`, `Session`, `Subtask` — Task 1:N Session, Task 1:N Subtask. Beschikbare tijd wordt niet meer als eigen datamodel opgeslagen (`AvailableTimePattern`/`AvailableTimeException` vervallen, [HERZIEN 2026-09-02, Correct Course]); `User` krijgt in plaats daarvan een `availabilityCalendarId`-veld (de door Evelien aangewezen Google Calendar-agenda, AD-10).
 - **Auth:** Google OAuth is de enige identiteit (AD-2), geen wachtwoordveld; sessiecookie gevalideerd in Nitro-middleware.
 - **Error handling:** technische errors via vaste `{error:{code,message}}`-envelope met gedeelde error-code-vocabulaire; gebruikersgerichte tijd-/energiegebrek-meldingen via aparte `Notification`-shape (`{notification:{type,message,actions}}`, AD-6) — nooit gemengd met de technische envelope.
 - **Secrets:** Google OAuth client secret + Turso auth-token uitsluitend via SST secrets-mechanisme, nooit in repo/code (AD-5).
@@ -121,18 +123,19 @@ UX-DR12: Benodigdheden-veld toont bij vak-wijziging (als er al items staan) een 
 UX-DR13: Alle formuliervelden met een validatieregel worden zowel on-blur als on-submit gevalideerd (vangnet).
 UX-DR14: Reden-kiezen (3.1) toont twee grote tikbare keuzekaarten ("Te weinig tijd" / "Te weinig energie") i.p.v. een compacte segmented control; beschikbare-tijd-invoer verschijnt pas na kaartkeuze (progressive disclosure).
 UX-DR15: Tekort-oplossen (3.2) toont een gecureerde set van max 3 aanbeveling-kaarten tegelijk, oplopend qua impact (Uitstellen → Tijd verruimen → Alleen het belangrijkste → Niet doen), elk met "Accepteren"/"Afwijzen"; geen ontsnappingsroute totdat het tekort is opgelost; afgewezen aanbevelingen komen terug als laatste redmiddel.
-UX-DR16: Beschikbare-tijd-instellen (4.1) toont een weekpatroon (7 rijen, +/- per dag, 15 min stappen, directe API-call zonder debounce) en een kalender voor dag-specifieke afwijkingen (alleen visueel gemarkeerd, geen aparte lijst); een afwijking verdwijnt automatisch zodra de waarde het weekpatroon weer evenaart.
+UX-DR16: [HERZIEN 2026-09-02, Correct Course] Beschikbare-tijd-instellen (4.1) toont een agenda-select (`avail-calendar-select`, directe API-call zonder debounce) waarmee Evelien een Google Calendar-agenda aanwijst als beschikbare-tijd-bron — geen weekpatroon of dag-specifieke-afwijkingen-UI meer.
 UX-DR17: Inlogscherm (5.1) toont merknaam, tagline en één "Inloggen met Google"-knop; foutstate "Inloggen mislukt" bij geweigerde/mislukte consent.
 UX-DR18: Takenoverzicht (6.1) groepeert taken per week (niet per dag/vak), toont alleen openstaande taken, en heeft een "+ Nieuwe taak"-knop.
 UX-DR19: Taakdetail (6.2) toont een verwijder-bevestigingsdialoog ("Dit kan niet ongedaan worden gemaakt").
 UX-DR20: Bewerkformulier (6.3) hergebruikt 2.1's volledige structuur/Object IDs (zelfde componenten/velden/validatie); afgeronde deeltaken zijn read-only met een "Heropenen"-link, uitgestelde/niet-gestarte deeltaken blijven vrij bewerkbaar.
 UX-DR21: Weekoverzicht (7.1) toont per dag beschikbare/benodigde tijd (cijfers), ingeplande taken, Calendar-items (indicatief), en bij een knelpunt één concrete suggestiekaart (hergebruikt 3.2's aanbevelingslogica maar toont er één i.p.v. de escalerende flow); accepteren houdt de dagrij zichtbaar (geen navigatie weg van de pagina).
-UX-DR22: Conflictmelding (8.1) is een modal bovenop het hoofdscherm (geen eigen route), met focus-trap en geen automatische Escape-sluiting; kan meerdere conflicten na elkaar tonen; "conflicteert niet" is een quiet tekst-link met scherpe bewoording ("Nee, dit ís mijn huiswerktijd"), bewust minder prominent dan "Beschikbare tijd aanpassen".
-UX-DR23: Beschikbare-tijd-aanpassen (8.2) hergebruikt 4.1's exceptie-paneel, voorgevuld o.b.v. Calendar-data; bevestigen is blokkerend (i.t.t. 1.4's fire-and-forget) omdat de samenvatting het daadwerkelijke resultaat moet tonen; toont een conditionele knelpunt-waarschuwing die doorlinkt naar 7.1.
+UX-DR22: [VERVALLEN 2026-09-02, Correct Course] Was: conflictmelding-modal (8.1) met "dit conflicteert niet" vs. "beschikbare tijd aanpassen". Scenario 08 (8.1/8.2) is vervallen — zie UX-DR-vervolg hieronder.
+UX-DR23: [VERVALLEN 2026-09-02, Correct Course] Was: beschikbare-tijd-aanpassen (8.2), hergebruikte 4.1's exceptie-paneel. Vervangen door een stille opstart-check op 1.1-hoofdscherm (herziene UJ-7/Story 6.7): geen zichtbare UI in het normale pad, escalatie naar de bestaande 3.2-tekort-oplossen-flow (met de nieuwe recheck-variant, zie UX-DR28) als stil herplannen niet volstaat. Volledige rationale: `sprint-change-proposal-2026-09-02.md`.
 UX-DR24: **Google Calendar write-sync (nieuw t.o.v. de oorspronkelijke PRD/architectuur):** Evelien kan op 4.1 een vaste Google Calendar-kleur instellen voor huiswerk-afspraken; Flowz zet voortaan geplande/herplande sessies zelf als events met die kleur in haar Calendar (aanmaken bij taak-opslaan, bijwerken bij elke herplanning — 1.4/3.2/6.3/7.1/8.2, verwijderen bij taak-verwijdering — 6.2), en negeert die kleur bij de conflict-detectie op 8.1. Vereist Calendar write-scope in de OAuth-consent (5.1) en nieuwe endpoints voor event-CRUD (indicatief: `POST/PATCH/DELETE /api/calendar/homework-events/...`). Bij handmatige wijziging/verwijdering van het event door Evelien zelf: Flowz overschrijft/hermaakt het gewoon bij de eerstvolgende (her)planning (geen conflict-detectie tussen handmatige en automatische Calendar-wijzigingen in v1).
 UX-DR25: Consistent gebruik van een "schuldvrije toon" voor alle tijd-/energiegebrek-gerelateerde meldingen (banners, aanbevelingen, conflictmeldingen) — neutraal/informerend, nooit alarmerend of verwijtend; uitzondering: de "Niet doen"-aanbeveling (3.2) is bewust eerlijk over de consequentie, niet verhullend.
 UX-DR26: Alle schermen Desktop-first ontworpen, met responsive/verkorte mobiele weergave (minder onderdelen tegelijk zichtbaar, secundaire secties standaard ingeklapt op formulieren).
-UX-DR27: Geen actief design system (`design_system_mode: none`) — WDS-standaardschaal voor spacing/typography op alle pagina's; components zijn nu per-pagina custom. Kandidaten voor latere design-system-extractie (herhaald patroon over meerdere pagina's): Card, Alert/waarschuwing-banner, segmented control, tag-list-invoer, uren+minuten time-field, aanbeveling-kaart (3.2/7.1), verschil-document-hergebruikpatroon (6.3→2.1, 8.2→4.1).
+UX-DR27: Geen actief design system (`design_system_mode: none`) — WDS-standaardschaal voor spacing/typography op alle pagina's; components zijn nu per-pagina custom. Kandidaten voor latere design-system-extractie (herhaald patroon over meerdere pagina's): Card, Alert/waarschuwing-banner, segmented control, tag-list-invoer, uren+minuten time-field, aanbeveling-kaart (3.2/7.1), verschil-document-hergebruikpatroon (6.3→2.1, 8.2→4.1 [VERVALLEN, zie UX-DR23]).
+UX-DR28: [NIEUW 2026-09-02, Correct Course] Tekort-oplossen (3.2) en Weekoverzicht (7.1) tonen voor het "tijd verruimen"-aanbevelingsniveau een recheck-knop ("Ik heb dit aangepast — controleer opnieuw") i.p.v. de directe Accepteren-knop, met instructietekst die naar de beschikbare-tijd-agenda (4.1) verwijst — Flowz kan deze aanpassing niet zelf toepassen (AD-10).
 
 ### FR Coverage Map
 
@@ -146,16 +149,16 @@ FR7: Epic 4 - Sessie-afrondoverzicht met aanpasbare resterende tijd
 FR8: Epic 4 - Terugkeer naar bijgewerkt hoofdscherm na sessie
 FR9: Epic 3 - Taak-formulier (alle velden)
 FR10: Epic 3 - Opslaan triggert automatische tijdsverdeling + bevestiging
-FR11: Epic 2 - Weekpatroon + dag-specifieke afwijkingen instellen
+FR11: Epic 2 - Beschikbare-tijd-agenda koppelen (Story 2.1, herzien 2026-09-02)
 FR12: Epic 5 - Takenoverzicht, gegroepeerd per week
 FR13: Epic 5 - Taakdetail: bewerken/verwijderen
 FR14: Epic 6 - Weekoverzicht met knelpunt-signalering
 FR15: Epic 6 - Automatische tijdgebrek-detectie op meerdere triggermomenten
 FR16: Epic 6 - Escalerende oplossingsketen (herplannen → verruimen → inkorten → laten vervallen)
 FR17: Epic 6 - Tekort-oplossen-scherm met gecureerde aanbevelingen
-FR18: Epic 6 - Agendaconflict-detectie bij opstarten
-FR19: Epic 6 - Conflictmelding: "conflicteert niet" vs. "tijd aanpassen"
-FR20: Epic 6 - Automatische herplanning + samenvatting na conflict-aanpassing
+FR18: Epic 6 - Opstart-check: planning vs. beschikbare-tijd-blokken, stille auto-herplanning (Story 6.7, herzien 2026-09-02)
+FR19: Epic 6 - Escalatie naar tekort-oplossen-flow als auto-herplannen niet volstaat (Story 6.7, herzien 2026-09-02)
+FR20: Vervallen 2026-09-02, Correct Course — opgegaan in het herziene FR18
 FR21: Epic 6 - "Vandaag niet als gepland?"-knop en reden-keuze
 FR22: Epic 6 - "Te weinig tijd"-pad (hergebruikt escalatieketen)
 FR23: Epic 6 - "Te weinig energie"-pad
@@ -278,52 +281,37 @@ So that ik op een schoollaptop niet hoef te wachten op de automatische timeout v
 **Then** stuurt de server haar terug naar 5.1-inlogscherm (geen gecachte, ingelogde weergave zichtbaar)
 
 ### Epic 2: Beschikbare Tijd & Agenda-koppeling
-Evelien stelt in hoeveel tijd ze per dag beschikbaar heeft voor huiswerk (weekpatroon + uitzonderingen), en kan optioneel haar Google Calendar laten meesyncen met een herkenbare huiswerk-kleur.
+Evelien wijst een Google Calendar-agenda aan waarin ze zelf tijdblokken voor huiswerk beheert; Flowz leest die blokken als beschikbare tijd, en kan optioneel haar Google Calendar laten meesyncen met een herkenbare huiswerk-kleur.
 **FRs covered:** FR11, FR28
 **NFRs:** NFR6
-**UX:** UX-DR16, UX-DR24
-**Implementation Notes:** FR28's Calendar write-sync-service wordt hier gebouwd, maar de daadwerkelijke aanroepen ervan zitten als losse stories verspreid over Epic 3 (taak aanmaken), Epic 4 (sessie afronden) en Epic 6 (elke vorm van herplanning) — telkens waar een sessie voor het eerst gepland of herpland wordt.
+**UX:** UX-DR16 (herzien), UX-DR24
+**Implementation Notes:** [TOEGEVOEGD 2026-09-02, Correct Course] Story 2.1/2.2 (Flowz-eigen weekpatroon + dag-afwijkingen) zijn vervangen door een herziene Story 2.1: beschikbare-tijd-agenda koppelen (AD-10). FR28's Calendar write-sync-service wordt hier gebouwd, maar de daadwerkelijke aanroepen ervan zitten als losse stories verspreid over Epic 3 (taak aanmaken), Epic 4 (sessie afronden) en Epic 6 (elke vorm van herplanning) — telkens waar een sessie voor het eerst gepland of herpland wordt.
 
-### Story 2.1: Weekpatroon Instellen
+### Story 2.1: Beschikbare-tijd-agenda Koppelen [HERZIEN 2026-09-02, Correct Course — vervangt de oorspronkelijke "Weekpatroon Instellen"]
 
 As Evelien,
-I want per weekdag (ma-zo) mijn beschikbare huiswerktijd instellen met +/- knoppen,
-So that de motor met mijn echte beschikbare tijd rekent.
+I want een Google Calendar-agenda aanwijzen waarin ik zelf tijdblokken voor huiswerk beheer,
+So that de motor met mijn echte, actuele beschikbare tijd rekent, zonder dat ik dat apart in Flowz hoef bij te houden.
 
 **Acceptance Criteria:**
 
 **Given** Evelien opent 4.1-beschikbare-tijd-instellen via het hamburgermenu
 **When** de pagina laadt
-**Then** toont `avail-week-list` 7 dagrijen (ma t/m zo) met de huidige beschikbare tijd per dag (`AvailableTimePattern`, User 1:1)
-**And** toont een skeleton tijdens het laden (geen spinner)
+**Then** toont `avail-calendar-select` een lijst van haar Google Calendar-agenda's (uit `calendarList.list`, hergebruikt Story 2.4's mechanisme) om als beschikbare-tijd-agenda aan te wijzen
+**And** toont, indien al gekoppeld, de huidige keuze vooraf geselecteerd
 
-**Given** Evelien staat op 4.1
-**When** ze op `avail-day-plus-button` of `avail-day-minus-button` voor een dag klikt
-**Then** wijzigt de tijd voor die dag direct met 15 minuten, via een eigen, niet-gedebouncete API-call per klik (FR11)
-**And** kan de tijd niet onder 0 minuten komen (`avail-day-minus-button` wordt disabled bij 0)
-**And** is er geen bovengrens
+**Given** Evelien kiest een agenda in `avail-calendar-select`
+**When** de keuze bevestigd wordt
+**Then** wordt `User.availabilityCalendarId` direct opgeslagen (`PATCH /api/settings/availability-calendar`, geen debounce)
+**And** berekent Flowz vanaf dat moment beschikbare tijd live uit de tijdblokken in die agenda (AD-10) — geen `AvailableTimePattern`/`AvailableTimeException` meer
 
-### Story 2.2: Dag-specifieke Afwijkingen Instellen
+**Given** geen beschikbare-tijd-agenda is gekoppeld
+**When** Flowz een planning probeert te berekenen
+**Then** toont het hoofdscherm een schuldvrije Notification die vraagt eerst een agenda te koppelen — er kan geen zinvolle planning gemaakt worden zonder bron
 
-As Evelien,
-I want voor specifieke dagen een afwijkende beschikbare tijd instellen t.o.v. mijn weekpatroon,
-So that een incidentele wijziging (bijv. een sportclub-uitje) niet mijn hele weekpatroon verstoort.
+### Story 2.2: [VERVALLEN 2026-09-02, Correct Course]
 
-**Acceptance Criteria:**
-
-**Given** Evelien staat op 4.1, onder het weekpatroon
-**When** ze een dag in `avail-calendar` aanklikt
-**Then** verschijnt `avail-exception-panel` met die datum en de huidige waarde (bestaande `AvailableTimeException`, of anders het weekpatroon als uitgangspunt)
-**And** markeert de kalender dagen met een actieve exceptie visueel (geen aparte lijst)
-
-**Given** het exceptie-paneel is open voor een dag
-**When** Evelien via `avail-exception-minus-button`/`avail-exception-plus-button` de tijd aanpast (15 min stappen, directe API-call)
-**Then** wordt een `AvailableTimeException` voor die datum aangemaakt/bijgewerkt via het ene schrijfpad dat dit datamodel heeft
-**And** verdwijnt de exceptie automatisch (server-side) zodra de waarde weer exact gelijk is aan het weekpatroon voor die weekdag
-
-**Given** het exceptie-paneel is open
-**When** Evelien op `avail-exception-close-button` klikt
-**Then** sluit het paneel zonder een andere dag te selecteren
+Was: "Dag-specifieke Afwijkingen Instellen". Vervalt volledig — ad-hoc afwijkingen regelt Evelien voortaan zelf door blokken in haar beschikbare-tijd-agenda aan te passen (AD-10); er is geen Flowz-eigen exceptie-UI meer nodig.
 
 ### Story 2.3: Huiswerk-kleur Kiezen & Calendar Write-Sync-Service
 
@@ -350,6 +338,10 @@ So that Flowz mijn geplande sessies zichtbaar in mijn agenda zet en nooit meer e
 **Given** geen huiswerk-kleur is ingesteld
 **When** een sessie gepland/herpland wordt
 **Then** gebeurt er geen Calendar-write — dit veld is optioneel en Flowz blijft dan volledig alleen-lezend zoals voorheen
+
+**Given** Evelien heeft een beschikbare-tijd-agenda gekoppeld (Story 2.1) en kiest een huiswerk-kleur
+**When** Flowz huiswerk-events schrijft (write-sync)
+**Then** schrijft Flowz uitsluitend naar de agenda die voor huiswerk-kleur-events is bedoeld (primary-agenda, ongewijzigd t.o.v. de bestaande AC's) — nooit naar de aparte beschikbare-tijd-agenda, ook niet als Evelien toevallig dezelfde agenda voor beide zou kiezen [TOEGEVOEGD 2026-09-02, Correct Course]
 
 > **Kruisverwijzing (Correct Course, 2026-08-26):** de "één event per sessie"-granulariteit uit de tweede AC hierboven is vervangen door samenvattende dagblokken — zie Story 2.5. Deze story se overige AC's (kleur kiezen, her-consent, "Flowz is bron van waarheid") blijven ongewijzigd van kracht.
 
@@ -406,7 +398,7 @@ So that mijn agenda overzichtelijk blijft in plaats van vol te staan met losse t
 **When** `syncHomeworkBlocksForDate` wordt aangeroepen
 **Then** gebeurt er niets (zelfde no-op-precedent als Story 2.3's AC #4)
 
-**Implementation Notes:** Raakt alle 7 bestaande aanroeppunten van de per-sessie write-sync (`server/domain/tasks/create-task.ts`, `delete-task.ts`, `server/domain/scheduling/apply-recommendation.ts`, `session-placement.ts`, `replan.ts`, `energy.ts`, `recalculate.ts`) — die roepen voortaan `syncHomeworkBlocksForDate` aan voor de betrokken datum(s) i.p.v. zelf create/update/delete te orkestreren. Ook de "is dit mijn eigen huiswerk-event"-uitsluiting op het hoofdscherm (`server/api/home/plan.get.ts`, nu op sessie-`googleEventId` gebaseerd) wordt op kleur gebaseerd, consistent met hoe `conflict-detection.ts` dat al doet. Migratie nodig voor het laten vervallen van `sessions.googleEventId`.
+**Implementation Notes:** Raakt alle 7 bestaande aanroeppunten van de per-sessie write-sync (`server/domain/tasks/create-task.ts`, `delete-task.ts`, `server/domain/scheduling/apply-recommendation.ts`, `session-placement.ts`, `replan.ts`, `energy.ts`, `recalculate.ts`) — die roepen voortaan `syncHomeworkBlocksForDate` aan voor de betrokken datum(s) i.p.v. zelf create/update/delete te orkestreren. Ook de "is dit mijn eigen huiswerk-event"-uitsluiting op het hoofdscherm (`server/api/home/plan.get.ts`, nu op sessie-`googleEventId` gebaseerd) wordt op kleur gebaseerd, consistent met hoe `conflict-detection.ts` dat al doet. Migratie nodig voor het laten vervallen van `sessions.googleEventId`. [TOEGEVOEGD 2026-09-02] Sessieplaatsing zelf is nu begrensd door Story 2.1's beschikbare-tijd-blokken (AD-10, Epic 3-concern) i.p.v. de hele dag; deze story's consolidatielogica (aaneengesloten stukken, gescheiden door bezette items) blijft ongewijzigd van toepassing.
 
 ### Epic 3: Taak Aanmaken met Automatische Tijdsverdeling
 Evelien maakt een taak aan (met optioneel deeltaken/benodigdheden) en Flowz plant er meteen een realistisch doelmoment voor, vóór de deadline.
@@ -434,6 +426,8 @@ So that Flowz er meteen een realistisch doelmoment vóór de deadline voor berek
 **And** wordt bij succes een flash-bevestiging getoond, de dagplanning direct bijgewerkt, en Evelien teruggestuurd naar de pagina van herkomst (FR10)
 **And** blijft de scheduling-berekening volledig server-side (AD-1) — de client vraagt en toont alleen
 **And** roept de scheduling-service, indien Evelien een huiswerk-kleur heeft ingesteld (Epic 2, Story 2.3), voor elke nieuw geplande sessie de Calendar-sync-service aan om een bijbehorend event aan te maken
+
+**Implementation Notes:** [TOEGEVOEGD 2026-09-02, Correct Course] Gebruikt voortaan `server/domain/availability` (AD-10, live Calendar-afgeleide blokken) i.p.v. `AvailableTimePattern`/`AvailableTimeException` als bron voor beschikbare tijd per dag.
 
 ### Story 3.2: Deeltaken & Automatische Tijdsom
 
@@ -487,6 +481,8 @@ So that de belangrijkste/dringendste taken voorrang krijgen zonder dat ik dat ze
 **Then** bepaalt ze de volgorde op basis van: urgentie (hoe weinig ruimte een taak nog heeft tot haar doelmoment), kans op uitloop (moeilijkheid × omvang), en prioriteit (FR25)
 **And** is deze berekening deterministisch (zelfde input → zelfde volgorde)
 
+**Implementation Notes:** [TOEGEVOEGD 2026-09-02, Correct Course] Gebruikt voortaan `server/domain/availability` (AD-10, live Calendar-afgeleide blokken) i.p.v. `AvailableTimePattern`/`AvailableTimeException` als bron voor beschikbare tijd per dag.
+
 ### Story 3.5: Idempotente Herberekening bij Wijzigingen
 
 As Evelien,
@@ -500,6 +496,10 @@ So that ik kan vertrouwen op wat ik zie, ook na meerdere snelle aanpassingen.
 **Then** gaat die altijd uit van de actuele Task/Session/Subtask/AvailableTime-staat, nooit van een tussentijds opgeslagen planningsstaat (AD-1, NFR8)
 **And** levert een herhaalde aanroep met dezelfde actuele staat exact hetzelfde resultaat op (idempotent)
 **And** is dit endpoint herbruikbaar als het gedeelde herberekenings-mechanisme voor Epic 4/5/6's replan-triggers
+
+**Given** Evelien opent de app (nieuw triggermoment) [TOEGEVOEGD 2026-09-02, Correct Course]
+**When** de opstart-check (herziene Story 6.7) draait
+**Then** wordt dit endpoint aangeroepen als het gedeelde herberekeningsmechanisme, uitgaand van de actuele beschikbare-tijd-blokken (AD-10) — naast de bestaande triggers (benodigde tijd wijzigt, sessie/taak afgerond, tijd-/energiegebrek)
 
 ### Epic 4: Werksessie Doorlopen
 Evelien ziet haar eerstvolgende taak op het hoofdscherm en doorloopt een complete werksessie: benodigdheden bekijken, timer/subtaken/pauzeren, en afronden met een direct bijgewerkte planning.
@@ -753,9 +753,13 @@ So that ik nooit zelf hoef te ontdekken dat mijn planning niet meer klopt.
 
 **Given** een tekort is gedetecteerd
 **When** de escalatie-service een oplossing zoekt
-**Then** doorloopt ze escalerend: (1) herplannen binnen deadline-grenzen, (2) tijd verruimen (concrete suggesties, bijv. "maandag van 2u naar 2,5u"), (3) sessies inkorten op basis van laagste prioriteit eerst, (4) een taak volledig laten vervallen als gegarandeerd laatste redmiddel (FR16)
+**Then** doorloopt ze escalerend: (1) herplannen binnen deadline-grenzen, (2) tijd verruimen — instructieve suggestie om een blok in de beschikbare-tijd-agenda te verruimen; heeft geen direct "Accepteren"-effect in Flowz, alleen een "Ik heb dit aangepast, controleer opnieuw"-actie [HERZIEN 2026-09-02, Correct Course], (3) sessies inkorten op basis van laagste prioriteit eerst, (4) een taak volledig laten vervallen als gegarandeerd laatste redmiddel (FR16)
 **And** retourneert elke aanbeveling met niveau, omschrijving en exacte tijdwinst
 **And** gebruikt uitsluitend de `Notification`-shape (AD-6) voor deze gebruikersgerichte berichten, nooit de technische error-envelope
+
+**Given** Evelien heeft de "tijd verruimen"-suggestie doorgevoerd in haar beschikbare-tijd-agenda (Google Calendar, in een ander tabblad) [TOEGEVOEGD 2026-09-02, Correct Course]
+**When** ze op `shortfall-recheck-button` klikt
+**Then** herberekent de service het tekort op basis van de actuele beschikbare-tijd-blokken (AD-10); is het tekort (deels) opgelost, dan werkt het scherm bij zoals bij een geaccepteerde aanbeveling; is het nog niet genoeg, dan blijft de kaart staan met het bijgewerkte resterende tekort
 
 ### Story 6.2: Tekort-oplossen-scherm
 
@@ -781,6 +785,10 @@ So that ik zelf kan sturen hoe het tekort wordt opgelost, zonder dat het als een
 **Given** het tekort is nog niet opgelost
 **When** Evelien de pagina probeert te verlaten
 **Then** is er geen ontsnappingsroute — dit scherm moet volledig opgelost worden
+
+**Given** een aanbeveling van het type "tijd verruimen" [TOEGEVOEGD 2026-09-02, Correct Course]
+**When** de kaart rendert
+**Then** toont ze i.p.v. `shortfall-recommendation-accept-button` een `shortfall-recommendation-recheck-button` ("Ik heb dit aangepast — controleer opnieuw") met instructietekst die naar de beschikbare-tijd-agenda verwijst
 
 ### Story 6.3: "Vandaag niet als gepland?" — Reden Kiezen (Te weinig tijd)
 
@@ -835,53 +843,35 @@ So that ik nooit verrast word door een drukke dag.
 **Given** Evelien klikt op `week-day-suggestion-accept-button`
 **When** de server de planning voor die dag aanpast
 **Then** verdwijnen de badge en suggestiekaart, worden de cijfers bijgewerkt, en blijft de dagrij zichtbaar (geen navigatie weg van de pagina — ander gedrag dan 3.2)
+**And** hergebruikt hetzelfde recheck-patroon als Story 6.2 wanneer het voorstel van het type "tijd verruimen" is [TOEGEVOEGD 2026-09-02, Correct Course]
 
-### Story 6.6: Beschikbare Tijd Aanpassen na Conflict & Samenvatting
+### Story 6.6: [VERVALLEN 2026-09-02, Correct Course]
 
-As Evelien,
-I want de beschikbare tijd voor een conflicterende dag bevestigen en direct zien wat Flowz heeft aangepast,
-So that ik geen verrassing achteraf krijg, zelfs niet als de oplossing elders een nieuw knelpunt veroorzaakt.
+Was: "Beschikbare Tijd Aanpassen na Conflict & Samenvatting" — hergebruikte Epic 2's exceptie-paneel, dat met AD-10 vervalt. Het onderliggende principe (na een beschikbaarheidswijziging blokkerend herplannen + een samenvatting tonen) verhuist naar de herziene Story 6.7 hieronder, die nu zelf de opstart-check + herplanning + eventuele escalatie combineert.
 
-**Acceptance Criteria:**
-
-**Given** Evelien komt op 8.2-beschikbare-tijd-aanpassen (rechtstreeks toetsbaar via route, met een gegeven dag/conflict-context — de entry via de modal volgt in Story 6.7)
-**When** de pagina laadt
-**Then** toont ze Epic 2's exceptie-paneel-componenten (`avail-exception-*`), al open en voorgevuld met de daadwerkelijk beschikbare tijd o.b.v. de agenda-items voor die dag
-
-**Given** Evelien bevestigt (evt. na verdere aanpassing)
-**When** ze op `conflict-confirm-button` klikt
-**Then** slaat de server de exceptie op, herplant automatisch en volledig op de achtergrond (blokkerend voor de client — de samenvatting heeft het resultaat nodig, i.t.t. Story 4.7's fire-and-forget), en werkt Epic 2's Calendar-sync eventuele events bij (FR20)
-**And** vervangt `conflict-summary-section` het formulier: wijzigingenlijst (`conflict-summary-changes`) en, indien van toepassing, `conflict-summary-bottleneck-warning` (klikbaar door naar 7.1)
-
-**Given** Evelien ziet de samenvatting
-**When** ze op `conflict-summary-back-button` klikt
-**Then** gaat ze terug naar 1.1-Home
-
-### Story 6.7: Agendaconflict-detectie bij Opstarten
+### Story 6.7: Opstart-check — Planning versus Beschikbare-tijd-blokken [HERZIEN 2026-09-02, Correct Course — vervangt de oorspronkelijke "Agendaconflict-detectie bij Opstarten"]
 
 As Evelien,
-I want gewaarschuwd worden als mijn ingestelde beschikbare tijd niet meer klopt met mijn agenda,
-So that mijn planning nooit stiekem verkeerd is zonder dat ik het weet.
+I want dat Flowz bij het opstarten controleert of mijn planning nog klopt met mijn actuele beschikbare-tijd-blokken,
+So that een wijziging die ik zelf in Google Calendar heb gemaakt nooit tot een stiekem verkeerde planning leidt.
 
 **Acceptance Criteria:**
 
 **Given** Evelien opent de app
-**When** 1.1-Home laadt en de opstart-check (`GET /api/availability/conflicts`) conflicten vindt
-**Then** verschijnt `conflict-modal` bovenop 1.1-Home (geen eigen route) met het eerste conflict (FR18)
-**And** worden agenda-items met de ingestelde huiswerk-kleur (Epic 2, Story 2.3) al server-side uitgesloten van deze check
-**And** heeft de modal een focus-trap en sluit niet automatisch via Escape
+**When** 1.1-Home laadt en de opstart-check draait
+**Then** wordt gecontroleerd of elke geplande sessie nog binnen een beschikbare-tijd-blok valt (AD-10) — geen conflict-melding meer op basis van een "ingestelde tijd", want die instelling bestaat niet meer
 
-**Given** de modal toont een conflict
-**When** Evelien op `conflict-not-applicable-button` ("Nee, dit ís mijn huiswerktijd") klikt
-**Then** wordt dit conflict als opgelost gemarkeerd; is er een volgend conflict, dan verschijnt dat in dezelfde modal, anders sluit de modal terug naar 1.1-Home (FR19)
+**Given** één of meer sessies vallen niet meer binnen de huidige blokken
+**When** de check dit detecteert
+**Then** herplant Flowz eerst automatisch, volledig op de achtergrond, binnen de resterende beschikbare tijd — zonder tussenkomst of melding aan Evelien, zolang dit lukt
 
-**Given** de modal toont een conflict
-**When** Evelien op `conflict-adjust-button` klikt
-**Then** navigeert ze naar het in Story 6.6 gebouwde 8.2-beschikbare-tijd-aanpassen, nu met de echte conflict-context vanuit de modal
+**Given** herplannen het niet (voldoende) oplost — er is per saldo te weinig beschikbare tijd
+**When** de opstart-check dit vaststelt
+**Then** verschijnt dezelfde tekort-escalatieketen als UJ-6/Story 6.1/6.2, met een melding die direct opgelost moet worden
 
-**Given** er zijn geen conflicten
+**Given** geen beschikbare-tijd-agenda is gekoppeld (Story 2.1)
 **When** 1.1-Home laadt
-**Then** verschijnt de modal niet
+**Then** verschijnt in plaats van de opstart-check een verwijzing naar de instellingenpagina om er eerst een te koppelen
 
 ### Epic 7: Schoolsessies Invoeren (Papieren Agenda)
 Evelien kan huiswerk dat ze op school deed — waar haar telefoon verplicht in het kluisje blijft — 's avonds thuis alsnog in Flowz vastleggen, op basis van wat ze op papier bijhield.

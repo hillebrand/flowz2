@@ -1,9 +1,11 @@
 ---
 design_intent: S
-design_status: not-started
+design_status: vervallen
 ---
 
 # 08: Evelien Lost een Agendaconflict Op
+
+> **⚠️ VERVALLEN 2026-09-02 (Correct Course).** Dit scenario is vervangen: beschikbare tijd komt sinds AD-10 uit een door Evelien aangewezen Google Calendar-agenda, dus er is geen Flowz-eigen ingestelde tijd meer om mee te conflicteren. De onderliggende zorg wordt nu stil opgelost op 1.1-Home (herziene UJ-7 opstart-check) met escalatie naar het bestaande Scenario 03 (3.2-tekort-oplossen) als stil herplannen niet volstaat. Zie [00-ux-scenarios.md](../00-ux-scenarios.md) en [sprint-change-proposal-2026-09-02.md](../../../_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md). Onderstaande inhoud blijft als historisch record staan, niet meer actief.
 
 **Project:** Flowz
 **Created:** 2026-07-23
