@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `availability_calendar_id` text;
