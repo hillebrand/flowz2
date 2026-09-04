@@ -65,6 +65,29 @@ async function accepteren(day: WeekDayDto) {
   }
 }
 
+// Story 6.5 (code review-fix, 2026-09-04) — spiegelt Story 6.2's `controlerenOpnieuw`:
+// een niveau-"verruimen"-suggestie heeft geen accept-effect meer (AD-10), dus deze knop
+// roept alleen een verse, live herberekening aan i.p.v. te muteren. Zelfde "hele week
+// opnieuw ophalen"-precedent als `accepteren` hierboven.
+async function controlerenOpnieuw(day: WeekDayDto) {
+  if (busyDate.value) return
+  busyDate.value = day.date
+  acceptErrorDate.value = null
+  try {
+    await $fetch(`/api/week/${encodeURIComponent(day.date)}/suggestion/recheck`, { method: 'POST' })
+    const response = await $fetch<WeekOverviewResponse>('/api/week')
+    days.value = response.days
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    acceptErrorDate.value = day.date
+  } finally {
+    busyDate.value = null
+  }
+}
+
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
   const hours = Math.floor(minutes / 60)
@@ -131,6 +154,16 @@ onMounted(loadWeek)
             <div class="week-day-suggestion-footer">
               <span class="week-day-suggestion-gain">+{{ formatMinutes(day.suggestion.gainMinutes) }}</span>
               <button
+                v-if="day.suggestion.tier === 'verruimen'"
+                id="week-day-suggestion-recheck-button"
+                type="button"
+                class="week-day-suggestion-recheck-button"
+                :aria-label="`Controleer opnieuw of het knelpunt is opgelost voor ${formatDayLabel(day.date)}`"
+                :disabled="busyDate === day.date"
+                @click="controlerenOpnieuw(day)"
+              ><span v-if="busyDate === day.date" class="week-spinner" aria-hidden="true" />{{ busyDate === day.date ? 'Bezig...' : 'Ik heb dit aangepast — controleer opnieuw' }}</button>
+              <button
+                v-else
                 id="week-day-suggestion-accept-button"
                 type="button"
                 class="week-day-suggestion-accept-button"
@@ -312,7 +345,21 @@ onMounted(loadWeek)
   cursor: pointer;
 }
 
-.week-day-suggestion-accept-button:disabled {
+.week-day-suggestion-recheck-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.week-day-suggestion-accept-button:disabled,
+.week-day-suggestion-recheck-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

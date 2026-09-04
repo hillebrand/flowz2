@@ -219,6 +219,7 @@ onMounted(loadShortfall)
               <span class="shortfall-recommendation-gain">+{{ formatMinutes(recommendation.gainMinutes) }}</span>
               <div class="shortfall-recommendation-actions">
                 <button
+                  v-if="recommendation.tier !== 'verruimen'"
                   type="button"
                   class="shortfall-recommendation-reject-button"
                   :aria-label="`Aanbeveling afwijzen: ${recommendation.description}`"
@@ -226,6 +227,15 @@ onMounted(loadShortfall)
                   @click="afwijzen(recommendation)"
                 >Afwijzen</button>
                 <button
+                  v-if="recommendation.tier === 'verruimen'"
+                  type="button"
+                  class="shortfall-recommendation-recheck-button"
+                  :aria-label="`Controleer opnieuw of het tekort is opgelost na aanpassing van ${recommendation.description}`"
+                  :disabled="busyId === recommendation.id"
+                  @click="controlerenOpnieuw(recommendation)"
+                ><span v-if="busyId === recommendation.id" class="shortfall-spinner" aria-hidden="true" />{{ busyId === recommendation.id ? 'Bezig...' : 'Ik heb dit aangepast — controleer opnieuw' }}</button>
+                <button
+                  v-else
                   type="button"
                   class="shortfall-recommendation-accept-button"
                   :aria-label="`Aanbeveling accepteren: ${recommendation.description}`"
@@ -355,8 +365,22 @@ onMounted(loadShortfall)
   cursor: pointer;
 }
 
+.shortfall-recommendation-recheck-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .shortfall-recommendation-accept-button:disabled,
-.shortfall-recommendation-reject-button:disabled {
+.shortfall-recommendation-reject-button:disabled,
+.shortfall-recommendation-recheck-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
