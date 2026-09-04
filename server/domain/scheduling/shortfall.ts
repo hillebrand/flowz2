@@ -28,9 +28,20 @@ export interface ShortfallResult {
 }
 
 // Tekort voor één specifieke dag: geplande tijd (som van alle sessies die user die dag al
-// heeft staan) minus beschikbare tijd (exceptie-of-weekpatroon). `null` = geen tekort.
-export async function detectShortfallForDate(userId: string, date: string): Promise<ShortfallResult | null> {
-  const availableMinutes = await availableMinutesForDate(userId, date)
+// heeft staan) minus beschikbare tijd (live uit de gekoppelde Calendar, AD-10).
+// `availableMinutesOverride` (Story 3.1 Task 7, code review-fix): als de aanroeper zelf al
+// een vers ingetypte waarde voor déze ene datum heeft (3.1-reden-kiezen se "hoeveel tijd
+// heb je vandaag nog?"), gebruik die direct i.p.v. opnieuw `availableMinutesForDate` aan te
+// roepen — vóór Task 7 liep dit via een `AvailableTimeException`-schrijf-en-herlees, maar
+// die tabel heeft sinds Task 7 geen enkele lezer meer (AD-10: de gekoppelde Calendar is de
+// enige bron), dus die omweg gaf sindsdien stilzwijgend het oude, ongewijzigde getal terug.
+// Bewust alléén voor déze ene aanroep, geen persistente override meer: een toekomstige
+// herberekening moet weer de live Calendar lezen, niet een bevroren handmatig getal — hoe
+// een handmatige "ik heb vandaag minder tijd"-correctie structureel blijvend zou moeten
+// doorwerken onder het Calendar-model is nog niet uitgewerkt (Story 6.1/6.2's eigen
+// AD-10-rework, al zo genoteerd in sprint-status.yaml — geen scope-uitbreiding hier).
+export async function detectShortfallForDate(userId: string, date: string, availableMinutesOverride?: number): Promise<ShortfallResult | null> {
+  const availableMinutes = availableMinutesOverride ?? await availableMinutesForDate(userId, date)
   const plannedMinutes = await sumPlannedMinutesForUserOnDate(userId, date)
   const shortfallMinutes = plannedMinutes - availableMinutes
 
@@ -131,8 +142,9 @@ export async function calculateStudiedrukScore(userId: string, date: string): Pr
 // doorvoeren van een aanbeveling ("Accepteren") is Story 6.2's zorg.
 
 // Niveau 2's stapgrootte (Open Question #3's voorstel, story Dev Notes) — hoeveel extra
-// tijd één "tijd verruimen"-aanbeveling per keer voorstelt.
+// tijd één "tijd verruimen"-instructie per keer voorstelt.
 const VERRUIMEN_STEP_MINUTES = 30
+
 // Ondergrens op een ingekorte sessie (niveau 3) — een sessie tot 0 "inkorten" is in
 // werkelijkheid niveau 4 (laten vervallen); dit houdt de niveaus onderscheidend.
 const MIN_MINUTES_AFTER_INKORTEN = 10
@@ -259,17 +271,25 @@ export async function generateShortfallRecommendations(userId: string, shortfall
     relocated.add(task.id)
   }
 
-  // Niveau 2: tijd verruimen — vaste stapgrootte (review-patch: eerder geschaald naar het
-  // volledige resterende tekort via `Math.ceil(remaining / STEP) * STEP`, wat dit niveau
-  // ELK tekort in één keer liet dekken — niveau 3/4 werden daardoor nooit bereikt, wat
-  // AC #2's escalatie-eis ondermijnde. Een vaste stap van `VERRUIMEN_STEP_MINUTES` laat
-  // een groter tekort bewust ongedekt, zodat de escalatie daadwerkelijk doorzet).
+  // Niveau 2: tijd verruimen — **herzien (Correct Course 2026-09-02, AD-10) en heringevoerd
+  // (Story 6.1, 2026-09-03)**. Vóór AD-10 verhoogde "Accepteren" deze aanbeveling direct
+  // (schreef een `AvailableTimeException`) — dat kan niet meer: beschikbare tijd komt nu
+  // live uit de gekoppelde Google Calendar-agenda, en Flowz mag/kan die agenda niet namens
+  // Evelien aanpassen. De aanbeveling is daarom voortaan **puur instructief**: ze vertelt
+  // Evelien wélke dag en hoeveel ze zelf in haar agenda moet verruimen, heeft géén
+  // accept-effect (`apply-recommendation.ts`'s `applyVerruimen` gooit bewust een fout als
+  // 'ie ooit alsnog aangeroepen wordt), en wordt in de UI (Story 6.2, `UX-DR28`) met een
+  // "Ik heb dit aangepast — controleer opnieuw"-knop getoond i.p.v. de gewone
+  // Accepteren-knop. "Controleren" is bij dit AD-10-model geen aparte functie: elke
+  // hernieuwde `detectShortfallForDate`/`generateShortfallRecommendations`-aanroep leest
+  // toch al live uit de Calendar (geen cache, geen tussenstaat) — een "recheck" ís simpelweg
+  // deze functies nogmaals aanroepen voor dezelfde datum, geen nieuw mechanisme nodig.
   if (remaining > 0) {
     const gain = VERRUIMEN_STEP_MINUTES
     recommendations.push({
       id: `verruimen:${shortfall.date}`,
       tier: 'verruimen',
-      description: `${formatDayLabel(shortfall.date)} van ${formatDurationLabel(shortfall.availableMinutes)} naar ${formatDurationLabel(shortfall.availableMinutes + gain)}`,
+      description: `Verruim ${formatDayLabel(shortfall.date)} met minstens ${formatDurationLabel(gain)} in je beschikbare-tijd-agenda`,
       gainMinutes: gain
     })
     remaining -= gain

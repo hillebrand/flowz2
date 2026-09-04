@@ -1,7 +1,6 @@
 import { readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import { detectAnyShortfall, detectShortfallForDate, generateShortfallRecommendations } from '../../domain/scheduling/shortfall'
-import { setExceptionForDate } from '../../data/availability'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import { isValidCalendarDate, MAX_MINUTES_PER_DAY } from '../../../shared/utils/availability'
 import type { ShortfallRequestInput, ShortfallResponse } from '../../../shared/types/shortfall'
@@ -10,10 +9,15 @@ import type { ShortfallRequestInput, ShortfallResponse } from '../../../shared/t
 // 6.1's escalatie-service ongewijzigd (`detectShortfallForDate`/`detectAnyShortfall` +
 // `generateShortfallRecommendations`). Story 6.2 bouwt deze route zelf (Open Question #1)
 // zodat 3.2 standalone laadbaar/testbaar is.
-// Story 6.3 — tweede aanroeper (3.1-reden-kiezen): `availableMinutesOverride` persisteert
-// eerst als `AvailableTimeException` (`setExceptionForDate`, Open Question #1's uitkomst)
-// vóórdat het tekort berekend wordt, zodat toekomstige herberekeningen ook van de
-// bijgestelde waarde uitgaan — niet alleen een eenmalige invoer voor déze aanroep.
+// Story 6.3 — tweede aanroeper (3.1-reden-kiezen): `availableMinutesOverride` gaf oorspronkelijk
+// eerst `setExceptionForDate` een `AvailableTimeException`-rij die vervolgens herlezen werd.
+// **Gecorrigeerd (Story 3.1 Task 7's code review, 2026-09-03):** sinds Task 7's AD-10-rework
+// heeft die tabel geen enkele lezer meer (beschikbare tijd komt live uit de gekoppelde
+// Calendar) — de write bleef dus stilzwijgend zonder enig effect, en Evelien se ingetypte
+// "hoeveel tijd heb je vandaag nog" werd genegeerd. `overrideTotalMinutes` gaat nu direct als
+// `detectShortfallForDate`'s nieuwe `availableMinutesOverride`-parameter mee, uitsluitend
+// voor déze ene aanroep — geen persistente write meer (zie die functie se Dev Notes voor de
+// volledige redenering, en waarom dat een bewuste scope-grens is, geen omissie).
 function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   return { error: { code, message } }
 }
@@ -63,12 +67,9 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
 
   try {
     const targetDate = body?.date ?? todayInAmsterdam()
-    if (overrideTotalMinutes !== null) {
-      await setExceptionForDate(session.user.id, targetDate, overrideTotalMinutes)
-    }
 
     const shortfall = body?.date || overrideTotalMinutes !== null
-      ? await detectShortfallForDate(session.user.id, targetDate)
+      ? await detectShortfallForDate(session.user.id, targetDate, overrideTotalMinutes ?? undefined)
       : await detectAnyShortfall(session.user.id)
 
     if (!shortfall) {

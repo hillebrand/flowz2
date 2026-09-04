@@ -1,7 +1,7 @@
-import { getExceptionForDate, getOrCreateWeekPattern } from '../../data/availability'
 import { sumPlannedMinutesForUserOnDate } from '../../data/tasks'
-import type { AvailableTimePattern, Difficulty, Priority } from '../../data/schema'
-import { weekdayFromDate } from '../../../shared/utils/availability'
+import type { Difficulty, Priority } from '../../data/schema'
+import { getAvailableMinutesForDate } from '../availability/calendar-blocks'
+import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 
 // Bovengrens op de terugwaartse zoeklus (code review 2026-08-01) — zonder dit kan een
 // sessieduur die geen enkele dag kan faciliteren de lus dag-voor-dag helemaal laten
@@ -61,17 +61,14 @@ export function isBefore(a: string, b: string): boolean {
   return a < b
 }
 
-// Beschikbare tijd voor één specifieke dag: exceptie wint, anders het weekpatroon
-// (Story 6.1, geëxtraheerd uit `findSessionDate`'s lus hieronder — die logica stond eerst
-// alleen inline daar; nu ook nodig voor de tekort-detectie, vandaar geëxporteerd i.p.v.
-// gedupliceerd). `pattern` optioneel doorgeven laat een aanroeper die al een weekpatroon
-// heeft (bv. een lus over meerdere dagen) een herhaalde `getOrCreateWeekPattern`-lookup
-// per dag besparen.
-export async function availableMinutesForDate(userId: string, date: string, pattern?: AvailableTimePattern): Promise<number> {
-  const exceptionMinutes = await getExceptionForDate(userId, date)
-  if (exceptionMinutes !== null) return exceptionMinutes
-  const resolvedPattern = pattern ?? await getOrCreateWeekPattern(userId)
-  return resolvedPattern[weekdayFromDate(date)]
+// Beschikbare tijd voor één specifieke dag (Story 3.1 Task 7, AD-10-rework, Correct Course
+// 2026-09-02): live, on-demand opgehaald uit de gekoppelde beschikbare-tijd-agenda i.p.v.
+// het oude weekpatroon+afwijkingen-model. Functiehandtekening bewust `(userId, date)`
+// gehouden — geen `pattern`-parameter meer, er is geen in-memory patroon meer om te
+// hergebruiken — zodat alle bestaande aanroepers (`actual-availability.ts`,
+// `energy.ts`, `shortfall.ts`, `week-overview.ts`) ongewijzigd blijven.
+export async function availableMinutesForDate(userId: string, date: string): Promise<number> {
+  return getAvailableMinutesForDate(userId, date)
 }
 
 // Doelmoment: laatste geplande sessie vóór de deadline, met een buffer (FR24). De buffer
@@ -124,12 +121,10 @@ export async function findSessionDate(
   today: string,
   excludeTaskId?: string
 ): Promise<string> {
-  const pattern = await getOrCreateWeekPattern(userId)
-
   let candidate = doelmoment
   let daysChecked = 0
   while (!isBefore(candidate, today) && daysChecked < MAX_SEARCH_DAYS) {
-    const availableMinutes = await availableMinutesForDate(userId, candidate, pattern)
+    const availableMinutes = await availableMinutesForDate(userId, candidate)
     const alreadyPlannedMinutes = await sumPlannedMinutesForUserOnDate(userId, candidate, excludeTaskId)
 
     if (availableMinutes - alreadyPlannedMinutes >= requiredMinutes) {
@@ -143,13 +138,19 @@ export async function findSessionDate(
   return doelmoment
 }
 
-// Gemiddelde dagelijks beschikbare tijd over het weekpatroon — input voor
-// `calculateDoelmoment` hierboven.
+// Gemiddelde dagelijks beschikbare tijd — input voor `calculateDoelmoment` hierboven.
+// Story 3.1 Task 7 (AD-10-rework): geen statisch 7-daags weekpatroon meer om te middelen
+// (de beschikbare-tijd-agenda kent geen "vaste weekdag"-structuur) — middelt in plaats
+// daarvan live over een vast venster van de eerstvolgende `AVERAGE_WINDOW_DAYS` kalender-
+// dagen vanaf vandaag. 14 dagen (twee weken): lang genoeg om een enkele weekend-uitschieter
+// te dempen, kort genoeg om niet te veel Calendar-calls per aanroep te doen — beargumenteerd
+// voorstel zonder vastgelegd PRD-cijfer, zie de story's Open Questions.
+const AVERAGE_WINDOW_DAYS = 14
+
 export async function averageDailyAvailableMinutes(userId: string): Promise<number> {
-  const pattern = await getOrCreateWeekPattern(userId)
-  const days: number[] = [
-    pattern.monday, pattern.tuesday, pattern.wednesday, pattern.thursday,
-    pattern.friday, pattern.saturday, pattern.sunday
-  ]
+  const today = todayInAmsterdam()
+  const days = await Promise.all(
+    Array.from({ length: AVERAGE_WINDOW_DAYS }, (_, offset) => getAvailableMinutesForDate(userId, addDays(today, offset)))
+  )
   return days.reduce((sum, minutes) => sum + minutes, 0) / days.length
 }

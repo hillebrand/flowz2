@@ -6,6 +6,8 @@ import type {
   ShortfallRecommendationRejectResponse,
   ShortfallResponse
 } from '#shared/types/shortfall'
+// `ShortfallRecommendationAcceptResponse` wordt hergebruikt voor de recheck-respons —
+// zelfde shape (`shortfallMinutes` + `recommendations`), zie shared/types/shortfall.d.ts.
 import { todayInAmsterdam } from '#shared/utils/scheduling'
 
 const { loggedIn } = useUserSession()
@@ -97,6 +99,34 @@ async function accepteren(recommendation: ShortfallRecommendationDto) {
     if ((fout as FetchError | undefined)?.statusCode === 404) {
       await loadShortfall()
     }
+  } finally {
+    busyId.value = null
+  }
+}
+
+// Story 6.2 (herzien 2026-09-02, Correct Course, AD-10) — "Tijd verruimen"-kaarten tonen
+// deze knop i.p.v. Accepteren (UX-spec `shortfall-recommendation-recheck-button`): Flowz
+// kan die aanpassing niet zelf toepassen (Eveliens eigen Google Calendar-agenda), dus in
+// plaats van een mutatie roept dit alleen een verse, live herberekening aan. Zelfde
+// respons-vorm/afhandeling als `accepteren` (shortfallMinutes bijwerken, tekort-0 →
+// "Tekort opgelost!"-navigatie), maar bij géén verandering blijft de kaart gewoon staan
+// zonder foutmelding — "nog niet aangepast" is geen fout (UX-spec, letterlijk).
+async function controlerenOpnieuw(recommendation: ShortfallRecommendationDto) {
+  if (busyId.value || resolved.value) return
+  busyId.value = recommendation.id
+  errorId.value = null
+  try {
+    const response = await $fetch<ShortfallRecommendationAcceptResponse>(
+      `/api/day/shortfall/recommendations/${encodeURIComponent(recommendation.id)}/recheck`,
+      { method: 'POST', body: { date: date.value ?? todayInAmsterdam() } }
+    )
+    applyResponse(response)
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    errorId.value = recommendation.id
   } finally {
     busyId.value = null
   }

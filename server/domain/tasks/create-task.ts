@@ -53,16 +53,34 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
   const today = todayInAmsterdam()
   const totalMinutes = computeTotalMinutes(input)
 
-  const avgAvailableMinutes = await averageDailyAvailableMinutes(userId)
-  const doelmoment = calculateDoelmoment(
-    input.deadline,
-    totalMinutes,
-    input.difficulty,
-    input.priority,
-    avgAvailableMinutes,
-    today
-  )
-  const sessionDate = await findSessionDate(userId, doelmoment, input.defaultSessionDuration, today)
+  // Story 3.1 Task 7's code review-fix (2026-09-03): sinds Task 7's AD-10-rework doen
+  // `averageDailyAvailableMinutes`/`findSessionDate` hieronder voor het eerst live Calendar-
+  // calls binnen déze kernberekening (voorheen puur lokale database-lookups) — een falende
+  // Calendar-read (verlopen token, tijdelijke Google-storing) bubbelde voorheen dus nooit
+  // vanaf hier omhoog. Bewust géén rollback/Notification hier toegevoegd (dat zou AD-6's
+  // eigen bindingsscope — uitsluitend UJ-6/7/8 — overschrijden, zie deze story's Dev Notes
+  // "Foutafhandeling: bestaande 500-envelope, geen Notification"); alleen een duidelijk
+  // gelabelde log-regel toegevoegd zodat "Kon taak niet aanmaken" in de logs meteen
+  // herleidbaar is tot een Calendar-oorzaak i.p.v. een gok, vóórdat `tasks.post.ts`'s
+  // bestaande catch-all 'm alsnog naar de generieke 500 vertaalt.
+  let avgAvailableMinutes: number
+  let doelmoment: string
+  let sessionDate: string
+  try {
+    avgAvailableMinutes = await averageDailyAvailableMinutes(userId)
+    doelmoment = calculateDoelmoment(
+      input.deadline,
+      totalMinutes,
+      input.difficulty,
+      input.priority,
+      avgAvailableMinutes,
+      today
+    )
+    sessionDate = await findSessionDate(userId, doelmoment, input.defaultSessionDuration, today)
+  } catch (fout) {
+    console.error(`[tasks] Kon beschikbare tijd niet live ophalen uit de gekoppelde Calendar-agenda voor user ${userId}:`, fout)
+    throw fout
+  }
 
   // Task-insert, stapelings-som-lezing, Session-insert en Subtask-inserts lopen atomair in
   // één transactie (code review 2026-08-01, Story 3.2 breidt dit uit met de Subtask-rijen)

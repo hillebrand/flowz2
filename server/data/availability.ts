@@ -1,9 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { getDb } from './db'
-import { availabilityWriteLocks, availableTimeExceptions, availableTimePatterns, type AvailableTimePattern } from './schema'
-import { MAX_MINUTES_PER_DAY, weekdayFromDate } from '../../shared/utils/availability'
-
-const DELTA_MINUTES = 15
+import { availableTimeExceptions, availableTimePatterns, type AvailableTimePattern } from './schema'
 
 // Lazy-aanmaak, analoog aan het upsert-patroon in users.ts: er is geen apart
 // aanmaakmoment bij signup, de eerste keer dat Evelien deze pagina opent moet de
@@ -63,164 +60,43 @@ export interface UpdateExceptionResult {
   active: boolean
 }
 
-// Leest uit twee tabellen (AvailableTimePattern én AvailableTimeException) en beslist
-// daarna tussen een delete of een upsert — dat is niet in één atomaire SQL-statement te
-// vangen zoals updateWeekPatternDay hierboven.
-//
-// GESCHIEDENIS (2026-08-18): dit gebruikte oorspronkelijk `getDb().transaction(...)`
-// ("write"-modus/`BEGIN IMMEDIATE`), met een dev-notitie die claimde dat dit "empirisch
-// geverifieerd" was tegen gelijktijdigheid. Bij Story 3.5's TOCTOU-race (zelfde patroon,
-// gebruikt voor sessieplaatsingen) bleek een live concurrency-test — met bewust
-// verschillende waarden om toeval uit te sluiten, en server-side CloudWatch-bevestiging —
-// dat die transactie NIET daadwerkelijk serialiseert tegen deze Turso/`@libsql/client/web`-
-// verbinding: gelijktijdige aanroepen lazen elkaars staat vóórdat ook maar één schreef. De
-// oorspronkelijke verificatie hier was vermoedelijk minder rigoureus (geen gelijktijdige
-// test met variërende waarden). Vervangen door hetzelfde lock-patroon dat bij Story 3.5 wél
-// empirisch bleek te werken: `availabilityWriteLocks`, een `UNIQUE`-afgedwongen mutual-
-// exclusion-rij per (user, datum) rond de hele lees-dan-schrijf-sectie.
+// **Buiten werking gesteld** (Story 3.1 Task 7's code review-fix, 2026-09-03) — sinds Task
+// 7's AD-10-rework leest de scheduling-engine (`doelmoment.ts`) `availableTimeExceptions`
+// niet meer (beschikbare tijd komt live uit de gekoppelde Google Calendar-agenda). Een
+// schrijf hierheen had dus geen enkel effect meer op de daadwerkelijke planning, terwijl de
+// nog-live aanroepers (`server/api/availability/exceptions/[date].patch.ts`,
+// `server/api/availability/day/[date]/prefill-conflict.post.ts`, en Story 6.2's
+// "tijd verruimen"-aanbeveling) een geslaagde respons bleven tonen — een stille leugen.
+// Nu een expliciete fout i.p.v. een no-op-succes, tot Story 6.1/6.2/6.7 (al zo genoteerd in
+// sprint-status.yaml) een echt AD-10-passend "beschikbare tijd aanpassen"-mechanisme
+// bouwen. De oorspronkelijke lees-dan-schrijf-implementatie (lock, clamp, auto-verwijderen
+// bij gelijkstand met het weekpatroon) staat in de git-geschiedenis van dit bestand vóór
+// 2026-09-03, niet hier uitgecommentarieerd bewaard.
 export async function updateExceptionForDate(
   userId: string,
-  date: string,
-  direction: 'increase' | 'decrease'
+  _date: string,
+  _direction: 'increase' | 'decrease'
 ): Promise<UpdateExceptionResult> {
-  const weekday = weekdayFromDate(date)
-
-  await acquireAvailabilityWriteLock(userId, date)
-  try {
-    // Defensief op 0 in plaats van getOrCreateWeekPattern hier aan te roepen — in de
-    // praktijk bestaat de rij altijd al, want de scheduling-engine roept `getOrCreateWeekPattern`
-    // (via `doelmoment.ts`) bij elke planningsberekening aan, wat de rij lazy aanmaakt.
-    // [Bijgewerkt 2026-09-02, code review verificatieronde 2 — verwees eerst naar Story
-    // 2.1's inmiddels verwijderde /api/availability/week-pagina als lazy-maker, maar díe
-    // was zelf ook al maar een doorgeefluik naar `getOrCreateWeekPattern`; de daadwerkelijk
-    // levende aanroeper is de scheduling-engine.] Dit pad blijft dus een vangnet, geen
-    // verwacht scenario.
-    const [pattern] = await getDb()
-      .select()
-      .from(availableTimePatterns)
-      .where(eq(availableTimePatterns.userId, userId))
-    const weekPatternMinutes = pattern ? pattern[weekday] : 0
-
-    const [existing] = await getDb()
-      .select()
-      .from(availableTimeExceptions)
-      .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
-
-    const current = existing ? existing.minutes : weekPatternMinutes
-    const next = direction === 'increase'
-      ? Math.min(MAX_MINUTES_PER_DAY, current + DELTA_MINUTES)
-      : Math.max(0, current - DELTA_MINUTES)
-
-    // AC #2: "verdwijnt de exceptie automatisch (server-side) zodra de waarde weer
-    // exact gelijk is aan het weekpatroon voor die weekdag."
-    if (next === weekPatternMinutes) {
-      if (existing) {
-        await getDb().delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
-      }
-      return { date, minutes: next, active: false }
-    }
-
-    if (existing) {
-      await getDb()
-        .update(availableTimeExceptions)
-        .set({ minutes: next, updatedAt: new Date().toISOString() })
-        .where(eq(availableTimeExceptions.id, existing.id))
-    } else {
-      await getDb().insert(availableTimeExceptions).values({ userId, date, minutes: next })
-    }
-
-    return { date, minutes: next, active: true }
-  } finally {
-    await releaseAvailabilityWriteLock(userId, date)
-  }
+  throw new Error(
+    `updateExceptionForDate is buiten werking sinds Story 3.1 Task 7's AD-10-rework `
+    + `(geen enkele lezer meer) — wacht op Story 6.1/6.2/6.7 (user ${userId}).`
+  )
 }
 
-// Story 6.3 — spiegelt `updateExceptionForDate` hierboven (zelfde lock-/clamp-/auto-
-// verwijder-gedrag), maar met een expliciete doelwaarde i.p.v. een `DELTA_MINUTES`-stap:
-// 3.1-reden-kiezen laat Evelien een absoluut aantal uren/minuten invullen ("ik heb vandaag
-// nog maar 1u30"), geen stapsgewijze aanpassing zoals de exceptie-kalender.
-export async function setExceptionForDate(userId: string, date: string, minutes: number): Promise<UpdateExceptionResult> {
-  const weekday = weekdayFromDate(date)
-  const clamped = Math.min(MAX_MINUTES_PER_DAY, Math.max(0, minutes))
-
-  await acquireAvailabilityWriteLock(userId, date)
-  try {
-    const [pattern] = await getDb()
-      .select()
-      .from(availableTimePatterns)
-      .where(eq(availableTimePatterns.userId, userId))
-    const weekPatternMinutes = pattern ? pattern[weekday] : 0
-
-    const [existing] = await getDb()
-      .select()
-      .from(availableTimeExceptions)
-      .where(and(eq(availableTimeExceptions.userId, userId), eq(availableTimeExceptions.date, date)))
-
-    // Zelfde AC #2-precedent als `updateExceptionForDate`: de exceptie verdwijnt
-    // automatisch zodra de waarde toevallig gelijk is aan het weekpatroon voor die dag.
-    if (clamped === weekPatternMinutes) {
-      if (existing) {
-        await getDb().delete(availableTimeExceptions).where(eq(availableTimeExceptions.id, existing.id))
-      }
-      return { date, minutes: clamped, active: false }
-    }
-
-    if (existing) {
-      await getDb()
-        .update(availableTimeExceptions)
-        .set({ minutes: clamped, updatedAt: new Date().toISOString() })
-        .where(eq(availableTimeExceptions.id, existing.id))
-    } else {
-      await getDb().insert(availableTimeExceptions).values({ userId, date, minutes: clamped })
-    }
-
-    return { date, minutes: clamped, active: true }
-  } finally {
-    await releaseAvailabilityWriteLock(userId, date)
-  }
+// **Buiten werking gesteld** — zelfde reden als `updateExceptionForDate` hierboven.
+export async function setExceptionForDate(userId: string, _date: string, _minutes: number): Promise<UpdateExceptionResult> {
+  throw new Error(
+    `setExceptionForDate is buiten werking sinds Story 3.1 Task 7's AD-10-rework `
+    + `(geen enkele lezer meer) — wacht op Story 6.1/6.2/6.7 (user ${userId}).`
+  )
 }
 
-// Zelfde lock-implementatie als Story 3.5's `acquireSessionPlacementLock`/
-// `releaseSessionPlacementLock` (`server/data/tasks.ts`) — bewust gedupliceerd, niet
-// gedeeld (andere tabel/resource, zie schema.ts's `availabilityWriteLocks`-commentaar).
-const LOCK_STALE_MS = 30_000
-const LOCK_MAX_WAIT_MS = 10_000
-const LOCK_POLL_INTERVAL_MS = 100
-
-async function acquireAvailabilityWriteLock(userId: string, date: string): Promise<void> {
-  const deadline = Date.now() + LOCK_MAX_WAIT_MS
-
-  while (true) {
-    const [inserted] = await getDb()
-      .insert(availabilityWriteLocks)
-      .values({ userId, date })
-      .onConflictDoNothing({ target: [availabilityWriteLocks.userId, availabilityWriteLocks.date] })
-      .returning()
-
-    if (inserted) return
-
-    const [existing] = await getDb()
-      .select()
-      .from(availabilityWriteLocks)
-      .where(and(eq(availabilityWriteLocks.userId, userId), eq(availabilityWriteLocks.date, date)))
-
-    if (existing && Date.now() - new Date(existing.createdAt).getTime() > LOCK_STALE_MS) {
-      await getDb().delete(availabilityWriteLocks).where(eq(availabilityWriteLocks.id, existing.id))
-      continue
-    }
-
-    if (Date.now() > deadline) {
-      throw new Error(`Kon geen beschikbaarheids-lock verkrijgen voor gebruiker ${userId} op ${date} (te lang bezet door een gelijktijdige aanpassing).`)
-    }
-    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_INTERVAL_MS))
-  }
-}
-
-async function releaseAvailabilityWriteLock(userId: string, date: string): Promise<void> {
-  await getDb()
-    .delete(availabilityWriteLocks)
-    .where(and(eq(availabilityWriteLocks.userId, userId), eq(availabilityWriteLocks.date, date)))
-}
+// `acquireAvailabilityWriteLock`/`releaseAvailabilityWriteLock` (de `availabilityWriteLocks`-
+// tabel, zelfde patroon als Story 3.5's `acquireSessionPlacementLock`) zijn hier verwijderd
+// (Story 3.1 Task 7's code review-fix, 2026-09-03) — hun enige aanroepers waren
+// `updateExceptionForDate`/`setExceptionForDate` hierboven, nu buiten werking. In de
+// git-geschiedenis van dit bestand vóór 2026-09-03 als Story 6.1/6.2/6.7's rework de
+// tabel/lock opnieuw nodig heeft.
 
 // Gerichte per-datum-lookup (Story 3.1) — `getExceptionsForMonth` hierboven is maand-breed,
 // de scheduling-engine's dag-plaatsing heeft per kandidaatdag maar één datum nodig. `null`

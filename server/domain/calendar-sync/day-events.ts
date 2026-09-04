@@ -98,7 +98,12 @@ export async function getVisibleCalendars(userId: string, accessToken: string): 
     .map(item => ({ id: item.id, name: item.summary ?? item.id, primary: item.primary === true }))
 }
 
-async function getEventsForCalendar(
+// Geëxporteerd (Story 3.1 Task 7, AD-10-rework) — `server/domain/availability/
+// calendar-blocks.ts` heeft dezelfde per-agenda events-ophaal-primitief nodig als
+// `getTodayEvents` hieronder gebruikt, maar dan voor precies één (de aangewezen
+// beschikbare-tijd-)agenda i.p.v. alle geabonneerde agenda's. Hergebruik i.p.v. een
+// tweede events-ophaal-implementatie, zelfde precedent als `isTimedEvent`/`toInstant`.
+export async function getEventsForCalendar(
   userId: string,
   accessToken: string,
   calendarId: string,

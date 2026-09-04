@@ -81,10 +81,10 @@ development_status:
   epic-2-retrospective: optional
 
   epic-3: in-progress
-  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done # implementation-note 2026-09-02: bron voor beschikbare tijd wordt server/domain/availability (AD-10) — nog te herbouwen, volgt na 2-1
+  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done # 2026-09-03: Task 7 (AD-10-rework) geïmplementeerd, code review (Opus 5) + fixes doorgevoerd, akkoord Hillebrand, zie het bestand se Change Log
   3-2-deeltaken-automatische-tijdsom: done
   3-3-benodigdheden-met-auto-suggestie-per-vak: done
-  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done # implementation-note 2026-09-02: zelfde als 3-1, nog te herbouwen
+  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done # 2026-09-03: AD-10-note geverifieerd en afgesloten — sortByVolgorde lift automatisch mee met 3.1's Task 7-rework, geen code gewijzigd
   3-5-idempotente-herberekening-bij-wijzigingen: done # nieuwe AC 2026-09-02: app-open als triggermoment — nog te implementeren, volgt bij 6-7
   epic-3-retrospective: optional
 
@@ -105,7 +105,7 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-tijdgebrek-detectie-escalatie-service: done # herzien 2026-09-02: "tijd verruimen"-stap + recheck-actie — nog te implementeren
+  6-1-tijdgebrek-detectie-escalatie-service: done # 2026-09-03: "tijd verruimen" heringevoerd als instructieve tier (geen accept-effect meer); recheck = herhaalde live-detectie, geen nieuwe functie nodig — live geverifieerd
   6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — nog te implementeren
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done

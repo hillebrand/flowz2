@@ -1,5 +1,4 @@
 import { dropTask, getSessionForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
-import { updateExceptionForDate } from '../../data/availability'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { placeSessionOnDate } from './session-placement'
 import type { ShortfallRecommendation } from './shortfall'
@@ -60,18 +59,22 @@ async function applyHerplannen(userId: string, recommendation: ShortfallRecommen
   await placeSessionOnDate(userId, task, existingSession, targetDate)
 }
 
-// Niveau 2: beschikbare tijd verhogen voor de tekortdag. Hergebruikt
-// `updateExceptionForDate` (Story 2.2) ongewijzigd — die verhoogt in vaste stappen van
-// 15 minuten (`DELTA_MINUTES`), dus tweemaal aangeroepen om `shortfall.ts`'s vaste
-// `VERRUIMEN_STEP_MINUTES` (30) te bereiken, i.p.v. een nieuwe "verhoog met N
-// minuten"-variant te bouwen voor precies één aanroeper.
-const VERRUIMEN_STEPS_PER_RECOMMENDATION = 2
-
+// Niveau 2 ("tijd verruimen"): **heeft bewust geen accept-effect** (Correct Course
+// 2026-09-02, AD-10, herzien in Story 6.1) — Flowz mag/kan de gekoppelde Google Calendar-
+// agenda niet namens Evelien aanpassen, dus "Accepteren" bestaat voor deze tier niet meer.
+// `shortfall.ts`'s `generateShortfallRecommendations` genereert de aanbeveling nog wél
+// (puur instructief: welke dag, hoeveel te verruimen), maar Story 6.2's UI (`UX-DR28`)
+// toont er een "Ik heb dit aangepast — controleer opnieuw"-knop bij i.p.v. de gewone
+// Accepteren-knop; die knop roept nooit déze functie aan, alleen opnieuw
+// `detectShortfallForDate`/`generateShortfallRecommendations` (een "recheck" is simpelweg
+// een herhaalde live-detectie, geen aparte accept-actie). Deze functie blijft staan als
+// expliciete, herkenbare fout — mocht een client onverhoopt toch een `verruimen:`-id naar
+// de accept-route sturen — i.p.v. stilzwijgend te "slagen" zonder enig effect.
 async function applyVerruimen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
-  const date = stripRecommendationIdPrefix(recommendation.id, 'verruimen:')
-  for (let i = 0; i < VERRUIMEN_STEPS_PER_RECOMMENDATION; i++) {
-    await updateExceptionForDate(userId, date, 'increase')
-  }
+  throw new Error(
+    `"Tijd verruimen" heeft geen accept-actie (aanbeveling ${recommendation.id}, user ${userId}) — `
+    + 'gebruik de recheck-actie (Story 6.1/6.2, AD-10) in plaats van accepteren.'
+  )
 }
 
 // Niveau 3: de sessie se `plannedMinutes` verkorten met de aanbevolen tijdwinst, zelfde

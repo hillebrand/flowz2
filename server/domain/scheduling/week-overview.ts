@@ -14,7 +14,12 @@ export async function buildWeekDay(userId: string, date: string): Promise<WeekDa
   const neededMinutes = taskSessions.reduce((sum, { session }) => sum + session.plannedMinutes, 0)
   const tasks = taskSessions.map(({ task }) => ({ subject: task.subject, title: task.title }))
 
-  const shortfall = await detectShortfallForDate(userId, date)
+  // `availableMinutes` hierboven al opgehaald (Story 3.1 Task 7's code review-fix,
+  // 2026-09-03) — hergebruik i.p.v. `detectShortfallForDate` diezelfde live Calendar-call
+  // een tweede keer voor exact dezelfde user/datum te laten doen. Was vóór Task 7 een
+  // goedkope lokale lookup (twee keer aanroepen deed er niet toe); sinds Task 7 is elke
+  // `availableMinutesForDate`-aanroep een echte Calendar-round-trip.
+  const shortfall = await detectShortfallForDate(userId, date, availableMinutes)
   let suggestion: WeekDayDto['suggestion'] = null
   if (shortfall) {
     const recommendations = await generateShortfallRecommendations(userId, shortfall)
