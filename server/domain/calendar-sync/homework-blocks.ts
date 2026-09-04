@@ -9,16 +9,21 @@ import {
   updateHomeworkBlockTimes
 } from '../../data/homework-blocks'
 import { createHomeworkEvent, deleteHomeworkEvent, updateHomeworkEvent } from './homework-events'
-import { getTodayEvents, type DayEvent } from './day-events'
-import { isBlockingEvent, overlapInterval } from './actual-availability'
 import type { HomeworkCalendarBlock } from '../../data/schema'
 
 // Story 2.5 (Correct Course, 2026-08-26) — vervangt de per-sessie write-sync (Story 2.3)
-// door een per-datum, samenvattende herberekening. Zie de story se Dev Notes
-// "Call-site-tabel" voor alle 7 aanroeppunten die deze functie voortaan gebruiken i.p.v.
-// zelf createHomeworkEvent/updateHomeworkEvent/deleteHomeworkEvent te orkestreren.
+// door een per-datum herberekening. Zie de story se Dev Notes "Call-site-tabel" voor alle
+// 7 aanroeppunten die deze functie voortaan gebruiken i.p.v. zelf createHomeworkEvent/
+// updateHomeworkEvent/deleteHomeworkEvent te orkestreren.
+//
+// **Niet meer samenvattend (2026-09-04, op verzoek van Hillebrand):** Story 2.5 groepeerde
+// hier aaneengesloten sessies (zonder tussenliggend bezet agenda-item) tot één gedeeld
+// blok. Nu de blok-titel het vak+de titel van de taak toont (zie `formatBlockTitle`),
+// zou een gedeeld blok een onhandige kommagescheiden titel krijgen — Hillebrand wil
+// expliciet één blok per taak, altijd. De busy-item-splitsingslogica van Story 2.5 is
+// daarmee overbodig geworden en verwijderd; elke sessie is nu 1-op-1 haar eigen blok.
 
-interface SessionForGrouping {
+interface SessionForBlock {
   startsAt: string
   plannedMinutes: number
   subject: string
@@ -28,50 +33,24 @@ interface SessionForGrouping {
 interface ComputedBlock {
   startsAt: string
   endsAt: string
-  // Taken die dit blok vormen, chronologisch — bepaalt de Calendar-eventtitel
-  // (`formatBlockTitle` hieronder). Meestal één taak; meerdere bij aaneengesloten sessies
-  // zonder tussenliggend bezet agenda-item.
-  tasks: { subject: string, title: string }[]
+  subject: string
+  title: string
 }
 
-// Titel per blok (2026-09-04, op verzoek van Hillebrand) — voorheen altijd de generieke
-// "Huiswerk", logisch toen een blok per definitie alle taken van de dag combineerde. Sinds
-// Story 2.5 splitst een blok al bij het eerste bezette agenda-item ertussen, dus in de
-// praktijk bevat een blok meestal precies één taak — de titel mag en moet dan zeggen welke.
-// Bij meerdere taken in hetzelfde blok (geen tussenliggend bezet item): alle taken
-// opgesomd, zelfde "{vak} — {titel}"-notatie als elders in dit project (bv.
-// `shortfall.ts`'s herplannen-omschrijving).
-function formatBlockTitle(tasks: { subject: string, title: string }[]): string {
-  return tasks.map(t => `${t.subject} — ${t.title}`).join(', ')
+// "{vak} — {titel}", zelfde notatie als elders in dit project (bv. `shortfall.ts`'s
+// herplannen-omschrijving).
+function formatBlockTitle(block: { subject: string, title: string }): string {
+  return `${block.subject} — ${block.title}`
 }
 
-// Groepeert sessies (al of niet op volgorde aangeleverd) in aaneengesloten blokken,
-// gescheiden door bezette agenda-items (AC #2). Twee opeenvolgende sessies horen bij
-// hetzelfde blok tenzij het gat ertussen overlapt met minstens één meegegeven bezet
-// event — reuse van `overlapInterval` (`actual-availability.ts`), zelfde primitief als
-// Story 2.4/6.7's overlap-detectie, geen tweede implementatie.
-export function groupSessionsIntoBlocks(sessions: SessionForGrouping[], blockingEvents: DayEvent[]): ComputedBlock[] {
-  const sorted = [...sessions].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-  const blocks: ComputedBlock[] = []
-
-  for (const session of sorted) {
-    const sessionEndsAt = new Date(new Date(session.startsAt).getTime() + session.plannedMinutes * 60_000).toISOString()
-    const laatsteBlok = blocks[blocks.length - 1]
-
-    if (laatsteBlok) {
-      const gat = { startsAt: laatsteBlok.endsAt, endsAt: session.startsAt }
-      const overlaptBezetItem = blockingEvents.some(event => overlapInterval(gat, event) !== null)
-      if (!overlaptBezetItem) {
-        laatsteBlok.endsAt = sessionEndsAt
-        laatsteBlok.tasks.push({ subject: session.subject, title: session.title })
-        continue
-      }
-    }
-
-    blocks.push({ startsAt: session.startsAt, endsAt: sessionEndsAt, tasks: [{ subject: session.subject, title: session.title }] })
-  }
-
-  return blocks
+// Eén blok per sessie — geen samenvoeging meer (zie de story se top-commentaar hierboven).
+function sessionsToBlocks(sessions: SessionForBlock[]): ComputedBlock[] {
+  return sessions.map(session => ({
+    startsAt: session.startsAt,
+    endsAt: new Date(new Date(session.startsAt).getTime() + session.plannedMinutes * 60_000).toISOString(),
+    subject: session.subject,
+    title: session.title
+  }))
 }
 
 interface BlockPair {
@@ -117,22 +96,6 @@ function matchBlocks(existingBlocks: HomeworkCalendarBlock[], computedBlocks: Co
   return pairs
 }
 
-// Fail-safe (zelfde precedent als day-events.ts se eigen contract): een mislukte
-// Calendar-lees-aanroep (`null`) mag de schrijfkant niet blokkeren — degradeert naar
-// "geen bezette items bekend", dus alle sessies vormen tijdelijk één blok (het gedrag van
-// vóór deze story). Sluit ook de eigen huiswerk-kleur uit (anders blokkeert een net
-// gesynchroniseerd eigen blok zichzelf bij de eerstvolgende herberekening) — zelfde
-// kleur-uitsluiting als `conflict-detection.ts` al gebruikt.
-async function getBlockingEventsForDate(userId: string, date: string, homeworkColorId: number): Promise<DayEvent[]> {
-  const result = await getTodayEvents(userId, date)
-  if (!result) return []
-
-  const homeworkColorIdString = String(homeworkColorId)
-  return result.events
-    .filter(isBlockingEvent)
-    .filter(event => event.colorId !== homeworkColorIdString)
-}
-
 // Zelf-bewakend op kleur + write-scope (zelfde no-op-precedent als Story 2.3's
 // createHomeworkEvent, AC #4) — de aanroeper hoeft dit niet zelf te controleren.
 // Idempotent (AD-1): gaat bij elke aanroep uit van de actuele DB-/Calendar-staat, nooit
@@ -146,16 +109,14 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
     }
 
     const taskSessions = await getTasksWithSessionOnDate(userId, date)
-    const blockingEvents = await getBlockingEventsForDate(userId, date, user.homeworkCalendarColorId)
 
-    const computedBlocks = groupSessionsIntoBlocks(
+    const computedBlocks = sessionsToBlocks(
       taskSessions.map(({ task, session }) => ({
         startsAt: session.startsAt,
         plannedMinutes: session.plannedMinutes,
         subject: task.subject,
         title: task.title
-      })),
-      blockingEvents
+      }))
     )
     const existingBlocks = await getHomeworkBlocksForDate(userId, date)
     const pairs = matchBlocks(existingBlocks, computedBlocks)
@@ -167,10 +128,10 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
     for (const { computed, existing } of pairs) {
       try {
         if (computed && existing) {
-          await updateHomeworkEvent(userId, existing.googleEventId, { title: formatBlockTitle(computed.tasks), startsAt: computed.startsAt, endsAt: computed.endsAt })
+          await updateHomeworkEvent(userId, existing.googleEventId, { title: formatBlockTitle(computed), startsAt: computed.startsAt, endsAt: computed.endsAt })
           await updateHomeworkBlockTimes(existing.id, computed.startsAt, computed.endsAt)
         } else if (computed && !existing) {
-          const result = await createHomeworkEvent(userId, { title: formatBlockTitle(computed.tasks), startsAt: computed.startsAt, endsAt: computed.endsAt })
+          const result = await createHomeworkEvent(userId, { title: formatBlockTitle(computed), startsAt: computed.startsAt, endsAt: computed.endsAt })
           if (result) {
             await insertHomeworkBlock(userId, date, computed.startsAt, computed.endsAt, result.googleEventId)
           }
