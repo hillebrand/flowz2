@@ -111,7 +111,7 @@ development_status:
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
   6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — nog te implementeren
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
-  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: in-progress # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; story-context aangemaakt 2026-09-04
+  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: review # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + gedeployed 2026-09-04
   epic-6-retrospective: optional
 
   epic-7: done
