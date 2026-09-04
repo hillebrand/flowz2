@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-09-03
+last_updated: 2026-09-04
 
 # Correct Course (2026-09-02, sprint-change-proposal-2026-09-02.md): beschikbare tijd komt
 # voortaan uit een door Evelien aangewezen Google Calendar-agenda (AD-10) i.p.v. een
@@ -111,7 +111,7 @@ development_status:
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
   6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — nog te implementeren
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
-  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: backlog # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten
+  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: in-progress # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; story-context aangemaakt 2026-09-04
   epic-6-retrospective: optional
 
   epic-7: done

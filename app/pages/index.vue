@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type { HomePlanResponse } from '#shared/types/tasks'
-import type { AgendaConflictDto, AgendaConflictsResponse } from '#shared/types/conflict'
+import type { StartupCheckResponse } from '#shared/types/startup-check'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
 
 const { loggedIn } = useUserSession()
@@ -25,42 +25,19 @@ watch(planError, (waarde) => {
   if (is401(waarde)) navigateTo('/inloggen')
 }, { immediate: true })
 
-// Story 6.7 — opstart-check, los van de `plan`-fetch (aparte, onafhankelijke aanroep,
-// zelfde `server: false`-precedent). Bewust NIET ge-`await`-ed (code review-patch): een
-// top-level `await` in `<script setup>` maakt de component async en blokkeert Home's eerste
-// render tot deze call klaar is — precies het "kritiek pad"-gedrag dat de comment hieronder
-// wil vermijden. Faalt de check zelf (netwerk/401), dan verschijnt de modal simpelweg niet.
-const { data: conflictsData, refresh: refreshConflicts } = useFetch<AgendaConflictsResponse>('/api/availability/conflicts', { server: false })
-const conflicts = computed<AgendaConflictDto[]>(() => conflictsData.value?.conflicts ?? [])
-const currentConflict = computed<AgendaConflictDto | null>(() => conflicts.value[0] ?? null)
+// Story 6.7 (herzien, AD-10) — opstart-check, los van de `plan`-fetch (aparte,
+// onafhankelijke aanroep, zelfde `server: false`-precedent). Bewust NIET ge-`await`-ed
+// (zelfde les als de vorige, vervallen versie van deze story: een top-level `await` in
+// `<script setup>` maakt de component async en blokkeert Home's eerste render tot deze call
+// klaar is). Faalt de check zelf (netwerk/401), dan gebeurt er simpelweg niets — Home
+// rendert gewoon met de (mogelijk nog niet stil-herplande) planning.
+const { data: startupCheck } = useFetch<StartupCheckResponse>('/api/scheduling/startup-check', { server: false })
 
-const dismissError = ref(false)
-
-async function conflictNietVanToepassing(conflict: AgendaConflictDto) {
-  dismissError.value = false
-  try {
-    await $fetch('/api/availability/conflicts/dismiss', {
-      method: 'POST',
-      body: { date: conflict.date, googleEventId: conflict.googleEventId }
-    })
-  } catch (fout) {
-    if (is401(fout)) {
-      await navigateTo('/inloggen')
-      return
-    }
-    // Review-patch: vroeger werd een niet-401-fout stil geslikt en toch herladen — het
-    // conflict kwam dan terug zonder enige uitleg waarom de klik niets deed.
-    dismissError.value = true
-    return
+watch(startupCheck, (waarde) => {
+  if (waarde && waarde.calendarLinked && !waarde.resolved) {
+    navigateTo('/herstel/tekort-oplossen')
   }
-  // Hergebruikt de server-staat i.p.v. lokaal te spliced — zelfde les als Story 6.5's
-  // zelfgevonden bug: vertrouw de server-staat, niet een lokale aanname.
-  await refreshConflicts()
-}
-
-function conflictAanpassen(conflict: AgendaConflictDto) {
-  navigateTo(`/agendaconflict/aanpassen?dag=${encodeURIComponent(conflict.date)}`)
-}
+})
 
 const isLoading = computed(() => planStatus.value === 'pending' || planStatus.value === 'idle')
 const nextTask = computed(() => plan.value?.nextTask ?? null)
@@ -240,13 +217,16 @@ const outsideWindowCalendarEvents = computed(() =>
 
 <template>
   <main v-if="loggedIn" class="home-page">
-    <ConflictModal
-      v-if="currentConflict"
-      :conflict="currentConflict"
-      :error="dismissError"
-      @not-applicable="conflictNietVanToepassing(currentConflict)"
-      @adjust="conflictAanpassen(currentConflict)"
-    />
+    <section
+      v-if="startupCheck && !startupCheck.calendarLinked"
+      id="home-availability-notice"
+      class="home-availability-notice"
+    >
+      <p>
+        Koppel eerst een beschikbare-tijd-agenda, zodat Flowz je planning kan maken.
+        <NuxtLink to="/instellingen">Naar instellingen</NuxtLink>
+      </p>
+    </section>
 
     <header id="home-header" class="home-header">
       <HamburgerMenu />
@@ -414,6 +394,19 @@ const outsideWindowCalendarEvents = computed(() =>
 
 .home-calendar-warnings p + p {
   margin-top: 0.25rem;
+}
+
+.home-availability-notice {
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.home-availability-notice p {
+  margin: 0;
+  font-size: 0.875rem;
 }
 
 .home-task-section {
