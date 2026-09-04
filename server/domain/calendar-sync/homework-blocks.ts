@@ -18,16 +18,31 @@ import type { HomeworkCalendarBlock } from '../../data/schema'
 // "Call-site-tabel" voor alle 7 aanroeppunten die deze functie voortaan gebruiken i.p.v.
 // zelf createHomeworkEvent/updateHomeworkEvent/deleteHomeworkEvent te orkestreren.
 
-const BLOCK_TITLE = 'Huiswerk'
-
 interface SessionForGrouping {
   startsAt: string
   plannedMinutes: number
+  subject: string
+  title: string
 }
 
 interface ComputedBlock {
   startsAt: string
   endsAt: string
+  // Taken die dit blok vormen, chronologisch — bepaalt de Calendar-eventtitel
+  // (`formatBlockTitle` hieronder). Meestal één taak; meerdere bij aaneengesloten sessies
+  // zonder tussenliggend bezet agenda-item.
+  tasks: { subject: string, title: string }[]
+}
+
+// Titel per blok (2026-09-04, op verzoek van Hillebrand) — voorheen altijd de generieke
+// "Huiswerk", logisch toen een blok per definitie alle taken van de dag combineerde. Sinds
+// Story 2.5 splitst een blok al bij het eerste bezette agenda-item ertussen, dus in de
+// praktijk bevat een blok meestal precies één taak — de titel mag en moet dan zeggen welke.
+// Bij meerdere taken in hetzelfde blok (geen tussenliggend bezet item): alle taken
+// opgesomd, zelfde "{vak} — {titel}"-notatie als elders in dit project (bv.
+// `shortfall.ts`'s herplannen-omschrijving).
+function formatBlockTitle(tasks: { subject: string, title: string }[]): string {
+  return tasks.map(t => `${t.subject} — ${t.title}`).join(', ')
 }
 
 // Groepeert sessies (al of niet op volgorde aangeleverd) in aaneengesloten blokken,
@@ -48,11 +63,12 @@ export function groupSessionsIntoBlocks(sessions: SessionForGrouping[], blocking
       const overlaptBezetItem = blockingEvents.some(event => overlapInterval(gat, event) !== null)
       if (!overlaptBezetItem) {
         laatsteBlok.endsAt = sessionEndsAt
+        laatsteBlok.tasks.push({ subject: session.subject, title: session.title })
         continue
       }
     }
 
-    blocks.push({ startsAt: session.startsAt, endsAt: sessionEndsAt })
+    blocks.push({ startsAt: session.startsAt, endsAt: sessionEndsAt, tasks: [{ subject: session.subject, title: session.title }] })
   }
 
   return blocks
@@ -133,7 +149,12 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
     const blockingEvents = await getBlockingEventsForDate(userId, date, user.homeworkCalendarColorId)
 
     const computedBlocks = groupSessionsIntoBlocks(
-      taskSessions.map(({ session }) => ({ startsAt: session.startsAt, plannedMinutes: session.plannedMinutes })),
+      taskSessions.map(({ task, session }) => ({
+        startsAt: session.startsAt,
+        plannedMinutes: session.plannedMinutes,
+        subject: task.subject,
+        title: task.title
+      })),
       blockingEvents
     )
     const existingBlocks = await getHomeworkBlocksForDate(userId, date)
@@ -146,10 +167,10 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
     for (const { computed, existing } of pairs) {
       try {
         if (computed && existing) {
-          await updateHomeworkEvent(userId, existing.googleEventId, { title: BLOCK_TITLE, startsAt: computed.startsAt, endsAt: computed.endsAt })
+          await updateHomeworkEvent(userId, existing.googleEventId, { title: formatBlockTitle(computed.tasks), startsAt: computed.startsAt, endsAt: computed.endsAt })
           await updateHomeworkBlockTimes(existing.id, computed.startsAt, computed.endsAt)
         } else if (computed && !existing) {
-          const result = await createHomeworkEvent(userId, { title: BLOCK_TITLE, startsAt: computed.startsAt, endsAt: computed.endsAt })
+          const result = await createHomeworkEvent(userId, { title: formatBlockTitle(computed.tasks), startsAt: computed.startsAt, endsAt: computed.endsAt })
           if (result) {
             await insertHomeworkBlock(userId, date, computed.startsAt, computed.endsAt, result.googleEventId)
           }

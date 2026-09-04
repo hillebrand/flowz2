@@ -7,8 +7,9 @@ import { refreshCalendarAccessToken } from '../auth/calendar-token'
 // Story 2.5 (Correct Course, 2026-08-26): vereenvoudigd van een per-sessie-vorm
 // (`HomeworkSession`, met `sessionId`/`subject`/`title`) naar een generieke, neutrale
 // Calendar-CRUD-laag — een blok dekt sinds deze story mogelijk meerdere taken tegelijk,
-// dus een taak-gebonden titel/identifier hoort hier niet meer thuis. De aanroeper
-// (`server/domain/calendar-sync/homework-blocks.ts`) bepaalt de titel (altijd "Huiswerk").
+// dus een taak-gebonden titel/identifier hoort hier niet meer thuis op dít niveau. De
+// aanroeper (`server/domain/calendar-sync/homework-blocks.ts`) bepaalt de titel — sinds
+// 2026-09-04 vak+titel van de taak/taken in het blok, niet meer de vaste tekst "Huiswerk".
 export interface CalendarBlockEvent {
   title: string
   // ISO 8601 UTC datetime (bv. "2026-08-01T14:00:00Z") — Google's Events-resource
