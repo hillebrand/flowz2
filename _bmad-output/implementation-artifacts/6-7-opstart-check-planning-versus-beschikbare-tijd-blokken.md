@@ -4,7 +4,7 @@ baseline_commit: b375678
 
 # Story 6.7: Opstart-check — Planning versus Beschikbare-tijd-blokken
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -117,6 +117,7 @@ Geen blokkerende open vragen. Eén punt uit de UX-spec zelf (1.1-hoofdscherm's O
 | 2026-09-04 | Story aangemaakt via create-story, voortbouwend op de nu volledig afgeronde Epic 3 (Story 3.1 Task 7's AD-10-rework, al gecommit) en Epic 6's Story 6.1-6.5 (done). Grootste scope-vraag: dit is zowel een nieuwe feature (stil-herplannen-orkestratie bij opstart) als een sanering van vijf bestanden + een pagina + drie routes die door de vorige (vervallen) Story 6.6/6.7 zijn achtergelaten en sinds Story 3.1 Task 7 deels al kapot zijn (`prefill-conflict.post.ts` roept een nu foutgooiende functie aan). Geen nieuwe scheduling-logica nodig — hergebruikt Story 6.1's escalatie-service en Story 6.2's `applyShortfallRecommendation`/`/herstel/tekort-oplossen`-pagina volledig ongewijzigd, alleen een nieuwe orkestratielus + opstart-aanroepmoment. Twee punten als beargumenteerd voorstel vastgelegd (niet-blokkerende check, iteratiegrens 10). Status meteen `ready-for-dev`. |
 | 2026-09-04 | Implementatie Tasks 0-3 afgerond: sanering (10 vervallen/kapotte bestanden verwijderd via `git rm`, `app/pages/index.vue` opgeschoond en uitgebreid met `home-availability-notice`), `runStartupReplanCheck` (`server/domain/scheduling/startup-check.ts`), `GET /api/scheduling/startup-check` + `shared/types/startup-check.d.ts`, Home-integratie (niet-blokkerende fetch + `watch`-gestuurde navigatie naar `/herstel/tekort-oplossen`). `npx nuxt typecheck` en `npx nuxt build` beide schoon. Gedeployed naar de dev-stage (`npx sst deploy --stage dev`, `flowz.fyi`). Gecommit en gepusht (`1cf552b`). |
 | 2026-09-04 | Live-verificatie (Task 4) volledig afgerond, ingelogd als Evelien (`eveliengelderblom@gmail.com`) met haar echte gekoppelde beschikbare-tijd-agenda. Alle vier AC's bevestigd met een echte testtaak en tijdelijke Calendar-blok-wijzigingen (telkens alleen de betreffende occurrence van een wekelijkse afspraak, nooit de hele reeks): (1) stil herplannen slaagde wanneer er een alternatieve dag met ruimte was — sessie stil verplaatst, geen enkele melding; (2) escalatie naar `/herstel/tekort-oplossen` wanneer er géén alternatieve dag was — bestaande Story 6.1/6.2-flow toonde correct de instructieve "Tijd verruimen"-aanbeveling; (3) geen gekoppelde agenda (getest als Hillebrand) toonde de `home-availability-notice`-verwijzing, geen crash; (4) alle vier gesaneerde routes bevestigd op 404 met een echte sessie, `startup-check` op 200. Testtaak en beide tijdelijke Calendar-wijzigingen na afloop opgeruimd/hersteld (één blok net geen exacte 09:50 meer te zetten via de Google Calendar-UI — nu 10:00, 10 min ruimer dan origineel, gemeld aan Hillebrand). Status → `review`. |
+| 2026-09-04 | Code review (Opus 5, adversarieel, gescoped op `b375678..5cba003` na de eerdere aanroep abusievelijk ongerelateerde ongetrackte bestanden pakte). 2 bevindingen, beide gepatcht: (1) `GET /api/scheduling/startup-check` had side effects (herplant/laat taken vervallen) — een `GET` wordt door prefetching/monitoring als veilig behandeld en kon zo ongewild mutaties triggeren; route + client-fetch omgezet naar `POST`, consistent met elke andere mutatie-route in dit project. (2) `dismissedConflicts`-schema in `schema.ts` had na de sanering geen enkele lezer/schrijver meer zonder dat expliciet vastgelegd — top-comment bijgewerkt naar hetzelfde "bewust nog niet verwijderd"-precedent als `availableTimePatterns`/`availableTimeExceptions` (Story 3.1 Task 7). `typecheck`/`build` schoon, opnieuw gedeployed naar de dev-stage. Status → `done`. |
 
 ## Dev Agent Record
 
@@ -141,6 +142,10 @@ Claude Sonnet 5 (claude-sonnet-5)
 - **AC #4 (geen gekoppelde agenda) bevestigd** met Hillebrand's eigen account (geen `availabilityCalendarId`): `home-availability-notice` verscheen, geen crash, `startup-check` deed geen enkele poging tot herplannen (`{calendarLinked: false, resolved: true}`).
 - **Sanering bevestigd met een echte sessie:** alle vier gesaneerde routes (`/agendaconflict/aanpassen`, `GET .../conflicts`, `POST .../conflicts/dismiss`, `PATCH .../exceptions/{date}`) gaven 404; `GET /api/scheduling/startup-check` gaf 200.
 - Testtaak en beide tijdelijke Calendar-blok-wijzigingen na afloop volledig opgeruimd/hersteld — bevestigd dat alleen Evelien's eigen, echte taak ("hoofdstuk 4") overbleef. Eén blok (10-09) kon niet meer exact op het originele 08:30-09:50 gezet worden via de Google Calendar-UI (geen 09:50-optie meer beschikbaar voor deze recurring afspraak, alleen 15-min-stappen) — nu 08:30-10:00 (10 min ruimer), een kleine, onschuldige afwijking, expliciet gemeld aan Hillebrand.
+- **Code review (Opus 5, gescoped op `b375678..5cba003`) — 2 bevindingen, beide gepatcht:**
+  1. **[Patch] `GET /api/scheduling/startup-check` had side effects** (herplant sessies, kan taken laten vervallen via `applyShortfallRecommendation`) — een `GET` wordt door browsers/monitoring/proxy's als veilig/idempotent behandeld en kan zo ongewild mutaties triggeren (prefetching, uptime-checks). Route hernoemd naar `startup-check.post.ts`, client-fetch in `index.vue` aangepast naar `POST` — zelfde precedent als elke andere mutatie-route in dit project.
+  2. **[Patch, documentatie] `dismissedConflicts`-schema/types in `schema.ts` hadden geen enkele lezer/schrijver meer** na de Task 0-sanering, zonder dat expliciet vastgelegd te hebben. Zelfde precedent als `availableTimePatterns`/`availableTimeExceptions` (Story 3.1 Task 7): tabel/types blijven bewust staan, geen migratie — nu met een bijgewerkte top-comment die dat expliciet maakt i.p.v. de oude, inmiddels misleidende beschrijving van de vervallen flow.
+  - `npx nuxt typecheck`/`npx nuxt build` beide schoon na de patches, opnieuw gedeployed naar de dev-stage (`flowz.fyi`).
 
 ### File List
 
@@ -155,7 +160,8 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `server/api/availability/exceptions/[date].patch.ts` (verwijderd)
 - `server/domain/availability/week-pattern.ts` (verwijderd)
 - `shared/types/conflict.d.ts` (verwijderd)
-- `app/pages/index.vue` (gewijzigd — `ConflictModal`-integratie vervangen door de niet-blokkerende `startup-check`-fetch + `home-availability-notice`)
+- `app/pages/index.vue` (gewijzigd — `ConflictModal`-integratie vervangen door de niet-blokkerende `startup-check`-fetch + `home-availability-notice`; review-patch: fetch nu `POST`)
 - `server/domain/scheduling/startup-check.ts` (nieuw — `runStartupReplanCheck`)
-- `server/api/scheduling/startup-check.get.ts` (nieuw)
+- `server/api/scheduling/startup-check.post.ts` (nieuw; review-patch: hernoemd van `.get.ts` naar `.post.ts` — de route muteert)
 - `shared/types/startup-check.d.ts` (nieuw — `StartupCheckResponse`)
+- `server/data/schema.ts` (review-patch: `dismissedConflicts`-top-comment bijgewerkt, markeert 'm expliciet als buiten werking sinds déze story se sanering)

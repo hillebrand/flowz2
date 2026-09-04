@@ -236,13 +236,14 @@ export const subtasks = sqliteTable('subtasks', {
 export type Subtask = typeof subtasks.$inferSelect
 export type NewSubtask = typeof subtasks.$inferInsert
 
-// Story 6.7 — persistente "dit is geen conflict"-beslissing per (user, datum,
-// Calendar-event). Alleen nodig voor `conflict-not-applicable-button`: de "tijd
-// aanpassen"-route (Story 6.6) heeft geen eigen dismissal-rij nodig, want die verandert de
-// onderliggende data zelf al (exceptie of taakverplaatsing), waardoor het conflict bij de
-// eerstvolgende check vanzelf niet meer optreedt. `googleEventId` (niet nullable) is de
-// identiteit van "dit specifieke conflict" — zonder een user/datum/event-combinatie is er
-// niks eenduidigs om te onthouden.
+// **Buiten werking** (Story 6.7 herzien, 2026-09-04, code review) — de oorspronkelijke
+// conflict-modal-flow die deze tabel schreef/las (`server/domain/calendar-sync/
+// conflict-detection.ts`, `server/data/dismissed-conflicts.ts`) is gesaneerd (zie die
+// story se Task 0/"Belangrijk" punt 2): geen enkele aanroeper meer over. Tabel/types
+// bewust nog niet verwijderd — zelfde precedent als `availableTimePatterns`/
+// `availableTimeExceptions` na Story 3.1 Task 7's AD-10-rework (code weg, geen migratie).
+// Oorspronkelijke context: persistente "dit is geen conflict"-beslissing per (user, datum,
+// Calendar-event), alleen nodig voor de vervallen `conflict-not-applicable-button`.
 export const dismissedConflicts = sqliteTable('dismissed_conflicts', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text('user_id').notNull().references(() => users.id),

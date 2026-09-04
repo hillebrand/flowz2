@@ -7,6 +7,12 @@ import type { StartupCheckResponse } from '../../../shared/types/startup-check'
 // beschikbare-tijd-agenda: niets om tegen te controleren (AC #4), dus geen
 // `runStartupReplanCheck`-aanroep. Anders: stil-herplan-lus, met AC #2/#3's uitkomst
 // (opgelost / blijft een tekort) rechtstreeks doorgegeven aan de client.
+//
+// Bewust `POST`, niet `GET` (code review-fix): deze route muteert (herplant sessies,
+// kan taken laten vervallen via `applyShortfallRecommendation`) — een `GET` zou door
+// prefetching/monitoring/proxy's als veilig behandeld kunnen worden en ongewild
+// mutaties triggeren. Zelfde precedent als elke andere mutatie-route in dit project
+// (`shortfall.post.ts`, `.../suggestion/accept.post.ts`, enz.).
 function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   return { error: { code, message } }
 }

@@ -104,14 +104,14 @@ development_status:
   5-3-taak-bewerken-hergebruik-taak-formulier: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-tijdgebrek-detectie-escalatie-service: done # 2026-09-03: "tijd verruimen" heringevoerd als instructieve tier (geen accept-effect meer); recheck = herhaalde live-detectie, geen nieuwe functie nodig — live geverifieerd
   6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — nog te implementeren
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
   6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — nog te implementeren
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
-  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: review # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + gedeployed 2026-09-04
+  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: done # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + code review (Opus 5, 2 patches: GET→POST, schema-comment) + herdeployed 2026-09-04. Epic 6 hiermee volledig done.
   epic-6-retrospective: optional
 
   epic-7: done

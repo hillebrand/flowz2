@@ -31,7 +31,7 @@ watch(planError, (waarde) => {
 // `<script setup>` maakt de component async en blokkeert Home's eerste render tot deze call
 // klaar is). Faalt de check zelf (netwerk/401), dan gebeurt er simpelweg niets — Home
 // rendert gewoon met de (mogelijk nog niet stil-herplande) planning.
-const { data: startupCheck } = useFetch<StartupCheckResponse>('/api/scheduling/startup-check', { server: false })
+const { data: startupCheck } = useFetch<StartupCheckResponse>('/api/scheduling/startup-check', { method: 'POST', server: false })
 
 watch(startupCheck, (waarde) => {
   if (waarde && waarde.calendarLinked && !waarde.resolved) {
