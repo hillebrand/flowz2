@@ -45,3 +45,21 @@ export function amsterdamLocalToUtcIso(dateStr: string, hour: number, minute: nu
 
   return new Date(naiveUtc.getTime() - offsetMinutes * 60_000).toISOString()
 }
+
+// Huidig moment als Amsterdam-lokale wandklok-tijd (uur/minuut) — nodig om te bepalen of
+// een geplande-sessie-ankertijd of een beschikbare-tijd-venster al (deels) in het verleden
+// ligt (2026-09-04, Hillebrand: nieuwe taken/beschikbare tijd mogen nooit in het verleden
+// vallen). Minuten worden bewust niet afgerond — een sessie die nu start moet echt nu
+// starten, niet een paar minuten eerder.
+export function nowAmsterdamHourMinute(): { hour: number, minute: number } {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Amsterdam',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(new Date())
+
+  const hour = Number(parts.find(part => part.type === 'hour')?.value ?? '0')
+  const minute = Number(parts.find(part => part.type === 'minute')?.value ?? '0')
+  return { hour, minute }
+}

@@ -1,7 +1,7 @@
 import { getUserById } from '../../data/users'
 import { getEventsForCalendar, type DayEvent } from '../calendar-sync/day-events'
 import { isTimedEvent } from '../calendar-sync/actual-availability'
-import { amsterdamLocalToUtcIso } from '../../../shared/utils/scheduling'
+import { amsterdamLocalToUtcIso, todayInAmsterdam } from '../../../shared/utils/scheduling'
 
 // Story 3.1 Task 7 (AD-10-rework, Correct Course 2026-09-02) — vervangt het oude
 // weekpatroon+afwijkingen-model als bron voor beschikbare tijd. `User.availabilityCalendarId`
@@ -68,5 +68,13 @@ export async function getAvailableMinutesForDate(userId: string, date: string): 
     throw new Error(`Kon beschikbare-tijd-agenda niet ophalen voor user ${userId} op ${date}.`)
   }
 
-  return mergedBlockMinutes(events.filter(isTimedEvent), new Date(timeMin).getTime(), new Date(timeMax).getTime())
+  // Alleen toekomstige tijd telt mee als beschikbaar (2026-09-04, Hillebrand): voor vandaag
+  // is een blok (of het al-verstreken deel ervan) vóór het huidige moment niet meer bruikbaar
+  // om een sessie in te plannen. Voor een toekomstige dag verandert er niets — de hele dag
+  // ligt al in de toekomst, dus het venster blijft vanaf lokale middernacht.
+  const windowStartMs = date === todayInAmsterdam()
+    ? Math.max(new Date(timeMin).getTime(), Date.now())
+    : new Date(timeMin).getTime()
+
+  return mergedBlockMinutes(events.filter(isTimedEvent), windowStartMs, new Date(timeMax).getTime())
 }

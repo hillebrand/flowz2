@@ -17,7 +17,29 @@ import {
   type Task,
   type TaskType
 } from './schema'
-import { amsterdamLocalToUtcIso } from '../../shared/utils/scheduling'
+import { amsterdamLocalToUtcIso, nowAmsterdamHourMinute, todayInAmsterdam } from '../../shared/utils/scheduling'
+
+// Ankeruur/-minuut waarop een sessie op `date` gestapeld wordt, nooit in het verleden
+// (2026-09-04, Hillebrand: nieuwe/herplande sessies mogen nooit in het verleden vallen).
+// Voor een toekomstige dag verandert er niets (gewoon `anchorHour:00`); voor vandaag, als
+// het al later is dan `anchorHour:00`, wordt het huidige moment zelf de basis waarop
+// `existingMinutes` bovenop gestapeld wordt — zo ligt het resultaat gegarandeerd nooit
+// vóór "nu". Gedeeld door `createTaskAndSession`/`placeSessionWithStackingOffset`
+// hieronder én `session-placement.ts`'s `placeSessionOnDate` (herplannen) — alle drie
+// hanteren exact dezelfde "anker + gestapelde minuten"-formule. Geëxporteerd i.p.v. hier
+// gedupliceerd, zelfde precedent als andere gedeelde data-laagfuncties in dit bestand.
+export function resolveAnchorHourMinute(date: string, anchorHour: number): { hour: number, minute: number } {
+  if (date !== todayInAmsterdam()) {
+    return { hour: anchorHour, minute: 0 }
+  }
+  const now = nowAmsterdamHourMinute()
+  const nowTotalMinutes = now.hour * 60 + now.minute
+  const anchorTotalMinutes = anchorHour * 60
+  if (nowTotalMinutes <= anchorTotalMinutes) {
+    return { hour: anchorHour, minute: 0 }
+  }
+  return now
+}
 
 export interface CreateTaskAndSessionInput {
   task: NewTask
@@ -61,8 +83,10 @@ export async function createTaskAndSession(input: CreateTaskAndSessionInput): Pr
         ))
       const existingMinutes = existingRows.reduce((sum, row) => sum + row.plannedMinutes, 0)
 
-      const hour = input.sessionAnchorHour + Math.floor(existingMinutes / 60)
-      const minute = existingMinutes % 60
+      const anchor = resolveAnchorHourMinute(input.sessionDate, input.sessionAnchorHour)
+      const totalMinutes = anchor.hour * 60 + anchor.minute + existingMinutes
+      const hour = Math.floor(totalMinutes / 60)
+      const minute = totalMinutes % 60
       const startsAt = amsterdamLocalToUtcIso(input.sessionDate, hour, minute)
 
       const [session] = await tx.insert(sessions).values({
@@ -489,8 +513,10 @@ export async function placeSessionWithStackingOffset(
         notInArray(tasks.id, excludeTaskIds)
       ))
     const existingMinutes = rows.reduce((sum, row) => sum + row.plannedMinutes, 0)
-    const hour = anchorHour + Math.floor(existingMinutes / 60)
-    const minute = existingMinutes % 60
+    const anchor = resolveAnchorHourMinute(date, anchorHour)
+    const totalMinutes = anchor.hour * 60 + anchor.minute + existingMinutes
+    const hour = Math.floor(totalMinutes / 60)
+    const minute = totalMinutes % 60
     const startsAt = amsterdamLocalToUtcIso(date, hour, minute)
 
     const [session] = await getDb()

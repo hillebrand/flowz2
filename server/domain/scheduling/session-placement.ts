@@ -1,4 +1,4 @@
-import { sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
+import { resolveAnchorHourMinute, sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { SESSION_ANCHOR_HOUR } from './doelmoment'
 import { amsterdamLocalToUtcIso } from '../../../shared/utils/scheduling'
@@ -11,8 +11,10 @@ import type { Task, Session } from '../../data/schema'
 export async function placeSessionOnDate(userId: string, task: Task, session: Session, targetDate: string): Promise<void> {
   const oudeDatum = session.startsAt.slice(0, 10)
   const existingMinutes = await sumPlannedMinutesForUserOnDate(userId, targetDate, task.id)
-  const hour = SESSION_ANCHOR_HOUR + Math.floor(existingMinutes / 60)
-  const minute = existingMinutes % 60
+  const anchor = resolveAnchorHourMinute(targetDate, SESSION_ANCHOR_HOUR)
+  const totalMinutes = anchor.hour * 60 + anchor.minute + existingMinutes
+  const hour = Math.floor(totalMinutes / 60)
+  const minute = totalMinutes % 60
   const startsAt = amsterdamLocalToUtcIso(targetDate, hour, minute)
 
   await updateSessionPlacement(session.id, { startsAt, plannedMinutes: session.plannedMinutes })
