@@ -170,12 +170,32 @@ function markerStyle(hour: number): { top: string, transform: string } {
 
 const allDayCalendarEvents = computed(() => (plan.value?.calendarDayEvents ?? []).filter(isAllDayEvent))
 
+// Google Calendar-daglink (2026-09-05, Hillebrand) — elk agenda-blok opent hiermee Google
+// Calendar in een nieuw tabblad, op de dag die de dayview toont. Bewust de dagweergave
+// (niet het specifieke event): het exacte Google-event-id wordt hier al bewust niet
+// meegestuurd vanuit de server (zie shared/types/tasks.d.ts se eigen commentaar daarover),
+// en welke van Eveliens meerdere geabonneerde agenda's een event hoort, is voor deze link
+// niet relevant — de dagweergave toont ze toch allemaal.
+const googleCalendarDayLink = computed(() => {
+  const [year, month, day] = today.split('-').map(Number)
+  return `https://calendar.google.com/calendar/r/day/${year}/${month}/${day}`
+})
+
 interface CalendarBlock {
   title: string
   tooltip: string
   topPercent: number
   heightPercent: number
 }
+
+// Minimale bloktekening-hoogte, als percentage van de dayview-hoogte — komt overeen met de
+// eerdere vaste `min-height: 0.75rem` op een dayview van 16rem hoog, nu bewust in dezelfde
+// eenheid (percentage) als `topPercent` i.p.v. een concurrerende absolute CSS-minimumhoogte.
+// Review-fix (Hillebrand, 2026-09-05): die twee competerende eenheden lieten het laatste
+// tijdblok van de dag (top dicht bij 100%) onder de dayview-box uitsteken zodra de absolute
+// minimumhoogte groter was dan de resterende ruimte tot 100%. Door hier te clampen op
+// `100 - topPercent` kan een blok nooit meer buiten de box vallen.
+const MIN_BLOCK_HEIGHT_PERCENT = 5
 
 // Review-patch: events volledig buiten 07:00-22:00 (of met een ongeldig/negatief
 // tijdsverschil, bv. door een dag-overschrijdend event) worden hier weggefilterd i.p.v.
@@ -201,11 +221,13 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
 
       const startMinutes = clamp(range.start - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
       const endMinutes = clamp(range.end - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)
+      const topPercent = (startMinutes / WINDOW_MINUTES) * 100
+      const rawHeightPercent = ((endMinutes - startMinutes) / WINDOW_MINUTES) * 100
       return [{
         title: event.title,
         tooltip: `${formatTimeAmsterdam(event.startsAt)}–${formatTimeAmsterdam(event.endsAt)} ${event.title}`,
-        topPercent: (startMinutes / WINDOW_MINUTES) * 100,
-        heightPercent: Math.max(2, ((endMinutes - startMinutes) / WINDOW_MINUTES) * 100)
+        topPercent,
+        heightPercent: Math.min(Math.max(MIN_BLOCK_HEIGHT_PERCENT, rawHeightPercent), 100 - topPercent)
       }]
     })
 )
@@ -325,13 +347,17 @@ const outsideWindowCalendarEvents = computed(() =>
                 class="home-calendar-hour-marker"
                 :style="markerStyle(hour)"
               >{{ hour }}:00</span>
-              <div
+              <a
                 v-for="(block, index) in calendarBlocks"
                 :key="index"
+                :href="googleCalendarDayLink"
+                target="_blank"
+                rel="noopener noreferrer"
                 class="home-calendar-block"
                 :style="{ top: `${block.topPercent}%`, height: `${block.heightPercent}%` }"
                 :title="block.tooltip"
-              >{{ block.title }}</div>
+                :aria-label="`${block.tooltip} — open in Google Calendar`"
+              >{{ block.title }}</a>
             </div>
           </template>
         </div>
@@ -571,9 +597,16 @@ const outsideWindowCalendarEvents = computed(() =>
 .home-calendar-dayview {
   position: relative;
   height: 16rem;
+  overflow: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: 0.5rem;
-  background: var(--color-surface-muted);
+  /* Review-fix (Hillebrand, 2026-09-05): was `--color-surface-muted`, dat bij het paarse
+     kleurthema vrijwel identiek is aan `--color-accent-bg-subtle` (de oude blok-achtergrond)
+     — de blokken waren daardoor nauwelijks te onderscheiden van de vrije tijd eromheen. Een
+     neutraal kaartoppervlak (`--color-surface`, blijft gelijk over alle 5 kleurthema's,
+     zie themes.css) contrasteert wél altijd voldoende met de nu-solide accentkleur van de
+     blokken hieronder. */
+  background: var(--color-surface);
 }
 
 .home-calendar-hour-marker {
@@ -587,15 +620,28 @@ const outsideWindowCalendarEvents = computed(() =>
   position: absolute;
   left: 3rem;
   right: 0.375rem;
-  min-height: 0.75rem;
+  display: block;
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
-  background: var(--color-accent-bg-subtle);
-  color: var(--color-accent-text-strong);
+  /* Review-fix (Hillebrand, 2026-09-05): was de subtiele `--color-accent-bg-subtle`-tint,
+     die bij het paarse thema nauwelijks afstak tegen de dayview-achtergrond. De volle
+     accentkleur (zelfde token als knoppen elders) geeft in alle 5 kleurthema's voldoende
+     contrast, ook tegen elkaar in een druk agenda-blok. */
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   font-size: 0.6875rem;
+  text-decoration: none;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.home-calendar-block:hover,
+.home-calendar-block:focus-visible {
+  background: var(--color-accent-strong);
+  outline: 2px solid var(--color-accent-contrast);
+  outline-offset: -2px;
 }
 
 .home-calendar-all-day {
