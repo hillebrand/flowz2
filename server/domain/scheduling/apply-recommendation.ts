@@ -1,4 +1,5 @@
 import { dropTask, getSessionById, getSessionsForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
+import { acquireShortfallApplyLock, releaseShortfallApplyLock } from '../../data/shortfall-apply-lock'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { placeSessionOnDate } from './session-placement'
 import type { ShortfallRecommendation } from './shortfall'
@@ -15,20 +16,36 @@ import type { ShortfallRecommendation } from './shortfall'
 // en het is duidelijker om ze naast elkaar te lezen dan achter een overkoepelende
 // interface te verstoppen (zelfde overweging als `updateTaskAndSubtasks`'s expliciete
 // per-geval-branches, Story 5.3).
+//
+// Deferred-work-fix (2026-09-07) — concurrency-guard op dít choke-point, niet in de drie
+// aanroepers apart (`day/shortfall/recommendations/[id]/accept.post.ts`, `week/[date]/
+// suggestion/accept.post.ts`, `startup-check.ts`'s auto-herplan-lus): `applyHerplannen`
+// (via `placeSessionOnDate`) heeft zelf geen lock, dus twee gelijktijdige aanroepen voor
+// dezelfde gebruiker — via twee van deze drie paden tegelijk, niet per se hetzelfde pad —
+// konden daadwerkelijk dezelfde sessie dubbel plaatsen/inkorten. Eén lock hier beschermt
+// alle drie de paden tegen elkáár; drie losse route-guards zouden dat niet doen (elk zou
+// alleen zichzelf tegen zichzelf beschermen). Zie `server/data/shortfall-apply-lock.ts`
+// voor waarom dit bewust de blokkerende vorm is, niet de niet-blokkerende
+// `startupCheckLocks`-vorm.
 export async function applyShortfallRecommendation(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
-  switch (recommendation.tier) {
-    case 'herplannen':
-      await applyHerplannen(userId, recommendation)
-      return
-    case 'verruimen':
-      await applyVerruimen(userId, recommendation)
-      return
-    case 'inkorten':
-      await applyInkorten(userId, recommendation)
-      return
-    case 'vervallen':
-      await applyVervallen(userId, recommendation)
-      return
+  const lockId = await acquireShortfallApplyLock(userId)
+  try {
+    switch (recommendation.tier) {
+      case 'herplannen':
+        await applyHerplannen(userId, recommendation)
+        return
+      case 'verruimen':
+        await applyVerruimen(userId, recommendation)
+        return
+      case 'inkorten':
+        await applyInkorten(userId, recommendation)
+        return
+      case 'vervallen':
+        await applyVervallen(userId, recommendation)
+        return
+    }
+  } finally {
+    await releaseShortfallApplyLock(lockId)
   }
 }
 

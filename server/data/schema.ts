@@ -382,3 +382,26 @@ export const startupCheckLocks = sqliteTable('startup_check_locks', {
 
 export type StartupCheckLock = typeof startupCheckLocks.$inferSelect
 export type NewStartupCheckLock = typeof startupCheckLocks.$inferInsert
+
+// Deferred-work-fix (2026-09-07) — sluit dezelfde TOCTOU-race als `startupCheckLocks`
+// hierboven, maar dan op de plek waar 'm écht ontstaat: `applyShortfallRecommendation`
+// (`server/domain/scheduling/apply-recommendation.ts`) zelf, aangeroepen vanuit drie
+// plekken (`day/shortfall/recommendations/[id]/accept.post.ts`, `week/[date]/suggestion/
+// accept.post.ts`, én `startup-check.ts`'s eigen auto-herplan-lus) — `placeSessionOnDate`
+// (de 'herplannen'-tier) heeft zelf geen lock. Eén lock op déze choke-point beschermt alle
+// drie de aanroeppaden tegen elkaar, i.p.v. drie route-specifieke guards die elkaar zelf
+// niet zouden zien. In tegenstelling tot `startupCheckLocks` is dit bewust wél de
+// blokkerende wacht-met-polling-vorm (zelfde patroon als `sessionPlacementLocks` e.a.):
+// een accept-klik is een directe, interactieve gebruikersactie die een definitief antwoord
+// verwacht — stil overslaan-en-net-doen-alsof (zoals bij de achtergrond-opstart-check) zou
+// hier misleidend zijn.
+export const shortfallApplyLocks = sqliteTable('shortfall_apply_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('shortfall_apply_locks_user_unique').on(table.userId)
+])
+
+export type ShortfallApplyLock = typeof shortfallApplyLocks.$inferSelect
+export type NewShortfallApplyLock = typeof shortfallApplyLocks.$inferInsert
