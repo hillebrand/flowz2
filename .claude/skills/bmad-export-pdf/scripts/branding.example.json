@@ -1,0 +1,85 @@
+{
+  "_comment": "Copy this file to branding.json in your project root and fill in your company details.",
+
+  "company": {
+    "name": "Jouw Bedrijfsnaam B.V.",
+    "tagline": "Ondertitel of slogan",
+    "website": "https://www.jouwbedrijf.nl",
+    "address": "Straatnaam 1, 1234 AB Stad, Nederland"
+  },
+
+  "logo": {
+    "path": "assets/logo.png",
+    "_comment_path": "Relatief pad naar je logo (PNG of JPG). Laat leeg ('') om alleen tekst te gebruiken.",
+    "width_mm": 40,
+    "height_mm": 20
+  },
+
+  "colors": {
+    "primary": "#003366",
+    "_comment_primary": "Hoofdkleur: gebruikt voor titels, kopteksten en voorblad",
+    "secondary": "#0066CC",
+    "_comment_secondary": "Accentkleur: gebruikt voor horizontale lijnen en subkopjes",
+    "text": "#1A1A1A",
+    "text_light": "#555555",
+    "background_cover": "#003366",
+    "cover_text": "#FFFFFF"
+  },
+
+  "fonts": {
+    "_comment": "Beschikbare built-in fonts: Helvetica, Times-Roman, Courier. Of geef pad naar TTF-bestanden.",
+    "heading": "Helvetica-Bold",
+    "body": "Helvetica",
+    "code": "Courier",
+    "size_h1": 22,
+    "size_h2": 16,
+    "size_h3": 13,
+    "size_body": 10,
+    "size_code": 9
+  },
+
+  "page": {
+    "size": "A4",
+    "margin_top_mm": 25,
+    "margin_bottom_mm": 25,
+    "margin_left_mm": 25,
+    "margin_right_mm": 20
+  },
+
+  "cover": {
+    "show": true,
+    "title_from_markdown": true,
+    "_comment_title": "Als true: gebruikt de eerste H1 uit het markdown bestand als titel",
+    "subtitle": "",
+    "show_date": true,
+    "show_version": true,
+    "version_prefix": "Versie"
+  },
+
+  "toc": {
+    "show": true,
+    "title": "Inhoudsopgave",
+    "max_depth": 3
+  },
+
+  "header": {
+    "show": true,
+    "left": "{company_name}",
+    "center": "",
+    "right": "{document_title}",
+    "_comment": "Beschikbare placeholders: {company_name}, {document_title}, {date}, {page}, {total_pages}"
+  },
+
+  "footer": {
+    "show": true,
+    "left": "{date}",
+    "center": "{company_name} — Vertrouwelijk",
+    "right": "Pagina {page} van {total_pages}"
+  },
+
+  "watermark": {
+    "show": false,
+    "text": "CONCEPT",
+    "opacity": 0.08
+  }
+}
