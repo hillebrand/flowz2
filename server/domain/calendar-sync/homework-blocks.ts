@@ -101,7 +101,7 @@ function matchBlocks(existingBlocks: HomeworkCalendarBlock[], computedBlocks: Co
 // Idempotent (AD-1): gaat bij elke aanroep uit van de actuele DB-/Calendar-staat, nooit
 // van een tussentijds opgeslagen aanname. Synchroon binnen het request-pad (AD-4/AD-7).
 export async function syncHomeworkBlocksForDate(userId: string, date: string): Promise<void> {
-  await acquireHomeworkBlockSyncLock(userId, date)
+  const lockId = await acquireHomeworkBlockSyncLock(userId, date)
   try {
     const user = await getUserById(userId)
     if (user.homeworkCalendarColorId === null || !user.hasCalendarWriteScope) {
@@ -155,6 +155,6 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
       }
     }
   } finally {
-    await releaseHomeworkBlockSyncLock(userId, date)
+    await releaseHomeworkBlockSyncLock(lockId)
   }
 }

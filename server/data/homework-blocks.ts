@@ -40,11 +40,16 @@ export async function deleteHomeworkBlock(id: string): Promise<void> {
 // Zelfde lock-implementatie als `server/data/tasks.ts`'s `acquireSessionPlacementLock`/
 // `releaseSessionPlacementLock` (Story 3.5) — bewust gedupliceerd, niet gedeeld: eigen
 // tabel/resource, zelfde precedent als `server/data/availability.ts`'s eigen kopie.
+// Inclusief dezelfde ownership-token-fix (deferred-work.md, 2026-09-07, zie het commentaar
+// bij `acquireSessionPlacementLock`): `acquire` geeft de rij se `id` terug, `release`
+// verwijdert uitsluitend die specifieke rij — voorkomt dat een langzame houder wiens lock
+// inmiddels als "gestolen" beschouwd is, bij zijn eigen late release alsnog de nieuwe
+// houder se lock wegneemt.
 const LOCK_STALE_MS = 30_000
 const LOCK_MAX_WAIT_MS = 10_000
 const LOCK_POLL_INTERVAL_MS = 100
 
-export async function acquireHomeworkBlockSyncLock(userId: string, date: string): Promise<void> {
+export async function acquireHomeworkBlockSyncLock(userId: string, date: string): Promise<string> {
   const deadline = Date.now() + LOCK_MAX_WAIT_MS
 
   while (true) {
@@ -54,7 +59,7 @@ export async function acquireHomeworkBlockSyncLock(userId: string, date: string)
       .onConflictDoNothing({ target: [homeworkBlockSyncLocks.userId, homeworkBlockSyncLocks.date] })
       .returning()
 
-    if (inserted) return
+    if (inserted) return inserted.id
 
     const [existing] = await getDb()
       .select()
@@ -73,8 +78,8 @@ export async function acquireHomeworkBlockSyncLock(userId: string, date: string)
   }
 }
 
-export async function releaseHomeworkBlockSyncLock(userId: string, date: string): Promise<void> {
+export async function releaseHomeworkBlockSyncLock(lockId: string): Promise<void> {
   await getDb()
     .delete(homeworkBlockSyncLocks)
-    .where(and(eq(homeworkBlockSyncLocks.userId, userId), eq(homeworkBlockSyncLocks.date, date)))
+    .where(eq(homeworkBlockSyncLocks.id, lockId))
 }

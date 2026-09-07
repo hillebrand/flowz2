@@ -448,14 +448,14 @@ export async function getSubtaskById(subtaskId: string): Promise<Subtask | null>
 // dezelfde `taskEditLocks`-lock als `updateTaskAndSubtasks`, zodat een taak-bewerk-opslag
 // die net de huidige deeltaakstatus aan het lezen is, deze schrijfactie niet kan missen.
 export async function updateSubtaskStatus(taskId: string, subtaskId: string, status: SubtaskStatus): Promise<void> {
-  await acquireTaskEditLock(taskId)
+  const lockId = await acquireTaskEditLock(taskId)
   try {
     await getDb()
       .update(subtasks)
       .set({ status, updatedAt: new Date().toISOString() })
       .where(eq(subtasks.id, subtaskId))
   } finally {
-    await releaseTaskEditLock(taskId)
+    await releaseTaskEditLock(lockId)
   }
 }
 
@@ -647,13 +647,12 @@ export async function withSessionPlacementLocks<T>(userId: string, dates: string
   const acquired: string[] = []
   try {
     for (const date of sortedUniqueDates) {
-      await acquireSessionPlacementLock(userId, date)
-      acquired.push(date)
+      acquired.push(await acquireSessionPlacementLock(userId, date))
     }
     return await fn()
   } finally {
-    for (const date of acquired) {
-      await releaseSessionPlacementLock(userId, date)
+    for (const lockId of acquired) {
+      await releaseSessionPlacementLock(lockId)
     }
   }
 }
@@ -667,7 +666,16 @@ const LOCK_STALE_MS = 30_000
 const LOCK_MAX_WAIT_MS = 10_000
 const LOCK_POLL_INTERVAL_MS = 100
 
-async function acquireSessionPlacementLock(userId: string, date: string): Promise<void> {
+// Ownership-token-fix (deferred-work.md, 2026-09-07): `acquire` gaf voorheen niets terug en
+// `release` deletete op `(userId, date)` — een langzame houder A wiens lock inmiddels als
+// verlopen "gestolen" is door een nieuwe houder B (verwijderd + opnieuw ingevoegd, ander
+// rij-`id`) verwijderde bij zijn eigen, late `release()` alsnog B's kersverse rij, waarna een
+// derde aanvrager C gelijktijdig met B kon binnenkomen — precies de TOCTOU-race die deze
+// lock-tabel moest voorkomen. Elke rij se eigen (al bestaande) `id` dient nu als eigenaar-
+// token: `acquire` geeft 'm terug, `release` verwijdert uitsluitend die specifieke rij. Een
+// gestolen lock se late `release()` (met het oude, inmiddels verwijderde `id`) wordt dan een
+// onschadelijke no-op i.p.v. de nieuwe houder se lock te raken.
+async function acquireSessionPlacementLock(userId: string, date: string): Promise<string> {
   const deadline = Date.now() + LOCK_MAX_WAIT_MS
 
   while (true) {
@@ -677,7 +685,7 @@ async function acquireSessionPlacementLock(userId: string, date: string): Promis
       .onConflictDoNothing({ target: [sessionPlacementLocks.userId, sessionPlacementLocks.date] })
       .returning()
 
-    if (inserted) return
+    if (inserted) return inserted.id
 
     const [existing] = await getDb()
       .select()
@@ -696,10 +704,10 @@ async function acquireSessionPlacementLock(userId: string, date: string): Promis
   }
 }
 
-async function releaseSessionPlacementLock(userId: string, date: string): Promise<void> {
+async function releaseSessionPlacementLock(lockId: string): Promise<void> {
   await getDb()
     .delete(sessionPlacementLocks)
-    .where(and(eq(sessionPlacementLocks.userId, userId), eq(sessionPlacementLocks.date, date)))
+    .where(eq(sessionPlacementLocks.id, lockId))
 }
 
 export interface UpdateTaskAndSubtasksInput {
@@ -738,7 +746,7 @@ export interface UpdateTaskAndSubtasksInput {
 export async function updateTaskAndSubtasks(taskId: string, input: UpdateTaskAndSubtasksInput): Promise<void> {
   const submittedIds = new Set(input.subtasks.filter(s => s.id).map(s => s.id!))
 
-  await acquireTaskEditLock(taskId)
+  const lockId = await acquireTaskEditLock(taskId)
   try {
     await getDb().transaction(async (tx) => {
       // Binnen de transactie gelezen (review-patch) — een lezing vóór `transaction()` liet
@@ -775,13 +783,15 @@ export async function updateTaskAndSubtasks(taskId: string, input: UpdateTaskAnd
       }
     })
   } finally {
-    await releaseTaskEditLock(taskId)
+    await releaseTaskEditLock(lockId)
   }
 }
 
 // Zelfde lock-implementatie als `acquireSessionPlacementLock`/`releaseSessionPlacementLock`
-// hierboven, bewust gedupliceerd (andere tabel/scope: per taak, niet per user+datum).
-async function acquireTaskEditLock(taskId: string): Promise<void> {
+// hierboven, bewust gedupliceerd (andere tabel/scope: per taak, niet per user+datum) —
+// inclusief dezelfde ownership-token-fix (zie het commentaar daar): `acquire` geeft de
+// rij se `id` terug, `release` verwijdert uitsluitend die specifieke rij.
+async function acquireTaskEditLock(taskId: string): Promise<string> {
   const deadline = Date.now() + LOCK_MAX_WAIT_MS
 
   while (true) {
@@ -791,7 +801,7 @@ async function acquireTaskEditLock(taskId: string): Promise<void> {
       .onConflictDoNothing({ target: taskEditLocks.taskId })
       .returning()
 
-    if (inserted) return
+    if (inserted) return inserted.id
 
     const [existing] = await getDb()
       .select()
@@ -810,6 +820,6 @@ async function acquireTaskEditLock(taskId: string): Promise<void> {
   }
 }
 
-async function releaseTaskEditLock(taskId: string): Promise<void> {
-  await getDb().delete(taskEditLocks).where(eq(taskEditLocks.taskId, taskId))
+async function releaseTaskEditLock(lockId: string): Promise<void> {
+  await getDb().delete(taskEditLocks).where(eq(taskEditLocks.id, lockId))
 }
