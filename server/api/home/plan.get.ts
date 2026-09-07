@@ -105,7 +105,11 @@ export default defineEventHandler(async (event): Promise<HomePlanResponse | Erro
     }))
 
     return { nextTask, remainingMinutesToday, laterTasks, completedTasks, calendarDayEvents: calendarDayEventsForClient, sessionTimeCheck, calendarWarnings }
-  } catch {
+  } catch (fout) {
+    // Review-fix (chunk 3, 2026-09-06): was een kale `catch {}` zonder enige logging — de
+    // enige route in de hele API-laag die dat deed, en de drukste (elke Home-load). Een
+    // productiestoring hier liet niets achter in CloudWatch om op te troubleshooten.
+    console.error('[home] Kon dagplanning niet ophalen:', fout)
     return envelope(event, 500, ErrorCodes.InternalError, 'Kon dagplanning niet ophalen.')
   }
 })

@@ -1,7 +1,6 @@
 import {
-  getSessionById,
+  getSessionsForTask,
   getTaskById,
-  insertSessionLog,
   logSessionAndCompleteTask,
   logSessionAndUpdateRemaining
 } from '../../data/tasks'
@@ -25,42 +24,55 @@ export async function replanAfterSession(
   sessionId: string,
   actualMinutes: number,
   remainingTotalMinutes: number | null
-): Promise<{ completed: true } | { completed: false, task: Task, session: Session }> {
+): Promise<{ completed: true } | { completed: false, task: Task, sessions: Session[] }> {
   const task = await getTaskById(taskId)
   if (!task) {
     throw new Error(`Taak ${taskId} bestaat niet.`)
   }
   // Review-patch (idempotency guard): al afgerond — een herhaalde/dubbele `/replan`-aanroep
   // (netwerkretry, dubbele klik) mag geen nieuwe sessielog schrijven of de al-afgeronde
-  // taak opnieuw herplannen.
-  if (task.completedAt) {
+  // taak opnieuw herplannen. Review-fix (ronde 3, 2026-09-06): `droppedAt` toegevoegd —
+  // een laten-vervallen taak accepteerde voorheen nog steeds een sessielog en een volledige
+  // herplanning, alsof ze nog open stond.
+  if (task.completedAt || task.droppedAt) {
     return { completed: true }
   }
 
-  if (remainingTotalMinutes === 0) {
-    const session = await getSessionById(sessionId)
-    if (!session) {
-      throw new Error(`Sessie ${sessionId} bestaat niet.`)
-    }
+  // Review-fix (2026-09-05, Story 3.1 Task 8): als Evelien het resterende-tijd-veld leeg
+  // laat (`null` — Story 7.1's schoolsessies-flow staat dit expliciet toe), betekende dit
+  // vóór deze fix "regenereer de volledige oorspronkelijke `totalMinutes` opnieuw, alsof er
+  // niets gebeurd is" — de zojuist bestede tijd werd dan nergens van afgetrokken. Nu wordt
+  // een ontbrekende resterende tijd geïnterpreteerd als "trek de bestede tijd gewoon af van
+  // wat er nog stond", consistent met wat "niets aangepast, gewoon doorgewerkt" betekent.
+  const effectiveRemainingTotalMinutes = remainingTotalMinutes ?? Math.max(0, task.totalMinutes - actualMinutes)
+
+  if (effectiveRemainingTotalMinutes === 0) {
+    // Story 3.1 Task 8 (Correct Course 2026-09-05): ALLE sessies van de taak, niet alleen
+    // de zojuist afgeronde — met meerdere sessies vooruit gepland moeten ook de nog niet
+    // gestarte, nu overbodig geworden toekomstige sessies se Calendar-blokken verdwijnen.
+    const allSessions = await getSessionsForTask(taskId)
     // Review-patch (transactie): logregel + afronding atomair, zelfde precedent als
-    // `createTaskAndSession`/`deleteTaskAndSession`.
+    // `createTaskAndSessions`/`deleteTaskAndSessions`.
     await logSessionAndCompleteTask(taskId, actualMinutes)
     // Story 2.5: ná de afronding herberekenen (de taak telt dan al niet meer mee in
-    // `getTasksWithSessionOnDate`, dus het blok krimpt/verdwijnt vanzelf correct).
-    try {
-      await syncHomeworkBlocksForDate(task.userId, session.startsAt.slice(0, 10))
-    } catch (fout) {
-      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na afronden van taak ${taskId}:`, fout)
+    // `getTasksWithSessionOnDate`, dus elk blok krimpt/verdwijnt vanzelf correct).
+    const distinctDates = new Set(allSessions.map(session => session.startsAt.slice(0, 10)))
+    for (const date of distinctDates) {
+      try {
+        await syncHomeworkBlocksForDate(task.userId, date)
+      } catch (fout) {
+        console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na afronden van taak ${taskId} (${date}):`, fout)
+      }
     }
     return { completed: true }
   }
 
-  if (remainingTotalMinutes !== null) {
-    await logSessionAndUpdateRemaining(taskId, actualMinutes, remainingTotalMinutes)
-  } else {
-    await insertSessionLog(taskId, actualMinutes)
-  }
+  await logSessionAndUpdateRemaining(taskId, actualMinutes, effectiveRemainingTotalMinutes)
 
-  const { task: updatedTask, session } = await recalculateTaskPlanning(taskId)
-  return { completed: false, task: updatedTask, session }
+  // Story 3.1 Task 8 (Correct Course 2026-09-05): de zojuist afgeronde sessie (`sessionId`)
+  // is al gelogd hierboven — expliciet uitgesloten van hergebruik bij de herberekening
+  // (`excludeSessionId`), zodat de nieuwe, resterende sessiereeks nooit per ongeluk de
+  // net-afgeronde sessie als "toekomstige" sessie hergebruikt.
+  const { task: updatedTask, sessions } = await recalculateTaskPlanning(taskId, [], { excludeSessionId: sessionId })
+  return { completed: false, task: updatedTask, sessions }
 }

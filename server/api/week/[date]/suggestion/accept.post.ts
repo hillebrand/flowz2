@@ -1,12 +1,12 @@
-import { getRouterParam } from 'h3'
+import { getRouterParam, readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../../../domain/errors'
 import { applyShortfallRecommendation } from '../../../../domain/scheduling/apply-recommendation'
-import { detectShortfallForDate, generateShortfallRecommendations } from '../../../../domain/scheduling/shortfall'
+import { detectShortfallForDateOrOverrun, generateShortfallRecommendations } from '../../../../domain/scheduling/shortfall'
 import { buildWeekDay } from '../../../../domain/scheduling/week-overview'
 import { addDays } from '../../../../domain/scheduling/doelmoment'
 import { isValidCalendarDate } from '../../../../../shared/utils/availability'
 import { todayInAmsterdam } from '../../../../../shared/utils/scheduling'
-import type { WeekSuggestionAcceptResponse } from '../../../../../shared/types/week'
+import type { WeekSuggestionAcceptInput, WeekSuggestionAcceptResponse } from '../../../../../shared/types/week'
 
 // Review-patch: het weekoverzicht toont alleen vandaag t/m 6 dagen verder — deze route
 // accepteerde voorheen elke geldige kalenderdatum, ook ver buiten dat venster.
@@ -20,6 +20,18 @@ const WEEK_DAYS = 7
 // dan blijft `suggestion` gevuld met de eerstvolgende beste aanbeveling i.p.v. onvoorwaardelijk
 // te verdwijnen — consistent met `week-day-bottleneck-badge`'s eigen definitie ("alleen als
 // beschikbare tijd < benodigde tijd").
+//
+// Review-fix (chunk 3, 2026-09-06): accepteerde voorheen blindelings `recommendations[0]`
+// zonder dat de client meestuurde wélke suggestie werd getoond — tussen het renderen van de
+// kaart en het klikken kon de vers herberekende #1 een ander tier zijn geworden, tot en met
+// "vervallen" (`dropTask()` op een klik die Evelien bedoelde als "verplaats naar donderdag").
+// Vereist nu — net als `.../recommendations/[id]/accept.post.ts` — een client-meegestuurd
+// `id` en 404't als dat niet meer de actuele beste aanbeveling is (of intussen "verruimen" is
+// geworden, die nooit een accept-effect heeft, AD-10 — zie de her-review-fix hieronder,
+// eerst per ongeluk weggehaald bij de eerste versie van déze fix). `week-overview.ts`'s
+// `buildWeekDay` gebruikt sindsdien ook `detectShortfallForDateOrOverrun` i.p.v.
+// `detectShortfallForDate`, anders zou een overrun-`verruimen:overrun:{taskId}:{date}`-id
+// (zie `shortfall.ts`) nooit gegenereerd/getoond worden om terug te sturen.
 function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
   return { error: { code, message } }
 }
@@ -44,8 +56,15 @@ export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptRes
     return envelope(400, ErrorCodes.ValidationError, 'Deze datum valt buiten het weekoverzicht.')
   }
 
+  const body = await readBody<Partial<WeekSuggestionAcceptInput>>(event).catch(() => null)
+  const recommendationId = body?.id
+  if (!recommendationId) {
+    setResponseStatus(event, 400)
+    return envelope(400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
+  }
+
   try {
-    const shortfall = await detectShortfallForDate(session.user.id, date)
+    const shortfall = await detectShortfallForDateOrOverrun(session.user.id, date, recommendationId)
     if (!shortfall) {
       // Geen tekort (meer) — legitiem, geen foutstate: bv. een dubbele klik nadat een
       // eerdere aanroep het tekort al oploste.
@@ -53,14 +72,21 @@ export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptRes
     }
 
     const recommendations = await generateShortfallRecommendations(session.user.id, shortfall)
-    const best = recommendations[0]
-    if (!best) {
-      // Kan zich in theorie niet voordoen (Story 6.1's "niveau 4 dekt altijd"-garantie),
-      // maar geen aanbeveling om toe te passen — geef gewoon de actuele dagdata terug.
-      return await buildWeekDay(session.user.id, date)
+    const target = recommendations.find(r => r.id === recommendationId)
+    // Review-fix (ronde 2, 2026-09-06): `target` kan van het type "tijd verruimen" zijn — die
+    // heeft bewust geen accept-effect (AD-10, `applyVerruimen` gooit altijd een fout).
+    // `generateShortfallRecommendations` geeft wél degelijk `verruimen`-id's terug (in
+    // tegenstelling tot wat een eerdere versie van dit commentaar beweerde) — zonder deze
+    // guard bereikte zo'n id alsnog `applyShortfallRecommendation` en crashte met een 500.
+    if (!target || target.tier === 'verruimen') {
+      // Net als `.../recommendations/[id]/accept.post.ts`: een 404, geen stille 200 — zonder
+      // dit kon de client "toegepast" niet onderscheiden van "genegeerd, want niet meer
+      // geldig" (`week/index.vue`'s foutmelding wordt alleen getoond bij een non-2xx-respons).
+      setResponseStatus(event, 404)
+      return envelope(404, ErrorCodes.NotFound, 'Deze suggestie is niet meer geldig — de planning is inmiddels gewijzigd.')
     }
 
-    await applyShortfallRecommendation(session.user.id, best)
+    await applyShortfallRecommendation(session.user.id, target)
 
     return await buildWeekDay(session.user.id, date)
   } catch (fout) {

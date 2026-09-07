@@ -1,4 +1,4 @@
-import { getOpenTasksWithProgress, getSessionForTask, getTaskById, getTasksWithSessionOnDate, sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
+import { getOpenTasksWithProgress, getSessionById, getSessionsForTask, getTaskById, getTasksWithSessionOnDate, sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
 import { placeSessionOnDate } from './session-placement'
 import { calculateStudiedrukScore, formatDayLabel } from './shortfall'
 import { addDays, availableMinutesForDate, averageDailyAvailableMinutes, calculateDoelmoment, isBefore } from './doelmoment'
@@ -37,6 +37,13 @@ export interface EnergyProposalItem {
   // vers-herberekende voorstel daadwerkelijk toe te passen zonder de zoektocht te herhalen.
   targetDate?: string
   shortenMinutes?: number
+  // Story 3.1 Task 8 (Correct Course 2026-09-05) — expliciet sessie-id, altijd meegegeven
+  // vanuit de al-bekende `{task, session}`-paren (`getTasksWithSessionOnDate`). Een taak kan
+  // nu meerdere sessies hebben, dus `applyEnergyProposal` mag niet meer "de sessie van deze
+  // taak" herafleiden via `getSessionForTask` (die geeft de eerstvolgende, niet per se
+  // dezelfde sessie die hier oorspronkelijk werd geïdentificeerd) — zelfde les als
+  // `shortfall.ts`'s aanbeveling-id's.
+  sessionId: string
 }
 
 export interface EnergyProposal {
@@ -123,7 +130,8 @@ async function tryDisplaceOnDate(
     state.relocatedItems.push({
       taskId: candidate.task.id,
       description: `${candidate.task.subject} — ${candidate.task.title} verschoven naar ${formatDayLabel(newDate)}`,
-      targetDate: newDate
+      targetDate: newDate,
+      sessionId: candidate.session.id
     })
     state.claimedMinutesByDate.set(newDate, (state.claimedMinutesByDate.get(newDate) ?? 0) + candidate.session.plannedMinutes)
     state.vacatedMinutesByDate.set(date, (state.vacatedMinutesByDate.get(date) ?? 0) + candidate.session.plannedMinutes)
@@ -136,8 +144,7 @@ async function tryDisplaceOnDate(
 // Zoekt voorwaarts vanaf `searchFrom` (exclusief) naar de eerste dag binnen `task`'s eigen
 // deadline met genoeg capaciteit — via verdringen indien nodig (zie `tryDisplaceOnDate`).
 // Geen dag gevonden binnen de deadline: `null` (aanroeper laat de taak dan gewoon staan,
-// geen geforceerde plaatsing buiten de deadline — zelfde fallback-gedachte als
-// `doelmoment.ts`'s `findSessionDate`).
+// geen geforceerde plaatsing buiten de deadline).
 async function placeHardTaskForward(
   userId: string,
   task: Task,
@@ -196,7 +203,8 @@ export async function generateEnergyProposal(userId: string, date: string): Prom
     state.relocatedItems.push({
       taskId: task.id,
       description: `${task.subject} — ${task.title} verschoven naar ${formatDayLabel(targetDate)}`,
-      targetDate
+      targetDate,
+      sessionId: session.id
     })
     state.relocatedTaskIds.add(task.id)
     state.claimedMinutesByDate.set(targetDate, (state.claimedMinutesByDate.get(targetDate) ?? 0) + session.plannedMinutes)
@@ -223,8 +231,13 @@ export async function generateEnergyProposal(userId: string, date: string): Prom
     for (const { task } of openTasks) {
       if (task.difficulty !== 'laag') continue
       if (relocatedTaskIds.has(task.id)) continue
-      const session = await getSessionForTask(task.id)
-      if (!session || session.startsAt.slice(0, 10) <= date) continue
+      // Story 3.1 Task 8: eerste sessie van déze taak die ná `date` valt — met meerdere
+      // sessies per taak is dat niet per se meer de eerstvolgende sessie ooit
+      // (`getSessionForTask`), een taak kan al een sessie vóór `date` hebben die niet
+      // relevant is voor "naar voren halen".
+      const sessions = await getSessionsForTask(task.id)
+      const session = sessions.find(s => s.startsAt.slice(0, 10) > date)
+      if (!session) continue
       laterEasyTaskSessions.push({ task, session })
     }
     laterEasyTaskSessions.sort((a, b) => (a.task.deadline < b.task.deadline ? -1 : a.task.deadline > b.task.deadline ? 1 : 0))
@@ -237,7 +250,8 @@ export async function generateEnergyProposal(userId: string, date: string): Prom
       pulledForward.push({
         taskId: task.id,
         description: `${task.subject} — ${task.title} naar voren gehaald van ${formatDayLabel(session.startsAt.slice(0, 10))}`,
-        targetDate: date
+        targetDate: date,
+        sessionId: session.id
       })
       remainingCapacity -= session.plannedMinutes
     }
@@ -281,7 +295,8 @@ export async function generateEnergyProposal(userId: string, date: string): Prom
     shortened.push({
       taskId: task.id,
       description: `${task.subject} — ${task.title}: ${ENERGY_SHORTEN_STEP_MINUTES} min korter`,
-      shortenMinutes: ENERGY_SHORTEN_STEP_MINUTES
+      shortenMinutes: ENERGY_SHORTEN_STEP_MINUTES,
+      sessionId: session.id
     })
   }
 
@@ -304,13 +319,19 @@ export async function applyEnergyProposal(userId: string, proposal: EnergyPropos
   for (const item of [...proposal.relocated, ...proposal.pulledForward]) {
     if (!item.targetDate) continue
 
+    // Story 3.1 Task 8: het exacte sessie-id komt nu al mee vanuit het voorstel-item
+    // (`getSessionById`) i.p.v. hier opnieuw "de sessie van deze taak" af te leiden
+    // (`getSessionForTask` geeft de eerstvolgende, wat sinds meerdere-sessies-per-taak niet
+    // meer per se dezelfde sessie is die tijdens het genereren werd geïdentificeerd).
     const task = await getTaskById(item.taskId)
-    const session = await getSessionForTask(item.taskId)
-    if (!task || !session) {
+    const session = await getSessionById(item.sessionId)
+    // Review-fix (2026-09-05): expliciete ownership-/samenhangscheck, zelfde reden als
+    // `apply-recommendation.ts`.
+    if (!task || !session || task.userId !== userId || session.taskId !== task.id) {
       throw new Error(`Taak of sessie voor voorstel-item ${item.taskId} niet gevonden.`)
     }
 
-    await placeSessionOnDate(userId, task, session, item.targetDate)
+    await placeSessionOnDate(userId, session, item.targetDate)
   }
 
   // Zelfde inkort-mutatie als `apply-recommendation.ts`'s `applyInkorten`: alleen
@@ -320,12 +341,18 @@ export async function applyEnergyProposal(userId: string, proposal: EnergyPropos
     if (!item.shortenMinutes) continue
 
     const task = await getTaskById(item.taskId)
-    const session = await getSessionForTask(item.taskId)
-    if (!task || !session) {
+    const session = await getSessionById(item.sessionId)
+    if (!task || !session || task.userId !== userId || session.taskId !== task.id) {
       throw new Error(`Taak of sessie voor voorstel-item ${item.taskId} niet gevonden.`)
     }
 
     const newPlannedMinutes = session.plannedMinutes - item.shortenMinutes
+    // Review-fix (2026-09-05): zelfde guard als apply-recommendation.ts's `applyInkorten` —
+    // nooit een niet-positieve sessieduur wegschrijven als de sessie tussen genereren en
+    // toepassen alweer gewijzigd is.
+    if (newPlannedMinutes <= 0) {
+      throw new Error(`Voorstel-item voor taak ${item.taskId} is niet meer geldig — de sessie is inmiddels te kort.`)
+    }
 
     await updateSessionPlacement(session.id, {
       startsAt: session.startsAt,

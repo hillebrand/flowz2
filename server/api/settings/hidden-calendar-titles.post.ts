@@ -1,5 +1,5 @@
 import { readBody } from 'h3'
-import { addHiddenCalendarTitleFor } from '../../domain/auth/users'
+import { addHiddenCalendarTitleFor, HiddenCalendarTitleLimitError } from '../../domain/auth/users'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import type { HiddenCalendarTitlesResponse } from '../../../shared/types/settings'
 
@@ -28,6 +28,9 @@ export default defineEventHandler(async (event): Promise<HiddenCalendarTitlesRes
     const titles = await addHiddenCalendarTitleFor(session.user.id, title)
     return { titles }
   } catch (fout) {
+    if (fout instanceof HiddenCalendarTitleLimitError) {
+      return envelope(event, 400, ErrorCodes.ValidationError, fout.message)
+    }
     console.error('[settings] Kon verborgen agenda-titel niet opslaan:', fout)
     return envelope(event, 500, ErrorCodes.InternalError, 'Kon de titel niet opslaan.')
   }

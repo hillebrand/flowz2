@@ -33,8 +33,33 @@ watch(planError, (waarde) => {
 // rendert gewoon met de (mogelijk nog niet stil-herplande) planning.
 const { data: startupCheck } = useFetch<StartupCheckResponse>('/api/scheduling/startup-check', { method: 'POST', server: false })
 
+const route = useRoute()
+// Review-fix (ronde 2, chunk D, 2026-09-06 — alle 3 agents, onafhankelijk gevonden): laat
+// `/herstel/tekort-oplossen`'s eigen "Terug naar Home"-uitweg (voor de `stuck`-staat, geen
+// bruikbare aanbeveling) niet meteen weer hierheen terugsturen — zonder deze vlag was die
+// escape hatch zelf een oneindige lus (tekort-scherm → Home → opstart-check → tekort-scherm).
+//
+// Review-fix (ronde 3, chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk
+// van elkaar gevonden): de vlag werd voorheen pas geconsumeerd IN de `watch(startupCheck)`-
+// callback — die vuurt alleen als die fetch daadwerkelijk oplost. Faalt de opstart-check
+// (netwerk/401/500, een expliciet voorzien pad, zie het commentaar hierboven), dan bleef de
+// vlag `true` staan voor de rest van de SPA-sessie en slikte hij stilzwijgend de eerstvolgende
+// écht legitieme herinnering op, mogelijk dagen later. Nu onvoorwaardelijk geconsumeerd bij
+// elke Home-mount, ongeacht of de opstart-check ooit teruggekomen is.
+const skipStartupRedirect = skipStartupRedirectOnce()
+function skipStartupRedirectOnce(): boolean {
+  const flag = useState('skip-startup-redirect-once', () => false)
+  const waarde = flag.value
+  flag.value = false
+  return waarde
+}
 watch(startupCheck, (waarde) => {
-  if (waarde && waarde.calendarLinked && !waarde.resolved) {
+  if (skipStartupRedirect) return
+  // Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): de (bewust niet-afgewachte) check
+  // kan traag terugkomen nadat de gebruiker hier al is weggenavigeerd (bv. "Start sessie"
+  // getikt vlak na page-load). Zonder de route-check hierboven stuurde deze late navigatie
+  // haar dan alsnog terug van `/sessie/starten` naar het tekort-scherm.
+  if (waarde && waarde.calendarLinked && !waarde.resolved && route.path === '/') {
     navigateTo('/herstel/tekort-oplossen')
   }
 })
@@ -177,7 +202,7 @@ const allDayCalendarEvents = computed(() => (plan.value?.calendarDayEvents ?? []
 // en welke van Eveliens meerdere geabonneerde agenda's een event hoort, is voor deze link
 // niet relevant — de dagweergave toont ze toch allemaal.
 const googleCalendarDayLink = computed(() => {
-  const [year, month, day] = today.split('-').map(Number)
+  const [year, month, day] = today.value.split('-').map(Number)
   return `https://calendar.google.com/calendar/r/day/${year}/${month}/${day}`
 })
 
@@ -204,11 +229,34 @@ const MIN_BLOCK_HEIGHT_PERCENT = 5
 // zodat de homepage-agenda dezelfde events bevat als het weekoverzicht (dat geen
 // venster hanteert) — gemeld door Hillebrand (2026-08-30): events buiten 07:00-22:00
 // ontbraken stilzwijgend op de homepage terwijl het weekoverzicht ze wél toonde.
-const today = todayInAmsterdam()
+// Review-fix (chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): was een eenmalige `const`, geëvalueerd bij setup — een tabblad dat
+// openstaat over middernacht heen (laptop dichtgeklapt, later heropend) bleef dan de vorige
+// dag als anker gebruiken voor elke tijdberekening hieronder én voor de Google Calendar-link.
+// Elke minuut herchecken is ruim voldoende voor een dagsgrens-verschuiving die zelf maar
+// eenmaal per etmaal voorkomt.
+const today = ref(todayInAmsterdam())
+let todayIntervalId: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  todayIntervalId = setInterval(() => {
+    const actueel = todayInAmsterdam()
+    if (actueel !== today.value) today.value = actueel
+  }, 60_000)
+})
+onUnmounted(() => {
+  if (todayIntervalId) clearInterval(todayIntervalId)
+})
 
+// Review-fix (chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): een 0-minuten of omgekeerd event (`range.end <= range.start` — Google
+// Calendar staat 0-durende events toe, en een ongeldig/onparsebaar tijdstip levert `null`
+// op) gaf hier `false` terug, waardoor het event NÉRGENS terechtkwam: `calendarBlocks`
+// filtert het er ook uit (zie de `flatMap` hieronder). Dat is precies de stille-omissie-bug
+// die de outside-window-tekstlijst (2026-08-30) juist moest voorkomen. Zulke events vallen nu
+// door naar die tekstlijst i.p.v. volledig te verdwijnen.
 function isOutsideWindow(event: { startsAt: string, endsAt: string }): boolean {
-  const range = eventMinutesRange(event, today)
-  if (!range || range.end <= range.start) return false
+  const range = eventMinutesRange(event, today.value)
+  if (!range || range.end <= range.start) return true
   return range.end <= WINDOW_START_HOUR * 60 || range.start >= WINDOW_END_HOUR * 60
 }
 
@@ -216,7 +264,7 @@ const calendarBlocks = computed<CalendarBlock[]>(() =>
   (plan.value?.calendarDayEvents ?? [])
     .filter(event => !isAllDayEvent(event) && !isOutsideWindow(event))
     .flatMap((event) => {
-      const range = eventMinutesRange(event, today)
+      const range = eventMinutesRange(event, today.value)
       if (!range || range.end <= range.start) return []
 
       const startMinutes = clamp(range.start - WINDOW_START_HOUR * 60, 0, WINDOW_MINUTES)

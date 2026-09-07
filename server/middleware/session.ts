@@ -19,8 +19,14 @@ const PUBLIC_PREFIXES = [
   '/favicon.ico'
 ]
 
+// Review-fix (chunk 3, 2026-09-06): ongeankerde prefix-match liet `/inloggen-x` of
+// `/__nuxtfoo` óók als publiek doorgaan. Een prefix die al op '/' eindigt is zelf al een
+// grens (`/auth/`, `/_nuxt/`); voor de rest wordt alleen exact of gevolgd door '/' geaccepteerd.
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix))
+  return PUBLIC_PREFIXES.some((prefix) => {
+    if (prefix.endsWith('/')) return pathname.startsWith(prefix)
+    return pathname === prefix || pathname.startsWith(`${prefix}/`)
+  })
 }
 
 // UJ-10/AD-9: 30 minuten, alleen voor sessies met het "openbare computer"-vinkje

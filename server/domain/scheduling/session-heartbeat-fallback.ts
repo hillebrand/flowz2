@@ -1,5 +1,5 @@
 import type { Session } from '../../data/schema'
-import { resetSessionHeartbeatTracking } from '../../data/tasks'
+import { claimStaleSessionForFinalization, releaseStaleSessionClaim } from '../../data/tasks'
 import { replanAfterSession } from './replan'
 
 // Story 4.5's AC #3 / UX-spec 1.3-sessie-actief regel 327 (opgepakt 2026-08-17, deferred
@@ -39,12 +39,29 @@ export async function finalizeStaleSessionIfNeeded(session: Session): Promise<bo
   const startMs = new Date(session.startsAt).getTime()
   const actualMinutes = clamp(Math.round((lastHeartbeatMs - startMs) / 60_000), 0, session.plannedMinutes)
 
-  await replanAfterSession(session.taskId, session.id, actualMinutes, null)
-  // Ná `replanAfterSession` (die zelf `recalculateTaskPlanning` aanroept, maar
-  // `lastHeartbeatAt`/`stoppedAt` nooit aanraakt — `updateSessionPlacement` beperkt zich tot
-  // `startsAt`/`plannedMinutes`) — reset zodat een hernieuwde sessie op
-  // dezelfde rij weer normaal kan heartbeaten.
-  await resetSessionHeartbeatTracking(session.id)
+  // Review-fix (ronde 3, 2026-09-06): atomair claimen vóórdat er iets gemuteerd wordt —
+  // zonder dit konden twee gelijktijdige aanroepen (bv. twee tabbladen die tegelijk
+  // `GET /api/tasks/[id]` doen) dezelfde verweesde sessie allebei als "stale" zien en
+  // allebei `replanAfterSession` aanroepen: een dubbele sessielog, dubbel afgetrokken van
+  // `totalMinutes`. Lukt de claim niet (een andere aanroeper was net eerder, of de sessie
+  // is inmiddels al gestopt) — dan is er niets te doen, geen fout, gewoon `false`.
+  const claimedStoppedAt = await claimStaleSessionForFinalization(session.id, session.lastHeartbeatAt)
+  if (!claimedStoppedAt) return false
+
+  // Review-fix (ronde 3, 2026-09-06): compenserende terugzet-actie als `replanAfterSession`
+  // faalt (bv. een Calendar-fout tijdens de herberekening) — zonder dit bleef de sessie
+  // permanent geclaimd (`stoppedAt` gezet) zonder ooit gelogd te zijn, en zou de bestede
+  // tijd van de gebruiker stil verloren gaan (geen retry meer mogelijk, zie de claim se
+  // eigen guard hierboven). **Review-fix (ronde 4):** `releaseStaleSessionClaim` krijgt nu
+  // het exacte, zojuist geclaimde `stoppedAt`-tijdstip mee (compare-and-set) — anders kon
+  // een legitieme Stop-knop-klik die tussen de claim en deze mislukking binnenkwam hier
+  // ongedaan worden gemaakt.
+  try {
+    await replanAfterSession(session.taskId, session.id, actualMinutes, null)
+  } catch (fout) {
+    await releaseStaleSessionClaim(session.id, claimedStoppedAt)
+    throw fout
+  }
 
   return true
 }

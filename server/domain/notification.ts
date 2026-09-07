@@ -16,8 +16,11 @@ export interface NotificationAction {
   // Story 6.1 (uitbreiding, niet vervanging) — alleen aanwezig wanneer déze actie een
   // tekort-escalatie-aanbeveling is (UJ-6/8). Geen aparte "Recommendation"-opslag nodig
   // (AD-3: berekende weergave, geen nieuwe tabel) — `id` is deterministisch afgeleid van
-  // de onderliggende entiteit (bv. `herplannen:{taskId}`), zodat een toekomstige
-  // accept/reject-route 'm kan terugvertalen naar "welke taak, welk niveau" zonder opslag.
+  // de onderliggende entiteit, zodat een accept/reject-route 'm kan terugvertalen naar
+  // "welke taak/sessie, welk niveau" zonder opslag. Vier vormen sinds Story 3.1 Task 8
+  // (`shortfall.ts`): `herplannen:{taskId}:{sessionId}`, `inkorten:{taskId}:{sessionId}`,
+  // `vervallen:{taskId}`, en `verruimen:{date}` (dag-aggregaat) of
+  // `verruimen:overrun:{taskId}:{date}` (deadline-overrun).
   id?: string
   tier?: RecommendationTier
   gainMinutes?: number

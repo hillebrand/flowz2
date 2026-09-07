@@ -14,7 +14,19 @@ export default defineEventHandler(async (event): Promise<HiddenCalendarTitlesRes
     return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
-  const title = getRouterParam(event, 'title')
+  // Review-fix (chunk 3, 2026-09-06): de routeparameter kwam nog URL-encoded en ongetrimd
+  // binnen, terwijl POST altijd getrimd opslaat — een titel met spaties/accenten/leestekens
+  // kon zo nooit meer matchen en dus nooit meer verwijderd worden.
+  const rawTitle = getRouterParam(event, 'title')
+  let title: string
+  try {
+    title = rawTitle ? decodeURIComponent(rawTitle).trim() : ''
+  } catch {
+    // Review-fix (ronde 2, 2026-09-06): `decodeURIComponent` gooit een `URIError` op een
+    // ongeldige percent-sequentie — die viel hier eerst buiten de try/catch en gaf h3's rauwe
+    // foutvorm, precies de envelope-inconsistentie die deze ronde elders juist dichtte.
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige titel.')
+  }
   if (!title) {
     return envelope(event, 400, ErrorCodes.ValidationError, 'Ontbrekende titel.')
   }

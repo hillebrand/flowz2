@@ -1,4 +1,4 @@
-import { and, eq, isNull, notInArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm'
 import { getDb } from './db'
 import {
   sessionLogs,
@@ -24,10 +24,13 @@ import { amsterdamLocalToUtcIso, nowAmsterdamHourMinute, todayInAmsterdam } from
 // Voor een toekomstige dag verandert er niets (gewoon `anchorHour:00`); voor vandaag, als
 // het al later is dan `anchorHour:00`, wordt het huidige moment zelf de basis waarop
 // `existingMinutes` bovenop gestapeld wordt — zo ligt het resultaat gegarandeerd nooit
-// vóór "nu". Gedeeld door `createTaskAndSession`/`placeSessionWithStackingOffset`
-// hieronder én `session-placement.ts`'s `placeSessionOnDate` (herplannen) — alle drie
-// hanteren exact dezelfde "anker + gestapelde minuten"-formule. Geëxporteerd i.p.v. hier
-// gedupliceerd, zelfde precedent als andere gedeelde data-laagfuncties in dit bestand.
+// vóór "nu". **Review-fix (2026-09-05):** sinds Story 3.1 Task 8 gebruikt alleen nog
+// `doelmoment.ts`'s `planSessionSlots` (uitsluitend het terugvalpad zonder gekoppelde
+// agenda) dit anker — de blok-bewuste paden (`planSessionSlots`'s normale pad,
+// `findBlockAwareSlot`, en sinds deze review-fix ook `session-placement.ts`'s
+// `placeSessionOnDate`) plaatsen sessies aan het begin van een écht beschikbaar blok, niet
+// meer aan een vast klokuur. Geëxporteerd i.p.v. hier gedupliceerd, zelfde precedent als
+// andere gedeelde data-laagfuncties in dit bestand.
 export function resolveAnchorHourMinute(date: string, anchorHour: number): { hour: number, minute: number } {
   if (date !== todayInAmsterdam()) {
     return { hour: anchorHour, minute: 0 }
@@ -41,99 +44,169 @@ export function resolveAnchorHourMinute(date: string, anchorHour: number): { hou
   return now
 }
 
-export interface CreateTaskAndSessionInput {
-  task: NewTask
-  sessionDate: string
-  sessionAnchorHour: number
+export interface SessionSlotInput {
+  startsAt: string
   plannedMinutes: number
+}
+
+export interface CreateTaskAndSessionsInput {
+  task: NewTask
+  // Story 3.1 Task 8 (Correct Course 2026-09-05) — vooraf berekende sessie-slots
+  // (`planSessionSlots`, `server/domain/scheduling/doelmoment.ts`), al inclusief exacte
+  // klok-tijden. Deze functie doet zelf geen anker-/stapelingsrekenwerk meer (dat gebeurt
+  // vóór aanroep, want het vereist live Calendar-blok-opzoekingen over mogelijk meerdere
+  // dagen — hoort niet thuis binnen een DB-transactie).
+  sessionSlots: SessionSlotInput[]
   // Al gefilterd op een niet-lege (getrimde) naam vóór aanroep (Story 3.2, server/api/
   // tasks.post.ts) — deze functie neemt aan dat elke rij hier een echte Subtask wordt.
   subtasks: Pick<NewSubtask, 'name' | 'minutes'>[]
 }
 
-export interface CreateTaskAndSessionResult {
+export interface CreateTaskAndSessionsResult {
   task: Task
-  session: Session
+  sessions: Session[]
   subtasks: Subtask[]
 }
 
-// Atomair: de Task-insert, de stapelings-som-lezing, de Session-insert, én (Story 3.2) de
-// Subtask-inserts lopen allemaal in dezelfde transactie (code review 2026-08-01) — voor
-// alles-of-niets bij een fout halverwege. De TOCTOU-isolatie tegen ándere gelijktijdige
-// aanroepen komt sinds 2026-08-18 niet meer van de transactie zelf (zie Story 3.5's Dev
-// Notes: `getDb().transaction(...)` bleek dat empirisch niet te bieden tegen deze Turso-
-// verbinding), maar van `sessionPlacementLocks` — bewust hergebruikt, niet gedupliceerd:
-// dit is dezelfde resource/hetzelfde conflict als `placeSessionWithStackingOffset`
-// (`recalculateTaskPlanning`) bewaakt — "hoeveel is er al bezet op déze dag" — dus een
-// nieuwe taak aanmaken en een bestaande taak naar dezelfde dag herberekenen moeten elkaar
-// wél degelijk kunnen blokkeren.
-export async function createTaskAndSession(input: CreateTaskAndSessionInput): Promise<CreateTaskAndSessionResult> {
-  await acquireSessionPlacementLock(input.task.userId, input.sessionDate)
-  try {
-    return await getDb().transaction(async (tx) => {
-      const [task] = await tx.insert(tasks).values(input.task).returning()
+// Atomair: de Task-insert, de Session-inserts (Story 3.1 Task 8: nu N i.p.v. 1) en (Story
+// 3.2) de Subtask-inserts lopen allemaal in dezelfde transactie — voor alles-of-niets bij
+// een fout halverwege. **Review-fix (2026-09-05):** de eerste versie van deze functie liet
+// de `sessionPlacementLocks`-bescherming per ongeluk helemaal vallen (de stapelings-som-
+// lezing verhuisde naar `planSessionSlots`, buiten déze functie, en de lock verhuisde niet
+// mee) — nu weer gedekt via `withSessionPlacementLocks` (hieronder, per betrokken datum,
+// gesorteerd verkregen om deadlocks tussen gelijktijdige aanroepen te voorkomen). De
+// planning zelf (`input.sessionSlots`) is al vóór aanroep berekend (buiten de lock en buiten
+// de transactie, want dat vereist live Calendar-aanroepen over mogelijk meerdere dagen) —
+// de lock dekt alleen de kritieke lees-dan-schrijf-sectie: opnieuw controleren dat de
+// datums nog kloppen was al gebeurd door `planSessionSlots`, hier gaat het om het
+// daadwerkelijk atomair reserveren van die datums tegen een gelijktijdige andere aanroep.
+export async function createTaskAndSessions(input: CreateTaskAndSessionsInput): Promise<CreateTaskAndSessionsResult> {
+  const dates = [...new Set(input.sessionSlots.map(slot => slot.startsAt.slice(0, 10)))]
 
-      const existingRows = await tx
-        .select({ plannedMinutes: sessions.plannedMinutes })
-        .from(sessions)
-        .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-        .where(and(
-          eq(tasks.userId, input.task.userId),
-          sql`substr(${sessions.startsAt}, 1, 10) = ${input.sessionDate}`
-        ))
-      const existingMinutes = existingRows.reduce((sum, row) => sum + row.plannedMinutes, 0)
+  return withSessionPlacementLocks(input.task.userId, dates, () => getDb().transaction(async (tx) => {
+    const [task] = await tx.insert(tasks).values(input.task).returning()
 
-      const anchor = resolveAnchorHourMinute(input.sessionDate, input.sessionAnchorHour)
-      const totalMinutes = anchor.hour * 60 + anchor.minute + existingMinutes
-      const hour = Math.floor(totalMinutes / 60)
-      const minute = totalMinutes % 60
-      const startsAt = amsterdamLocalToUtcIso(input.sessionDate, hour, minute)
+    const insertedSessions = input.sessionSlots.length > 0
+      ? await tx.insert(sessions).values(
+          input.sessionSlots.map(slot => ({ taskId: task!.id, startsAt: slot.startsAt, plannedMinutes: slot.plannedMinutes }))
+        ).returning()
+      : []
 
-      const [session] = await tx.insert(sessions).values({
-        taskId: task!.id,
-        startsAt,
-        plannedMinutes: input.plannedMinutes
-      }).returning()
+    const insertedSubtasks = input.subtasks.length > 0
+      ? await tx.insert(subtasks).values(
+          input.subtasks.map(subtask => ({ ...subtask, taskId: task!.id }))
+        ).returning()
+      : []
 
-      const insertedSubtasks = input.subtasks.length > 0
-        ? await tx.insert(subtasks).values(
-            input.subtasks.map(subtask => ({ ...subtask, taskId: task!.id }))
-          ).returning()
-        : []
-
-      return { task: task!, session: session!, subtasks: insertedSubtasks }
-    })
-  } finally {
-    await releaseSessionPlacementLock(input.task.userId, input.sessionDate)
-  }
+    return { task: task!, sessions: insertedSessions, subtasks: insertedSubtasks }
+  }))
 }
 
-// Compenserende opruiming (code review 2026-08-01): als de Calendar-sync-aanroep ná de
-// transactie hierboven alsnog faalt, is er geen manier om die transactie zelf terug te
-// draaien (de HTTP-call naar Google valt erbuiten) — dus expliciet opruimen i.p.v. een
-// weeskind-Task/Session/Subtask achter te laten. Geen `onDelete: 'cascade'` op enige FK in
-// dit schema, dus alle tabellen met een `taskId`-FK expliciet, niet alleen sessions/tasks
-// (Story 3.2 — zonder deze uitbreiding zouden Subtask-rijen alsnog een weeskind worden).
-export async function deleteTaskAndSession(taskId: string, sessionId: string): Promise<void> {
-  // In één transactie (code review 2026-08-01): drie losse deletes lieten een venster open
+// Compenserende opruiming (code review 2026-08-01, Task 8: nu alle sessies van de taak,
+// niet meer één specifieke) — als de Calendar-sync-aanroep ná de transactie hierboven
+// alsnog faalt, is er geen manier om die transactie zelf terug te draaien (de HTTP-call
+// naar Google valt erbuiten) — dus expliciet opruimen i.p.v. een weeskind-Task/Session(s)/
+// Subtask achter te laten. Ook hergebruikt door Epic 5's `deleteTask` (taak verwijderen) —
+// vandaar de generieke naam zonder "Compenserend" erin.
+export async function deleteTaskAndSessions(taskId: string): Promise<void> {
+  // In één transactie (code review 2026-08-01): losse deletes lieten een venster open
   // waarin een gelijktijdige lezer (of een crash halverwege) een deels opgeruimde Task/
-  // Session/Subtask-combinatie kon zien — dezelfde atomiciteitseis als `createTaskAndSession`.
+  // Session/Subtask-combinatie kon zien.
   await getDb().transaction(async (tx) => {
     // Bugfix (2026-09-02): `sessionLogs.taskId` (Story 4.7, ná deze functie geschreven)
     // verwijst ook naar `tasks.id` — zonder deze delete faalde élke taakverwijdering met
     // een FOREIGN KEY constraint-fout zodra de taak ooit gelogde sessietijd had.
     await tx.delete(sessionLogs).where(eq(sessionLogs.taskId, taskId))
     await tx.delete(subtasks).where(eq(subtasks.taskId, taskId))
-    await tx.delete(sessions).where(eq(sessions.id, sessionId))
+    // Task 8: ALLE sessies van deze taak, niet één specifieke id — anders blijven de
+    // overige N-1 sessies als weeskind-rijen achter (en de daaropvolgende `tasks`-delete
+    // zou zelfs kunnen falen op een FK-constraint als die ooit afgedwongen wordt).
+    await tx.delete(sessions).where(eq(sessions.taskId, taskId))
     await tx.delete(tasks).where(eq(tasks.id, taskId))
+  })
+}
+
+// Story 3.1 Task 8 — bulk-insert van extra sessies bij een bestaande taak (initiële N-1
+// sessies ná de eerste bij `createTask`, of nieuwe sessies bij een herberekening die meer
+// sessies nodig heeft dan er nu bestaan). Geen lock nodig — de slots zijn al volledig
+// berekend (`planSessionSlots`), dit is een kale insert.
+export async function insertSessionsForTask(taskId: string, slots: SessionSlotInput[]): Promise<Session[]> {
+  if (slots.length === 0) return []
+  return getDb().insert(sessions).values(
+    slots.map(slot => ({ taskId, startsAt: slot.startsAt, plannedMinutes: slot.plannedMinutes }))
+  ).returning()
+}
+
+// Story 3.5 (Correct Course 2026-09-05) — sessies die bij een herberekening overbodig zijn
+// geworden (minder sessies nodig dan er nu bestaan) of die al zijn afgehandeld (Story 4.7's
+// zojuist-afgeronde sessie) worden hiermee verwijderd, nooit hergebruikt met nieuwe inhoud.
+export async function deleteSessionsById(sessionIds: string[]): Promise<void> {
+  if (sessionIds.length === 0) return
+  await getDb().delete(sessions).where(inArray(sessions.id, sessionIds))
+}
+
+export interface RecalculatedSessionsInput {
+  // De eerstvolgende bestaande sessie wordt, indien er nog een sessie nodig is, altijd IN
+  // PLAATS bijgewerkt (nooit verwijderd-en-opnieuw-aangemaakt) — zodat een eventuele live
+  // sessie (heartbeat-tracking, Epic 4) nooit onder haar handen verdwijnt.
+  keep?: { sessionId: string, startsAt: string, plannedMinutes: number }
+  toInsert: SessionSlotInput[]
+  toDeleteIds: string[]
+}
+
+// Review-fix (2026-09-05, Story 3.1 Task 8) — `recalculateTaskPlanning` deed deze drie
+// schrijfstappen eerst als losse, niet-getransactioneerde aanroepen (en verwijderde de
+// uitgesloten sessie zelfs vóór de — potentieel falende, live-Calendar-afhankelijke —
+// planningsstap): een fout halverwege liet een inconsistente sessie-set achter, of verloor
+// de zojuist afgeronde sessie zonder vervanging. Nu één atomaire transactie, uitsluitend
+// aangeroepen NA een geslaagde `planSessionSlots`-berekening (die zelf geen DB-writes doet).
+export async function applyRecalculatedSessions(taskId: string, input: RecalculatedSessionsInput): Promise<Session[]> {
+  return getDb().transaction(async (tx) => {
+    const resultSessions: Session[] = []
+
+    if (input.keep) {
+      const [updated] = await tx.update(sessions)
+        .set({ startsAt: input.keep.startsAt, plannedMinutes: input.keep.plannedMinutes, updatedAt: new Date().toISOString() })
+        .where(eq(sessions.id, input.keep.sessionId))
+        .returning()
+      if (!updated) {
+        throw new Error(`Sessie ${input.keep.sessionId} bestaat niet.`)
+      }
+      resultSessions.push(updated)
+    }
+
+    if (input.toInsert.length > 0) {
+      const inserted = await tx.insert(sessions).values(
+        input.toInsert.map(slot => ({ taskId, startsAt: slot.startsAt, plannedMinutes: slot.plannedMinutes }))
+      ).returning()
+      resultSessions.push(...inserted)
+    }
+
+    if (input.toDeleteIds.length > 0) {
+      await tx.delete(sessions).where(inArray(sessions.id, input.toDeleteIds))
+    }
+
+    return resultSessions
   })
 }
 
 // Voor de sessie-tijdstip-stapeling én de dag-plaatsings-capaciteitscheck (Story 3.1):
 // hoeveel minuten heeft deze user al gepland op déze datum, over al zijn taken heen.
 // `startsAt` is een volledige UTC-datetime; de vergelijking op de eerste 10 tekens
-// (YYYY-MM-DD) is veilig omdat het vaste 16:00 Europe/Amsterdam-anker nooit dicht genoeg
-// bij middernacht UTC ligt om de datumgrens te kunnen overschrijden.
+// (YYYY-MM-DD) is de UTC-dag, niet per se Eveliens Amsterdam-lokale kalenderdag.
+//
+// **Correctie (code review-ronde 3, 2026-09-06):** dit bestand claimde hier eerder dat die
+// vergelijking "veilig is omdat het vaste 16:00 Europe/Amsterdam-anker nooit dicht genoeg
+// bij middernacht UTC ligt" — dat gold voor het oude enkele-sessie-model (Story 3.1, vóór
+// Task 8), waar élke sessie op dat ene vaste anker stond. Sinds Story 3.1 Task 8 landen
+// sessies op willekeurige tijdstippen binnen een écht beschikbaar-tijd-blok (`doelmoment.ts`'s
+// `planSessionSlots`/`packSlotsInBlocks`) — een blok vroeg in de ochtend (00:00-02:00 lokaal)
+// valt wél degelijk op een andere UTC-dag dan de Amsterdam-lokale dag waarin het blok werd
+// gevonden. Dit is een bekende, nog niet volledig opgeloste beperking (zie de story's Open
+// Questions) — de vorige claim was feitelijk onjuist geworden en actief misleidend voor een
+// toekomstige lezer, vandaar deze correctie, ook zonder de onderliggende beperking zelf hier
+// al op te lossen (dat vergt een bredere keuze: overal consequent Amsterdam-lokale dagen
+// gebruiken i.p.v. de UTC-substring-conventie die dit hele project al sinds Story 3.1 hanteert).
 //
 // `excludeTaskId` (Story 3.5, optioneel — bestaande aanroepers ongewijzigd): sluit de
 // sessie(s) van déze taak uit van de som. Nodig zodra een taak's eigen, nog-niet-verplaatste
@@ -144,13 +217,27 @@ export async function deleteTaskAndSession(taskId: string, sessionId: string): P
 // destijds miste. Een afgeronde taak se sessie-rij blijft historisch bestaan (Story 4.7's
 // "resterende tijd 0" laat de rij staan, verwijdert 'm niet), dus zonder deze filter bleef
 // die dag voor altijd "bezet" tellen in élke capaciteitscheck die deze functie gebruikt
-// (`findSessionDate`, `createTaskAndSession`, en Story 6.1's eigen tekort-detectie) — de
+// (de plaatsingslogica in `doelmoment.ts`, en Story 6.1's eigen tekort-detectie) — de
 // laatste is waar dit voor het eerst een echt correctheidsprobleem opleverde: de tekort-
 // detectie kon een tekort zien terwijl de escalatie-service (die wél al filterde) minder of
 // geen kandidaat-taken had om aan te bevelen.
-export async function sumPlannedMinutesForUserOnDate(userId: string, date: string, excludeTaskId?: string): Promise<number> {
+// `excludeTaskId` accepteert sinds Story 3.1 Task 8 ook een array (`planSessionSlots`
+// sluit tijdens het initieel plannen zowel de eigen taak als eventuele batchgenoten uit,
+// zelfde precedent als `placeSessionWithStackingOffset`'s `excludeTaskIds`).
+// `excludeSessionId` (review-fix 2026-09-05, optioneel) — sluit één specifieke sessie-rij
+// uit, los van `excludeTaskId`. Nodig voor `findBlockAwareSlot`/`session-placement.ts`: het
+// verplaatsen van één sessie van een taak mag niet ook de overige, blijvende sessies van
+// dezelfde taak op de doeldatum uitsluiten (die tellen wél als "al bezet") — alleen de rij
+// die daadwerkelijk verplaatst wordt, telt niet mee tegen zichzelf.
+export async function sumPlannedMinutesForUserOnDate(
+  userId: string,
+  date: string,
+  excludeTaskId?: string | string[],
+  excludeSessionId?: string
+): Promise<number> {
+  const excludeIds = excludeTaskId === undefined ? [] : Array.isArray(excludeTaskId) ? excludeTaskId : [excludeTaskId]
   const rows = await getDb()
-    .select({ plannedMinutes: sessions.plannedMinutes })
+    .select({ plannedMinutes: sessions.plannedMinutes, startsAt: sessions.startsAt })
     .from(sessions)
     .innerJoin(tasks, eq(sessions.taskId, tasks.id))
     .where(and(
@@ -160,10 +247,21 @@ export async function sumPlannedMinutesForUserOnDate(userId: string, date: strin
       // taak se sessie mag niet blijven meetellen als "al bezette" capaciteit.
       isNull(tasks.droppedAt),
       sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
-      excludeTaskId ? sql`${tasks.id} != ${excludeTaskId}` : undefined
+      excludeIds.length > 0 ? notInArray(tasks.id, excludeIds) : undefined,
+      excludeSessionId ? sql`${sessions.id} != ${excludeSessionId}` : undefined
     ))
 
-  return rows.reduce((sum, row) => sum + row.plannedMinutes, 0)
+  // Review-fix (2026-09-05): voor VANDAAG tellen sessies die al voorbij zijn
+  // (`startsAt + plannedMinutes` ligt in het verleden) niet meer mee als "gepland" —
+  // `getAvailableMinutesForDate` clamt de beschikbare tijd voor vandaag al op "nu", dus
+  // zonder deze symmetrische clamp aan de geplande kant groeide het tekort voor vandaag de
+  // hele dag door, puur omdat de klok doorliep terwijl allang-afgelopen sessies bleven
+  // meetellen. Voor een toekomstige dag verandert er niets (die ligt al volledig vóór "nu").
+  const now = Date.now()
+  const today = todayInAmsterdam()
+  return rows
+    .filter(row => date !== today || new Date(row.startsAt).getTime() + row.plannedMinutes * 60_000 > now)
+    .reduce((sum, row) => sum + row.plannedMinutes, 0)
 }
 
 // Voor `taak-subject-select`'s suggestielijst (Task 4) — geen aparte Subject-tabel, zie
@@ -200,7 +298,7 @@ export async function getNeedsSuggestionsForSubject(userId: string, subject: str
 
 // Voor `server/domain/scheduling/ordering.ts`'s `sortByVolgorde` (Story 3.4) — welke
 // Task+Session-paren van deze user landen op déze datum. Zelfde datumvergelijkingstechniek
-// als `sumPlannedMinutesForUserOnDate`/`createTaskAndSession` hierboven (substr op de
+// als `sumPlannedMinutesForUserOnDate`/`createTaskAndSessions` hierboven (substr op de
 // eerste 10 tekens van `startsAt`, veilig door het vaste 16:00 Europe/Amsterdam-anker).
 // Story 4.7 — `isNull(tasks.completedAt)` toegevoegd: zonder deze filter zou een zojuist
 // afgeronde taak (resterende tijd 0 op 1.4-sessie-afronden) op déze datum blijven staan, want
@@ -220,7 +318,16 @@ export async function getTasksWithSessionOnDate(userId: string, date: string): P
       sql`substr(${sessions.startsAt}, 1, 10) = ${date}`
     ))
 
-  return rows
+  // Review-fix (ronde 3, 2026-09-06): zelfde "vandaag al voorbij"-filter als
+  // `sumPlannedMinutesForUserOnDate` hierboven, en om dezelfde reden — deze twee functies
+  // worden altijd samen gelezen door de escalatie-service (`shortfall.ts`) en het
+  // weekoverzicht: het aggregaat-tekort (via `sumPlannedMinutesForUserOnDate`) sloot een
+  // al-voorbije sessie al uit, maar de kandidatenlijst hier deed dat niet — waardoor een
+  // aanbeveling een sessie kon voorstellen te verplaatsen/verkorten/laten-vervallen die al
+  // had plaatsgevonden, zonder dat dit ook maar iets aan het echte tekort verhielp.
+  const now = Date.now()
+  const today = todayInAmsterdam()
+  return rows.filter(row => date !== today || new Date(row.session.startsAt).getTime() + row.session.plannedMinutes * 60_000 > now)
 }
 
 // Amendement (Hillebrand, 2026-08-26) — voor het schoolsessies-scherm: een afgeronde taak
@@ -299,19 +406,24 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
   return task ?? null
 }
 
-// Voor `recalculateTaskPlanning` (Story 3.5) — huidige architectuur (AD-3, Story 3.1/3.2)
-// kent precies 1 sessie per taak.
+// [HERZIEN, Story 3.1 Task 8, Correct Course 2026-09-05] — een taak kent sinds deze rework
+// N sessies (AD-3's oorspronkelijke "Task 1:N Session"-model, zie epics.md's Additional
+// Requirements), niet meer precies 1. Deze functie geeft de **eerstvolgende** sessie terug
+// (kleinste `startsAt`) — dat is voor élke bestaande aanroeper (sessie-tussenscherm/
+// -actief, taak verwijderen se ownership-check vóór `getSessionsForTask`, schoolsessies
+// loggen, Epic 6's aanbevelingen/energie-pad) precies de sessie waar ze semantisch al om
+// vroegen: "de sessie die nu aan de beurt is". Gooit niet langer een `Error` bij meerdere
+// rijen — dat was de oude, inmiddels achterhaalde aanname zelf.
 export async function getSessionForTask(taskId: string): Promise<Session | null> {
-  const rows = await getDb().select().from(sessions).where(eq(sessions.taskId, taskId))
-  // Bewaakt de "precies 1 sessie per taak"-aanname expliciet (code review 2026-08-02) —
-  // stilzwijgend een willekeurige rij teruggeven zou een toekomstige datacorruptie (bv. een
-  // bug die per ongeluk een tweede sessie aan een bestaande taak toevoegt) verbergen i.p.v.
-  // signaleren, zelfde discipline als Story 2.3's "stil zwijgen kan een integratiebug
-  // verbergen"-les.
-  if (rows.length > 1) {
-    throw new Error(`Taak ${taskId} heeft ${rows.length} sessies, verwacht precies 1.`)
-  }
-  return rows[0] ?? null
+  const [session] = await getDb().select().from(sessions).where(eq(sessions.taskId, taskId)).orderBy(sessions.startsAt).limit(1)
+  return session ?? null
+}
+
+// Story 3.1 Task 8 (nieuw) — alle sessies van een taak, chronologisch. Nodig voor
+// operaties die de VOLLEDIGE sessiereeks moeten kennen (herberekenen, verwijderen), in
+// tegenstelling tot `getSessionForTask` hierboven (alleen de eerstvolgende).
+export async function getSessionsForTask(taskId: string): Promise<Session[]> {
+  return getDb().select().from(sessions).where(eq(sessions.taskId, taskId)).orderBy(sessions.startsAt)
 }
 
 // Story 4.4 — eerste leesfunctie voor subtaken (bestonden al sinds Story 3.2, maar tot nu
@@ -374,17 +486,56 @@ export async function markSessionStopped(sessionId: string): Promise<void> {
     .where(eq(sessions.id, sessionId))
 }
 
-// Story 4.5's AC #3 (opgepakt 2026-08-17) — ná het stil afronden van een verweesde sessie
-// (`session-heartbeat-fallback.ts`) moeten `lastHeartbeatAt`/`stoppedAt` weer naar `null`
-// zodat een hernieuwde poging op dezelfde sessierij (Sessions is 1:1 per taak, nooit
-// verwijderd-en-opnieuw-aangemaakt — Story 3.5) opnieuw normaal kan heartbeaten. Zonder dit
-// zou `markSessionHeartbeat`'s eigen `isNull(stoppedAt)`-guard (Story 4.5-review) elke
-// volgende heartbeat stil laten mislukken.
-export async function resetSessionHeartbeatTracking(sessionId: string): Promise<void> {
+// Review-fix (ronde 3, 2026-09-06) — `claimStaleSessionForFinalization` vervangt de
+// vroegere `resetSessionHeartbeatTracking` (verwijderd, zie hieronder) én sluit een echte
+// race: twee gelijktijdige `GET /api/tasks/[id]`-aanroepen konden allebei dezelfde
+// verweesde sessie als "stale" zien en allebei `replanAfterSession` aanroepen — een dubbele
+// sessielog, dubbel afgetrokken van `totalMinutes`. Deze conditionele `UPDATE` claimt de
+// sessie atomair (alleen als hij nog niet gestopt is EN het heartbeat-moment nog exact
+// overeenkomt met wat de aanroeper zag) — de tweede, verliezende aanroeper krijgt `false`
+// terug en doet niets.
+//
+// `resetSessionHeartbeatTracking` (Story 4.5's AC #3) is hier verwijderd: die reset was
+// bedoeld om dezelfde sessierij herbruikbaar te maken ("Sessions is 1:1 per taak, nooit
+// verwijderd-en-opnieuw-aangemaakt") — een aanname die Story 3.1 Task 8's N-sessie-rework
+// ongeldig maakte. `replanAfterSession` verwijdert de zojuist afgehandelde sessie nu altijd
+// (`excludeSessionId`) en regenereert de rest; er is geen rij meer om te resetten.
+// Review-fix (ronde 4, 2026-09-06): geeft nu het zojuist geschreven `stoppedAt`-tijdstip
+// terug (`null` bij een mislukte claim) i.p.v. alleen een boolean — `releaseStaleSession-
+// Claim` heeft dit nodig om zijn eigen compensatie-write te scopen op exact déze claim
+// (compare-and-set), niet blind elke `stoppedAt` op deze sessie terug te zetten.
+export async function claimStaleSessionForFinalization(sessionId: string, expectedLastHeartbeatAt: string): Promise<string | null> {
+  const [claimed] = await getDb()
+    .update(sessions)
+    .set({ stoppedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(and(
+      eq(sessions.id, sessionId),
+      isNull(sessions.stoppedAt),
+      eq(sessions.lastHeartbeatAt, expectedLastHeartbeatAt)
+    ))
+    .returning()
+  return claimed?.stoppedAt ?? null
+}
+
+// Review-fix (ronde 3, 2026-09-06) — compensatie voor een geslaagde `claimStale-
+// SessionForFinalization` gevolgd door een mislukte `replanAfterSession` (bv. een
+// Calendar-fout tijdens de daaropvolgende herberekening). Zonder dit bleef de sessie
+// permanent `stoppedAt` staan zonder ooit een `sessionLogs`-rij te hebben gekregen — de
+// bestede tijd van de gebruiker ging dan stil en onherstelbaar verloren, want
+// `finalizeStaleSessionIfNeeded`'s eigen `if (session.stoppedAt) return false` sluit een
+// hernieuwde poging voorgoed uit. Zet de claim terug zodat de eerstvolgende poging het
+// opnieuw probeert.
+// Review-fix (ronde 4, 2026-09-06): scopeert de terugzet-write nu op exact het `stoppedAt`-
+// tijdstip dat déze claim zelf schreef (compare-and-set), i.p.v. onvoorwaardelijk elke
+// `stoppedAt` op deze sessie te wissen. Zonder deze scope kon een legitieme Stop-knop-klik
+// (of de `beforeunload`-beacon) die tussen de claim en de mislukte herberekening binnenkomt,
+// door déze compensatie ongedaan worden gemaakt — een écht gestopte sessie zou dan weer
+// "actief" lijken.
+export async function releaseStaleSessionClaim(sessionId: string, claimedStoppedAt: string): Promise<void> {
   await getDb()
     .update(sessions)
-    .set({ lastHeartbeatAt: null, stoppedAt: null, updatedAt: new Date().toISOString() })
-    .where(eq(sessions.id, sessionId))
+    .set({ stoppedAt: null, updatedAt: new Date().toISOString() })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.stoppedAt, claimedStoppedAt)))
 }
 
 // Story 4.7 (review-patch) — schrijft de daadwerkelijk bestede sessietijd weg (Consistency
@@ -399,7 +550,7 @@ export async function insertSessionLog(taskId: string, actualMinutes: number): P
 
 // Story 4.7 (review-patch) — logt de bestede sessietijd en markeert de taak als definitief
 // klaar (resterende tijd 0) atomair in één transactie (zelfde precedent als
-// `createTaskAndSession`/`deleteTaskAndSession`) — voorkomt dat een crash tussen de twee
+// `createTaskAndSessions`/`deleteTaskAndSessions`) — voorkomt dat een crash tussen de twee
 // writes de sessielog wel, maar de afronding niet (of omgekeerd) laat landen. Taak/sessie/
 // deeltaken blijven bestaan als historisch record — dit is puur een filter-veld, geen
 // verwijdering (zie `getTasksWithSessionOnDate` hierboven).
@@ -469,69 +620,41 @@ export async function updateSessionPlacement(
 // laten gebeuren" — inmiddels het geval (Epic 4-6, allemaal `done`, roepen
 // `recalculateTaskPlanning` vanuit minstens acht plekken aan). Opgepakt 2026-08-17/18.
 //
-// Alleen voor `recalculateTaskPlanning` — de andere aanroepers van `sumPlannedMinutesFor-
-// UserOnDate`/`updateSessionPlacement` (`createTaskAndSession`, `apply-recommendation.ts`,
-// `session-placement.ts`, `energy.ts`) blijven ongewijzigd, dit is geen bredere refactor.
+// Destijds alleen voor `recalculateTaskPlanning` opgepakt. **Review-fix (2026-09-05):**
+// `createTaskAndSessions` en `recalculateTaskPlanning` gebruiken sinds Story 3.1 Task 8
+// beide `withSessionPlacementLocks` (hieronder) — `apply-recommendation.ts`/
+// `session-placement.ts`/`energy.ts` muteren altijd een reeds-bestaande, specifieke sessie
+// op een al-gekozen datum (geen nieuwe-sessie-plaatsing), dus blijven buiten deze lock.
 //
-// TWEE aparte bugs speelden hier, ontdekt via live concurrency-tests (zie Story 3.5's Dev
-// Notes voor het volledige onderzoek, incl. CloudWatch-bewijs):
+// TWEE aparte bugs speelden hier destijds, ontdekt via live concurrency-tests (zie Story
+// 3.5's Dev Notes voor het volledige onderzoek, incl. CloudWatch-bewijs): een echte
+// TOCTOU-race tussen gelijktijdige aanroepen, en een structurele plaatsingsfout (de
+// "stapel-aan-het-eind"-formule garandeerde wiskundig dat twee taken op dezelfde dag op
+// hetzelfde eindpunt uitkwamen zodra ze ná elkaar herberekend werden). De oplossing was een
+// expliciete, database-afgedwongen lock-rij (`sessionPlacementLocks`, `UNIQUE` op
+// user+datum) rond de lees-dan-schrijf-sectie.
 //
-// 1. **Echte TOCTOU-race** (gelijktijdige aanroepen kunnen elkaars lees-dan-schrijf
-//    overlappen). Twee eerdere pogingen (multi-statement-transactie met `BEGIN IMMEDIATE`;
-//    single-statement optimistic-guard) faalden empirisch tegen deze Turso/`@libsql/client/
-//    web`-verbinding — de precieze reden is niet volledig doorgrond. **Oplossing:** een
-//    expliciete, database-afgedwongen lock-rij (`sessionPlacementLocks`, `UNIQUE` op
-//    user+datum) rond de hele lees-dan-schrijf-sectie — hangt alleen af van een `UNIQUE`-
-//    constraint, de meest basale garantie die elke SQL-engine moet bieden.
-// 2. **Structurele plaatsingsfout, los van concurrency** — pas ontdekt tijdens het testen van
-//    fix 1: zelfs strikt sequentieel (géén gelijktijdigheid) overlapten twee taken die ná
-//    elkaar op dezelfde dag herberekend werden. Reden: de "stapel-aan-het-eind"-formule
-//    (`anker + som van ieders duur behalve die van mezelf`) garandeert wiskundig dat elke
-//    taak op hetzelfde eindpunt uitkomt zodra twee of meer taken die dezelfde dag delen,
-//    ná elkaar herberekend worden — pure optel-wiskunde, geen race. **Oplossing:**
-//    `excludeTaskIds` (plural) i.p.v. één taak-id — `recalculateTaskPlanning` geeft hier de
-//    nog-niet-verwerkte batchgenoten ook mee uit te sluiten (zie dat bestand se commentaar).
-export async function placeSessionWithStackingOffset(
-  sessionId: string,
-  userId: string,
-  date: string,
-  excludeTaskIds: string[],
-  anchorHour: number,
-  plannedMinutes: number
-): Promise<{ session: Session, startsAt: string }> {
-  await acquireSessionPlacementLock(userId, date)
+// **Review-fix (2026-09-05, Story 3.1 Task 8):** de oorspronkelijke aanroeper van deze lock
+// (`placeSessionWithStackingOffset`, het vaste-anker-stapelmodel) is met de N-sessie-rework
+// vervallen — `createTaskAndSessions`/`recalculateTaskPlanning` lieten de lock-bescherming
+// initieel per ongeluk helemaal vallen (code review, 2026-09-05). `withSessionPlacementLocks`
+// hieronder hergebruikt exact dezelfde lock-primitieven voor de nieuwe, potentieel
+// meerdere-datums-tegelijk-rakende schrijfpaden — gesorteerde verkrijgvolgorde voorkomt een
+// deadlock tussen twee gelijktijdige aanroepen die dezelfde datums in een andere volgorde
+// zouden claimen.
+export async function withSessionPlacementLocks<T>(userId: string, dates: string[], fn: () => Promise<T>): Promise<T> {
+  const sortedUniqueDates = [...new Set(dates)].sort()
+  const acquired: string[] = []
   try {
-    const rows = await getDb()
-      .select({ plannedMinutes: sessions.plannedMinutes })
-      .from(sessions)
-      .innerJoin(tasks, eq(sessions.taskId, tasks.id))
-      .where(and(
-        eq(tasks.userId, userId),
-        isNull(tasks.completedAt),
-        isNull(tasks.droppedAt),
-        sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
-        notInArray(tasks.id, excludeTaskIds)
-      ))
-    const existingMinutes = rows.reduce((sum, row) => sum + row.plannedMinutes, 0)
-    const anchor = resolveAnchorHourMinute(date, anchorHour)
-    const totalMinutes = anchor.hour * 60 + anchor.minute + existingMinutes
-    const hour = Math.floor(totalMinutes / 60)
-    const minute = totalMinutes % 60
-    const startsAt = amsterdamLocalToUtcIso(date, hour, minute)
-
-    const [session] = await getDb()
-      .update(sessions)
-      .set({ startsAt, plannedMinutes, updatedAt: new Date().toISOString() })
-      .where(eq(sessions.id, sessionId))
-      .returning()
-
-    if (!session) {
-      throw new Error(`Sessie ${sessionId} bestaat niet.`)
+    for (const date of sortedUniqueDates) {
+      await acquireSessionPlacementLock(userId, date)
+      acquired.push(date)
     }
-
-    return { session, startsAt }
+    return await fn()
   } finally {
-    await releaseSessionPlacementLock(userId, date)
+    for (const date of acquired) {
+      await releaseSessionPlacementLock(userId, date)
+    }
   }
 }
 
@@ -597,7 +720,7 @@ export interface UpdateTaskAndSubtasksInput {
 
 // Story 5.3 — atomair: taak-rij bijwerken + deeltaken reconciliëren (update bestaande,
 // invoegen nieuwe, verwijderen weggelaten rijen) in één transactie, zelfde precedent als
-// `createTaskAndSession`. **Beschermt `'afgerond'`-deeltaken tegen stilzwijgende
+// `createTaskAndSessions`. **Beschermt `'afgerond'`-deeltaken tegen stilzwijgende
 // wijziging**, ongeacht wat de client voor naam/tijd stuurt — "server is gezaghebbend,
 // niet de client" (Story 3.2's les) — maar staat de éne expliciete uitzondering toe: een
 // submitted `status: 'niet-gestart'` op een momenteel `'afgerond'`-rij ("Heropenen",

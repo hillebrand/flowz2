@@ -1,4 +1,4 @@
-import { detectShortfallForDate, generateShortfallRecommendations } from './shortfall'
+import { detectShortfallForDateOrOverrun, generateShortfallRecommendations } from './shortfall'
 import { availableMinutesForDate } from './doelmoment'
 import { getTasksWithSessionOnDate } from '../../data/tasks'
 import { getTodayEvents } from '../calendar-sync/day-events'
@@ -19,7 +19,13 @@ export async function buildWeekDay(userId: string, date: string): Promise<WeekDa
   // een tweede keer voor exact dezelfde user/datum te laten doen. Was vóór Task 7 een
   // goedkope lokale lookup (twee keer aanroepen deed er niet toe); sinds Task 7 is elke
   // `availableMinutesForDate`-aanroep een echte Calendar-round-trip.
-  const shortfall = await detectShortfallForDate(userId, date, availableMinutes)
+  // Review-fix (chunk 3, 2026-09-06): `detectShortfallForDate` alleen kan nooit een
+  // deadline-overrun-aanbeveling opleveren (die se `ShortfallResult.date` is de taak se
+  // deadline, geen dag-aggregaat, zie `detectShortfallForDateOrOverrun`'s eigen Dev Notes)
+  // — een taak die haar deadline al overschreden heeft toonde hier dus stilzwijgend géén
+  // suggestie, en `.../suggestion/accept.post.ts`'s eigen overrun-ondersteuning kon zo nooit
+  // bereikt worden vanuit de UI.
+  const shortfall = await detectShortfallForDateOrOverrun(userId, date, undefined, availableMinutes)
   let suggestion: WeekDayDto['suggestion'] = null
   if (shortfall) {
     const recommendations = await generateShortfallRecommendations(userId, shortfall)

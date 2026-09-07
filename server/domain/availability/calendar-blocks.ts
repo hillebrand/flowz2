@@ -42,17 +42,16 @@ function mergedBlockMinutes(events: DayEvent[], windowStartMs: number, windowEnd
   return Math.round(totalMs / 60_000)
 }
 
-// Live, on-demand beschikbare tijd (in minuten) voor één datum, uit de gekoppelde
-// beschikbare-tijd-agenda. Geen agenda gekoppeld: `0` (zelfde effectieve terugval als het
-// oude model voor een vers weekpatroon — `calculateDoelmoment`/`findSessionDate` vangen dat
-// al op; Evelien ziet de eigen `avail-no-calendar-notice` op de instellingenpagina). Een
-// mislukte Calendar-call gooit een expliciete Error (AD-10: nooit stil terugvallen op
-// verouderde/aangenomen beschikbaarheid) — propageert naar de aanroeper, geen Notification-
-// plumbing hier nodig (zie Story 3.1 Task 7 se Dev Notes: AD-6 bindt aan UJ-6/7/8, niet aan
-// UJ-2's taak-aanmaken-flow).
-export async function getAvailableMinutesForDate(userId: string, date: string): Promise<number> {
+// Gedeeld door `getAvailableMinutesForDate`/`getAvailableBlocksForDate` — haalt de timed
+// events op uit de gekoppelde beschikbare-tijd-agenda voor één datum, en bepaalt het
+// effectieve venster (geclampt op "nu" voor vandaag, zie hieronder). `null` betekent: geen
+// agenda gekoppeld.
+async function getTimedBlocksAndWindow(
+  userId: string,
+  date: string
+): Promise<{ events: DayEvent[]; windowStartMs: number; windowEndMs: number } | null> {
   const user = await getUserById(userId)
-  if (!user.availabilityCalendarId) return 0
+  if (!user.availabilityCalendarId) return null
 
   const timeMin = amsterdamLocalToUtcIso(date, 0, 0)
   const timeMax = amsterdamLocalToUtcIso(date, 23, 59)
@@ -76,5 +75,51 @@ export async function getAvailableMinutesForDate(userId: string, date: string): 
     ? Math.max(new Date(timeMin).getTime(), Date.now())
     : new Date(timeMin).getTime()
 
-  return mergedBlockMinutes(events.filter(isTimedEvent), windowStartMs, new Date(timeMax).getTime())
+  return { events: events.filter(isTimedEvent), windowStartMs, windowEndMs: new Date(timeMax).getTime() }
+}
+
+// Live, on-demand beschikbare tijd (in minuten) voor één datum, uit de gekoppelde
+// beschikbare-tijd-agenda. Geen agenda gekoppeld: `0` (zelfde effectieve terugval als het
+// oude model voor een vers weekpatroon — `calculateDoelmoment`/`findSessionDate` vangen dat
+// al op; Evelien ziet de eigen `avail-no-calendar-notice` op de instellingenpagina). Een
+// mislukte Calendar-call gooit een expliciete Error (AD-10: nooit stil terugvallen op
+// verouderde/aangenomen beschikbaarheid) — propageert naar de aanroeper, geen Notification-
+// plumbing hier nodig (zie Story 3.1 Task 7 se Dev Notes: AD-6 bindt aan UJ-6/7/8, niet aan
+// UJ-2's taak-aanmaken-flow).
+export async function getAvailableMinutesForDate(userId: string, date: string): Promise<number> {
+  const window = await getTimedBlocksAndWindow(userId, date)
+  if (window === null) return 0
+
+  return mergedBlockMinutes(window.events, window.windowStartMs, window.windowEndMs)
+}
+
+// Story 3.1 Task 8 (Correct Course 2026-09-05) — naast het aggregaat-minutentotaal
+// hierboven (blijft in gebruik door o.a. `shortfall.ts`/`week-overview.ts`) hebben de
+// sessieplaatsing en het volgorde-algoritme (Epic 3) de daadwerkelijke tijdsintervallen
+// nodig om een sessie ECHT binnen een blok te leggen, niet alleen te toetsen of er "genoeg
+// minuten" op de dag zijn. Retourneert de gemergde, op het dagvenster geclampte intervallen
+// (ISO 8601 UTC), chronologisch gesorteerd. Geen agenda gekoppeld: lege array.
+export async function getAvailableBlocksForDate(userId: string, date: string): Promise<{ start: string; end: string }[]> {
+  const window = await getTimedBlocksAndWindow(userId, date)
+  if (window === null) return []
+
+  const intervals = window.events
+    .map(event => [
+      Math.max(new Date(event.startsAt).getTime(), window.windowStartMs),
+      Math.min(new Date(event.endsAt).getTime(), window.windowEndMs)
+    ] as [number, number])
+    .filter(([start, end]) => end > start)
+    .sort((a, b) => a[0] - b[0])
+
+  const merged: [number, number][] = []
+  for (const [start, end] of intervals) {
+    const last = merged[merged.length - 1]
+    if (last && start <= last[1]) {
+      last[1] = Math.max(last[1], end)
+    } else {
+      merged.push([start, end])
+    }
+  }
+
+  return merged.map(([start, end]) => ({ start: new Date(start).toISOString(), end: new Date(end).toISOString() }))
 }

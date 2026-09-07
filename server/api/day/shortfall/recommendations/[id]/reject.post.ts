@@ -1,6 +1,6 @@
 import { getRouterParam, readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../../../../domain/errors'
-import { detectShortfallForDate, generateShortfallRecommendations } from '../../../../../domain/scheduling/shortfall'
+import { detectShortfallForDateOrOverrun, generateShortfallRecommendations } from '../../../../../domain/scheduling/shortfall'
 import { isValidCalendarDate } from '../../../../../../shared/utils/availability'
 import type { ShortfallRecommendationActionInput, ShortfallRecommendationRejectResponse } from '../../../../../../shared/types/shortfall'
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
   }
 
   try {
-    const shortfall = await detectShortfallForDate(session.user.id, body.date)
+    const shortfall = await detectShortfallForDateOrOverrun(session.user.id, body.date, recommendationId)
     const recommendations = shortfall ? await generateShortfallRecommendations(session.user.id, shortfall) : []
 
     return {

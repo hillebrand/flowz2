@@ -139,46 +139,80 @@ const validationError = ref('')
 const submitError = ref(false)
 const busy = ref(false)
 
+// Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): `loadTodayTasks` had geen in-flight-
+// guard — een dubbele tap op "Opnieuw proberen" (of een reload getriggerd door `heropenen`
+// terwijl een eerdere reload nog liep) kon twee overlappende fetches laten racen, waarbij de
+// traagste respons als laatste `todayRows` overschreef, mét het al ingetypte werk van de
+// gebruiker uit de tussentijd. `loadToken` laat een verouderde respons zichzelf herkennen en
+// negeren; de type-behoud-snapshot hieronder vangt daarnaast het legitieme geval af waarin
+// dezelfde (nieuwste) reload gewoon input van ándere, niet-bij-de-reload-betrokken rijen zou
+// wissen (bv. `heropenen` op rij A herlaadt de hele lijst, rij B se ingetypte tijd mag dan
+// niet verdwijnen).
+let loadToken = 0
+
+type TypedInputSnapshot = Pick<TodayRow, 'minutes' | 'remainingHours' | 'remainingMinutes' | 'remainingTouched' | 'rowError'>
+
+function snapshotTypedInput(): Map<string, TypedInputSnapshot> {
+  const snapshot = new Map<string, TypedInputSnapshot>()
+  for (const row of todayRows.value) {
+    if (row.completed) continue
+    if (isEmptyField(row.minutes) && isEmptyField(row.remainingHours) && isEmptyField(row.remainingMinutes) && !row.remainingTouched && !row.rowError) continue
+    snapshot.set(row.id, {
+      minutes: row.minutes,
+      remainingHours: row.remainingHours,
+      remainingMinutes: row.remainingMinutes,
+      remainingTouched: row.remainingTouched,
+      rowError: row.rowError
+    })
+  }
+  return snapshot
+}
+
 async function loadTodayTasks() {
+  const token = ++loadToken
+  const typedInput = snapshotTypedInput()
   isLoading.value = true
   loadError.value = false
   try {
     const tasks: SchoolSessionTasksResponse = await $fetch<SchoolSessionTasksResponse>('/api/school-sessions/tasks')
+    if (token !== loadToken) return
     // Amendement (Hillebrand, 2026-08-26): besteed = geplande tijd voorinvullen — het
     // gebruikelijke geval is dat het volgens plan verliep, dan hoeft Evelien alleen op
     // "Opslaan" te klikken. Ze past het aan als er meer/minder tijd aan besteed is.
     todayRows.value = tasks.map((task) => {
+      const bewaard = task.completed ? undefined : typedInput.get(task.id)
       const row: TodayRow = {
         id: task.id,
         subject: task.subject,
         title: task.title,
         totalMinutes: task.totalMinutes,
         // Afgeronde taak: geen invoer meer nodig/mogelijk (read-only kaart, zie template).
-        minutes: task.completed ? null : task.plannedMinutes,
-        remainingHours: null,
-        remainingMinutes: null,
+        minutes: task.completed ? null : (bewaard?.minutes ?? task.plannedMinutes),
+        remainingHours: bewaard?.remainingHours ?? null,
+        remainingMinutes: bewaard?.remainingMinutes ?? null,
         remainingHoursError: '',
         remainingMinutesError: '',
-        remainingTouched: false,
+        remainingTouched: bewaard?.remainingTouched ?? false,
         completed: task.completed,
         reopenOpen: false,
         reopenHours: null,
         reopenMinutes: null,
         reopenError: '',
         reopenBusy: false,
-        rowError: ''
+        rowError: bewaard?.rowError ?? ''
       }
-      if (!task.completed) pasSuggestieToe(row)
+      if (!task.completed && !bewaard) pasSuggestieToe(row)
       return row
     })
   } catch (fout) {
+    if (token !== loadToken) return
     if (is401(fout)) {
       await navigateTo('/inloggen')
       return
     }
     loadError.value = true
   } finally {
-    isLoading.value = false
+    if (token === loadToken) isLoading.value = false
   }
 }
 
@@ -197,10 +231,21 @@ async function ensureOpenTasksLoaded() {
   }
 }
 
+// Review-fix (chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): taken die al als vaste vandaag-rij staan (of al in een ándere
+// "Andere taak"-rij gekozen zijn) werden hier niet uitgesloten — Evelien kon zo per ongeluk
+// dezelfde taak twee keer loggen (twee schooluren van hetzelfde vak, per abuis via zoeken
+// i.p.v. het bestaande veld aan te passen). De server wijst een dubbele `taskId` inmiddels
+// per regel af, maar dat is pas ná een deels-toegepaste batch — hier voorkomen is beter.
 function zoekTaakOpties(row: ExtraRow): OpenTaskItem[] {
   const query = row.searchQuery.trim().toLowerCase()
   if (!query || !allOpenTasks.value) return []
+  const alGebruikt = new Set([
+    ...todayRows.value.map(r => r.id),
+    ...extraRows.value.filter(r => r.id !== row.id && r.kind === 'search' && r.pickedTask).map(r => r.pickedTask!.id)
+  ])
   return allOpenTasks.value
+    .filter(task => !alGebruikt.has(task.id))
     .filter(task => task.title.toLowerCase().includes(query) || task.subject.toLowerCase().includes(query))
     .slice(0, MAX_SEARCH_RESULTS)
 }
@@ -209,6 +254,21 @@ function kiesGevondenTaak(row: ExtraRow, task: OpenTaskItem) {
   row.pickedTask = { id: task.id, subject: task.subject, title: task.title, totalMinutes: task.totalMinutes }
   row.searchQuery = ''
   pasSuggestieToe(row)
+}
+
+// Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): de inline reset liet `minutes` en de
+// foutvelden ongemoeid — bestede tijd getypt voor de vorige taak bleef zo onzichtbaar (het
+// veld verschijnt pas weer zodra een taak gekozen is) achter de schermen staan en werd bij
+// het opslaan alsnog tegen de nieuw gekozen taak geboekt.
+function resetGevondenTaak(row: ExtraRow) {
+  row.pickedTask = null
+  row.minutes = null
+  row.remainingTouched = false
+  row.remainingHours = null
+  row.remainingMinutes = null
+  row.remainingHoursError = ''
+  row.remainingMinutesError = ''
+  row.rowError = ''
 }
 
 function andereTaakRijToevoegen() {
@@ -244,12 +304,28 @@ function heropenenAnnuleren(row: TodayRow) {
   row.reopenError = ''
 }
 
+// Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): valideerde eerder alleen "allebei
+// leeg" — een minutenveld boven de 59, een negatief getal, of "0u 0m" werd zo pas door de
+// server geweigerd (`tasks/[id]/reopen.post.ts`), en kwam terug als het generieke "Kon de
+// taak niet heropenen." i.p.v. een van de server se eigen, specifieke meldingen. Hergebruikt
+// dezelfde validatiefuncties als het gewone resterende-tijd-veld hierboven.
 async function heropenen(row: TodayRow) {
+  if (row.reopenBusy) return
   row.reopenError = ''
+  const urenFout = valideerResterendeUren({ ...row, remainingHours: row.reopenHours, remainingMinutes: row.reopenMinutes })
+  const minutenFout = valideerResterendeMinuten({ ...row, remainingHours: row.reopenHours, remainingMinutes: row.reopenMinutes })
+  if (urenFout || minutenFout) {
+    row.reopenError = urenFout || minutenFout
+    return
+  }
   const uren = isEmptyField(row.reopenHours) ? null : Number(row.reopenHours)
   const minuten = isEmptyField(row.reopenMinutes) ? null : Number(row.reopenMinutes)
   if (uren === null && minuten === null) {
     row.reopenError = 'Vul de resterende tijd in.'
+    return
+  }
+  if ((uren ?? 0) * 60 + (minuten ?? 0) === 0) {
+    row.reopenError = 'Resterende tijd moet groter dan 0 zijn.'
     return
   }
   row.reopenBusy = true
@@ -404,6 +480,15 @@ async function versturen() {
 
     if (mislukt.size > 0) {
       submitError.value = true
+      // Review-fix (chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk
+      // van elkaar gevonden): bij een gedeeltelijke mislukking bleven de geslaagde rijen op
+      // scherm met hun `totalMinutes` van vóór déze batch — `replanAfterSession` heeft de
+      // resterende tijd server-side juist al bijgewerkt. Een tweede sessie voor zo'n taak
+      // gebruikte dan een verouderd basisgetal voor de resterende-tijd-suggestie, en een
+      // zojuist volledig afgeronde taak bleef ten onrechte als open/invoerbare rij staan.
+      // `loadTodayTasks` behoudt hierboven al ingetypte input voor de nog-mislukte rijen
+      // (zie `snapshotTypedInput`), dus dit kost de gebruiker niets van wat ze al invulde.
+      await loadTodayTasks()
       return
     }
 
@@ -557,7 +642,7 @@ onMounted(loadTodayTasks)
             <div v-else class="school-session-row-header">
               <span class="school-session-task-subject">{{ row.pickedTask.subject }}</span>
               <span class="school-session-task-title">{{ row.pickedTask.title }}</span>
-              <button type="button" class="school-retry" @click="row.pickedTask = null; row.remainingTouched = false; row.remainingHours = null; row.remainingMinutes = null">Andere taak</button>
+              <button type="button" class="school-retry" @click="resetGevondenTaak(row)">Andere taak</button>
             </div>
           </div>
 

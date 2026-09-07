@@ -3,6 +3,7 @@ import { getSessionForTask, getTaskById } from '../data/tasks'
 import { ErrorCodes, type ErrorEnvelope } from '../domain/errors'
 import { replanAfterSession } from '../domain/scheduling/replan'
 import { createTask } from '../domain/tasks/create-task'
+import { deleteTask } from '../domain/tasks/delete-task'
 import { MAX_SESSION_DURATION, MAX_TITLE_LENGTH, MIN_SESSION_DURATION } from '../domain/tasks/validate-task-input'
 import { isValidCalendarDate } from '../../shared/utils/availability'
 import { todayInAmsterdam } from '../../shared/utils/scheduling'
@@ -25,6 +26,11 @@ import type { SchoolSessionEntry, SchoolSessionResult, SchoolSessionsInput, Scho
 // sessieduur krijgen dan vaste defaults (Hillebrand, 2026-08-23) — zie de story se Dev Notes
 // voor de volledige redenering. `createTask()` zelf (Story 3.1) blijft ongewijzigd; alleen
 // de invoer ervoor wordt hier samengesteld.
+// Review-fix (chunk 3, 2026-09-06): geen bovengrens op het aantal regels per batch — elke
+// regel kost meerdere DB-round-trips plus een `replanAfterSession` (die Calendar-sync
+// triggert). Zelfde soort ongebonden-invoer-fout als elders in de API al wordt afgevangen.
+const MAX_ENTRIES = 50
+
 const NEW_TASK_SUBJECT = 'Overig'
 const NEW_TASK_TYPE = 'opdracht' as const
 const NEW_TASK_DIFFICULTY = 'gemiddeld' as const
@@ -61,7 +67,7 @@ function isValidEntry(value: unknown): value is SchoolSessionEntry {
 
   if (hasNewTask) {
     const newTask = entry.newTask as Record<string, unknown>
-    if (typeof newTask.title !== 'string' || newTask.title.trim().length === 0 || newTask.title.length > MAX_TITLE_LENGTH) return false
+    if (typeof newTask.title !== 'string' || newTask.title.trim().length === 0 || newTask.title.trim().length > MAX_TITLE_LENGTH) return false
     if (typeof newTask.deadline !== 'string' || !isValidCalendarDate(newTask.deadline)) return false
   }
 
@@ -86,19 +92,67 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
   if (!body || !Array.isArray(body.entries) || body.entries.length === 0) {
     return envelope(event, 400, ErrorCodes.ValidationError, 'Vul minstens één schoolsessie in.')
   }
+  if (body.entries.length > MAX_ENTRIES) {
+    return envelope(event, 400, ErrorCodes.ValidationError, `Te veel regels in één keer (max ${MAX_ENTRIES}).`)
+  }
   if (!body.entries.every(isValidEntry)) {
     return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige taak of bestede tijd.')
   }
+  // Review-fix (chunk 3, 2026-09-06): een dubbele rowId werd voorheen gewoon twee keer
+  // verwerkt — dezelfde sessie kreeg dan tweemaal bestede tijd afgetrokken. `rowId` is per
+  // definitie uniek per rij (client-gegenereerd), dus een dubbele `rowId` is altijd een
+  // client-bug — dat blokkeert de hele batch terecht (er is geen zinnige "welke van de twee
+  // bedoelde je" per-regel-uitkomst). Een dubbele `taskId` kan wél een legitieme invoer zijn
+  // (twee schooluren van hetzelfde vak op één dag) — die tweede/latere rij wordt hier voorlopig
+  // per-regel afgewezen i.p.v. de hele batch te blokkeren (ronde 2, 2026-09-06 — was eerst óók
+  // een hele-batch-400, in tegenspraak met dit bestand se eigen "per-regel resultaat"-contract).
+  // **Nog niet ondersteund, bewust:** de twee rijen samenvoegen (opgetelde `actualMinutes`)
+  // zou de eigenlijke oplossing zijn voor dat legitieme geval — vergt een productbeslissing
+  // van Hillebrand over hoe zo'n samengevoegde rij aan de gebruiker getoond moet worden.
+  const rowIds = new Set<string>()
+  for (const entry of body.entries) {
+    if (rowIds.has(entry.rowId)) {
+      return envelope(event, 400, ErrorCodes.ValidationError, 'Dubbele rij in de batch.')
+    }
+    rowIds.add(entry.rowId)
+  }
 
   const results: SchoolSessionResult[] = []
+  const taskIdsSeen = new Set<string>()
 
   for (const entry of body.entries) {
+    if (entry.taskId && taskIdsSeen.has(entry.taskId)) {
+      results.push({ rowId: entry.rowId, ok: false, message: 'Deze taak komt al voor in de batch.' })
+      continue
+    }
+    if (entry.taskId) taskIdsSeen.add(entry.taskId)
+
+    // Review-fix (chunk 3, 2026-09-06): voor een `newTask`-regel bestond het risico dat
+    // `createTask()` slaagde maar een latere stap in dezelfde regel (bv. geen geplande sessie,
+    // of `replanAfterSession` die faalt) faalde — de regel werd dan `ok: false` gerapporteerd
+    // terwijl de taak al persistent was. Een client-retry van diezelfde (nog steeds gefaalde)
+    // rij riep `createTask()` dan nogmaals aan, wat een orphan-duplicaat opleverde.
+    // `createdTaskId` volgt of déze regel zelf een taak aanmaakte; `failRow` compenseert
+    // (ronde 2, 2026-09-06: oorspronkelijk alleen in de `catch`, niet op de `continue`-paden
+    // hieronder — een taak zonder geplande sessie liet zo alsnog een wees achter).
+    let createdTaskId: string | null = null
+    async function failRow(message: string): Promise<void> {
+      if (createdTaskId) {
+        try {
+          await deleteTask(session!.user.id, createdTaskId)
+        } catch (rollbackFout) {
+          console.error(`[school-sessions] Kon net-aangemaakte taak ${createdTaskId} niet compenserend verwijderen na mislukte regel:`, rollbackFout)
+        }
+      }
+      results.push({ rowId: entry.rowId, ok: false, message })
+    }
+
     try {
       let taskId = entry.taskId
 
       if (entry.newTask) {
         if (entry.newTask.deadline < todayInAmsterdam()) {
-          results.push({ rowId: entry.rowId, ok: false, message: 'Deadline mag niet in het verleden liggen.' })
+          await failRow('Deadline mag niet in het verleden liggen.')
           continue
         }
 
@@ -117,13 +171,14 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
           needs: []
         })
         taskId = task.id
+        createdTaskId = task.id
       } else {
         // Ownership-check: zelfde "niet-bestaand en niet-eigen krijgen dezelfde 404"-precedent
         // als sessions/[sessionId]/replan.post.ts — hier als per-regel resultaat i.p.v. een
         // hele-aanroep-404, zodat de overige regels van de batch gewoon doorgaan.
         const task = await getTaskById(taskId as string)
         if (!task || task.userId !== session.user.id) {
-          results.push({ rowId: entry.rowId, ok: false, message: 'Taak niet gevonden.' })
+          await failRow('Taak niet gevonden.')
           continue
         }
       }
@@ -132,7 +187,7 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
       // aparte sessionId nodig van de client.
       const taskSession = await getSessionForTask(taskId as string)
       if (!taskSession) {
-        results.push({ rowId: entry.rowId, ok: false, message: 'Geen geplande sessie voor deze taak.' })
+        await failRow('Geen geplande sessie voor deze taak.')
         continue
       }
 
@@ -145,7 +200,7 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
       results.push({ rowId: entry.rowId, ok: true })
     } catch (fout) {
       console.error('[school-sessions] Kon één schoolsessie niet verwerken:', fout)
-      results.push({ rowId: entry.rowId, ok: false, message: 'Kon deze sessie niet opslaan.' })
+      await failRow('Kon deze sessie niet opslaan.')
     }
   }
 

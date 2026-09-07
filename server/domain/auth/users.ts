@@ -61,7 +61,23 @@ export async function getHiddenCalendarTitlesFor(userId: string): Promise<string
   return user.hiddenCalendarTitles
 }
 
+// Review-fix (chunk 3, 2026-09-06): zonder enige grens kon `hiddenCalendarTitles` onbeperkt
+// groeien (geen max lengte, geen max aantal) — dezelfde soort ongebonden-invoer-fout als
+// elders in de API al wordt afgevangen (`MAX_TITLE_LENGTH` op taaktitels).
+export const MAX_HIDDEN_CALENDAR_TITLE_LENGTH = 200
+export const MAX_HIDDEN_CALENDAR_TITLES = 50
+
+export class HiddenCalendarTitleLimitError extends Error {}
+
 export async function addHiddenCalendarTitleFor(userId: string, title: string): Promise<string[]> {
+  if (title.length > MAX_HIDDEN_CALENDAR_TITLE_LENGTH) {
+    throw new HiddenCalendarTitleLimitError(`Titel is te lang (max ${MAX_HIDDEN_CALENDAR_TITLE_LENGTH} tekens).`)
+  }
+  const existing = await getHiddenCalendarTitlesFor(userId)
+  const alreadyPresent = existing.some(t => t.toLowerCase() === title.toLowerCase())
+  if (!alreadyPresent && existing.length >= MAX_HIDDEN_CALENDAR_TITLES) {
+    throw new HiddenCalendarTitleLimitError(`Maximaal ${MAX_HIDDEN_CALENDAR_TITLES} verborgen agenda-items.`)
+  }
   return addHiddenCalendarTitle(userId, title)
 }
 

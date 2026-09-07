@@ -43,6 +43,19 @@ const activeTab = ref<TabKey>('beschikbare-tijd')
         >{{ tab.label }}</button>
       </nav>
 
+      <!-- Review-fix (chunk E, ronde 1, 2026-09-06 — Edge Case Hunter), TERUGGEDRAAID in
+           ronde 2 (Architecture Auditor): `KeepAlive` loste de mid-save-tabwissel-race op,
+           maar beide panelen doen hun fetch top-level in `<script setup>` (`await
+           useFetch(...)`), wat maar één keer per component-*instantie* draait — met
+           `KeepAlive` blijft die instantie voor de rest van de paginasessie in leven, dus een
+           tabwissel ververst de data niet meer. Voor `InstellingenBeschikbareTijd` (AD-10's
+           enige bron voor de beschikbare-tijd-agenda) betekent dat: wijzig de koppeling
+           elders, wissel van tabblad en terug, en het scherm toont de verouderde waarde. Die
+           nieuwe staleness weegt zwaarder dan de mid-save-race die de fix moest oplossen
+           (zeldzaam: vereist een tabwissel binnen exact het venster van een lopende auto-
+           save). Terug naar gewoon `v-if`/`v-else-if` — het onderliggende gat blijft
+           gedocumenteerd in deferred-work.md; een echte fix hoort in de panelen zelf (een
+           toekomstige chunk), niet in deze tab-shell. -->
       <section id="settings-content" class="settings-content">
         <InstellingenBeschikbareTijd v-if="activeTab === 'beschikbare-tijd'" />
         <InstellingenVerborgenAgendaItems v-else-if="activeTab === 'verborgen-agenda-items'" />

@@ -163,6 +163,13 @@ function getHandler(variant: OAuthScopeVariant) {
         // cumulatief meer) teruggeven dan gevraagd.
         const hasCalendarWriteScope = (tokens.scope ?? '').split(' ').includes(CALENDAR_WRITE_SCOPE)
 
+        const dbUser = await loginWithGoogle({
+          googleSubjectId: user.sub,
+          calendarAccessToken: tokens.access_token,
+          calendarRefreshToken: tokens.refresh_token,
+          hasCalendarWriteScope
+        })
+
         // UJ-10/AD-9: bepaal vóór `startNieuweSessie()` (die de bestaande sessie wist) of
         // dit een publieke-computer-sessie moet worden. Twee bronnen, in volgorde:
         // 1. De kortlevende cookie van de eerste leg (normale login vanaf 5.1-inlogscherm).
@@ -173,15 +180,17 @@ function getHandler(variant: OAuthScopeVariant) {
         //    (ook een her-login vanaf bijv. een bookmark) telt uitsluitend de pending-cookie —
         //    anders zou een her-login zónder het vinkje het vinkje van een nog actieve oude
         //    publieke-computer-sessie ongewenst opnieuw opleggen (code review 2026-08-23).
+        //
+        // Review-fix (chunk 3, 2026-09-06): `existingSession.isPublicComputer` alleen
+        // overnemen wanneer de zojuist ingelogde `dbUser` daadwerkelijk dezelfde gebruiker is
+        // als de sessie die hier al lag. Zonder deze check kon Google's accountkiezer bij de
+        // `write`-scope-upgrade een ánder account teruggeven dan waarmee Evelien was ingelogd
+        // — de gebruiker werd dan stilzwijgend gewisseld, mét het publieke-computer-vinkje van
+        // het oude, niet-gerelateerde account.
         const existingSession = await getUserSession(event)
-        const isPublicComputer = pendingPublicComputer || (variant === 'write' && existingSession.isPublicComputer === true)
-
-        const dbUser = await loginWithGoogle({
-          googleSubjectId: user.sub,
-          calendarAccessToken: tokens.access_token,
-          calendarRefreshToken: tokens.refresh_token,
-          hasCalendarWriteScope
-        })
+        const sameUserAsExistingSession = existingSession.user?.id === dbUser.id
+        const isPublicComputer = pendingPublicComputer
+          || (variant === 'write' && sameUserAsExistingSession && existingSession.isPublicComputer === true)
 
         await startNieuweSessie(event)
 

@@ -19,11 +19,25 @@ const days = ref<WeekDayDto[]>([])
 const busyDate = ref<string | null>(null)
 const acceptErrorDate = ref<string | null>(null)
 
+// Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): gedeelde 15s-timeout, zelfde precedent als
+// `herstel/tekort-oplossen.vue`'s `withTimeout` — zonder dit bleef een hangende `$fetch`
+// (loadWeek, accepteren of controlerenOpnieuw) `isLoading`/`busyDate` voorgoed op waar
+// staan, met een eeuwig draaiende skeleton resp. een voor altijd "Bezig..."-knop.
+const WEEK_TIMEOUT_MS = 15_000
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), WEEK_TIMEOUT_MS)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
+}
+
 async function loadWeek() {
   isLoading.value = true
   loadError.value = false
   try {
-    const response = await $fetch<WeekOverviewResponse>('/api/week')
+    const response = await withTimeout($fetch<WeekOverviewResponse>('/api/week'))
     days.value = response.days
   } catch (fout) {
     if (is401(fout)) {
@@ -48,18 +62,68 @@ async function accepteren(day: WeekDayDto) {
     // actuele staat tonen, ongeacht welk niveau werd toegepast. Bewust geen `loadWeek()`
     // (die zet `isLoading` en verbergt dan de hele lijst achter de Laden-state) — de
     // Bezig-spinner op de knop is hier voldoende feedback.
-    await $fetch(`/api/week/${encodeURIComponent(day.date)}/suggestion/accept`, { method: 'POST' })
-    const response = await $fetch<WeekOverviewResponse>('/api/week')
-    days.value = response.days
-  } catch (fout) {
-    if (is401(fout)) {
-      await navigateTo('/inloggen')
+    // Review-fix (chunk 3, 2026-09-06): het id van de suggestie die Evelien daadwerkelijk
+    // op het scherm zag wordt meegestuurd — de route accepteert alleen nog exact déze
+    // aanbeveling, nooit "wat op dit moment toevallig #1 is" (die kon tussen het tonen en
+    // het klikken van tier zijn veranderd, tot en met "vervallen").
+    try {
+      await withTimeout($fetch<unknown>(`/api/week/${encodeURIComponent(day.date)}/suggestion/accept`, {
+        method: 'POST',
+        body: { id: day.suggestion?.id }
+      }))
+    } catch (fout) {
+      if (is401(fout)) {
+        await navigateTo('/inloggen')
+        return
+      }
+      // Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk
+      // van elkaar gevonden): een 400 hier betekent bijna altijd dat `day.date` inmiddels
+      // in het verleden ligt (het tabblad stond open over middernacht heen) — de week
+      // gewoon herladen i.p.v. een blijvend-herhalende foutmelding tonen die een retry
+      // uitlokt die nooit kan slagen.
+      if ((fout as FetchError | undefined)?.statusCode === 400) {
+        await loadWeek()
+        return
+      }
+      // Review-fix (ronde 2, chunk E, 2026-09-06 — Architecture Auditor): een 404 hier is
+      // een expliciet schuldvrije boodschap van de server ("deze suggestie is niet meer
+      // geldig, de planning is inmiddels gewijzigd") — zelfde precedent als
+      // `tekort-oplossen.vue`'s `accepteren`. Herladen i.p.v. een technische foutmelding met
+      // een dode "probeer opnieuw" tonen die exact dezelfde 404 zou herhalen.
+      if ((fout as FetchError | undefined)?.statusCode === 404) {
+        await loadWeek()
+        return
+      }
+      // Review-fix (ronde 2, chunk E, 2026-09-06 — Blind Hunter): een timeout (`withTimeout`)
+      // betekent niet per se een mislukte mutatie — de server-side POST kan best zijn
+      // doorgegaan. Een "probeer opnieuw" zou dan een tweede, mogelijk destructieve
+      // aanbeveling toepassen op een dag die al gewijzigd is. Herladen toont de echte,
+      // actuele staat i.p.v. een retry uit te lokken op een onzekere uitkomst.
+      if ((fout as Error | undefined)?.message === 'timeout') {
+        await loadWeek()
+        return
+      }
+      acceptErrorDate.value = day.date
       return
     }
-    // Review-patch: eerder stil — de knop sprong terug naar Default zonder dat Evelien
-    // te zien kreeg dat het niet gelukt is. De kaart blijft gewoon staan (met de nu
-    // mogelijk verouderde suggestie), maar met een zichtbare foutmelding erbij.
-    acceptErrorDate.value = day.date
+    // Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+    // elkaar gevonden): eigen try/catch voor de ververs-call — voorheen deelde deze dezelfde
+    // catch als de mutatie hierboven, waardoor een geslaagde mutatie gevolgd door een
+    // mislukte ververs als "Kon deze aanpassing niet doorvoeren" werd getoond. Dat nodigde
+    // uit tot een retry die de nu-alweer-actuele (of een volgende) aanbeveling nogmaals
+    // toepast — mogelijk een taak laten vervallen die al eerder verplaatst was.
+    try {
+      const response = await withTimeout($fetch<WeekOverviewResponse>('/api/week'))
+      days.value = response.days
+    } catch (fout) {
+      if (is401(fout)) {
+        await navigateTo('/inloggen')
+        return
+      }
+      // De mutatie is al toegepast — alleen de ververs mislukte. Geen "Probeer opnieuw"
+      // op de mutatie zelf; gewoon opnieuw laden lost het weergaveprobleem op.
+      await loadWeek()
+    }
   } finally {
     busyDate.value = null
   }
@@ -74,15 +138,34 @@ async function controlerenOpnieuw(day: WeekDayDto) {
   busyDate.value = day.date
   acceptErrorDate.value = null
   try {
-    await $fetch(`/api/week/${encodeURIComponent(day.date)}/suggestion/recheck`, { method: 'POST' })
-    const response = await $fetch<WeekOverviewResponse>('/api/week')
-    days.value = response.days
-  } catch (fout) {
-    if (is401(fout)) {
-      await navigateTo('/inloggen')
+    try {
+      await withTimeout($fetch<unknown>(`/api/week/${encodeURIComponent(day.date)}/suggestion/recheck`, { method: 'POST' }))
+    } catch (fout) {
+      if (is401(fout)) {
+        await navigateTo('/inloggen')
+        return
+      }
+      // Review-fix (ronde 2, chunk E, 2026-09-06 — Blind Hunter): dezelfde asymmetrie als
+      // `accepteren` had vóór ronde 2 — recheck zit achter dezelfde datumvenster-validatie,
+      // dus een over-middernacht-verouderde `day.date` gaf hier nog steeds een
+      // blijvend-herhalende foutmelding i.p.v. de week te herladen.
+      if ((fout as FetchError | undefined)?.statusCode === 400) {
+        await loadWeek()
+        return
+      }
+      acceptErrorDate.value = day.date
       return
     }
-    acceptErrorDate.value = day.date
+    try {
+      const response = await withTimeout($fetch<WeekOverviewResponse>('/api/week'))
+      days.value = response.days
+    } catch (fout) {
+      if (is401(fout)) {
+        await navigateTo('/inloggen')
+        return
+      }
+      await loadWeek()
+    }
   } finally {
     busyDate.value = null
   }
@@ -159,7 +242,7 @@ onMounted(loadWeek)
                 type="button"
                 class="week-day-suggestion-recheck-button"
                 :aria-label="`Controleer opnieuw of het knelpunt is opgelost voor ${formatDayLabel(day.date)}`"
-                :disabled="busyDate === day.date"
+                :disabled="!!busyDate"
                 @click="controlerenOpnieuw(day)"
               ><span v-if="busyDate === day.date" class="week-spinner" aria-hidden="true" />{{ busyDate === day.date ? 'Bezig...' : 'Ik heb dit aangepast — controleer opnieuw' }}</button>
               <button
@@ -168,7 +251,7 @@ onMounted(loadWeek)
                 type="button"
                 class="week-day-suggestion-accept-button"
                 :aria-label="`Suggestie accepteren voor ${formatDayLabel(day.date)}`"
-                :disabled="busyDate === day.date"
+                :disabled="!!busyDate"
                 @click="accepteren(day)"
               ><span v-if="busyDate === day.date" class="week-spinner" aria-hidden="true" />{{ busyDate === day.date ? 'Bezig...' : 'Accepteren' }}</button>
             </div>

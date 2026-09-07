@@ -1,5 +1,5 @@
 import { getUserById } from '../../data/users'
-import { getTasksWithSessionOnDate } from '../../data/tasks'
+import { getTasksWithSessionOnDateIncludingCompleted } from '../../data/tasks'
 import {
   acquireHomeworkBlockSyncLock,
   deleteHomeworkBlock,
@@ -108,7 +108,18 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
       return
     }
 
-    const taskSessions = await getTasksWithSessionOnDate(userId, date)
+    // Review-fix (ronde 4, 2026-09-06): `getTasksWithSessionOnDate` (capaciteits-check)
+    // sluit sinds ronde 3 al-verstreken sessies van vandaag uit — correct voor "hoeveel
+    // ruimte is er nog", maar verkeerd hier: dit bestand bepaalt welke Calendar-blokken
+    // moeten BESTAAN voor déze datum, inclusief sessies die al hebben plaatsgevonden (een
+    // afgelopen afspraak verdwijnt ook niet uit een echte agenda). Met de capaciteits-
+    // functie verdween een al-verstreken sessie hier stilzwijgend uit de berekende set,
+    // waardoor `matchBlocks` het bijbehorende, al-bestaande Calendar-event als "overbodig"
+    // zag en verwijderde — het agenda-blok voor een sessie die Evelien al had gedaan
+    // verdween dan uit haar echte Google Calendar. `getTasksWithSessionOnDateIncludingCompleted`
+    // heeft niet deze elapsed-filter (en toont ook afgeronde taken, wat hier eveneens
+    // correct is — een afgeronde taak se sessie hoort nog steeds op de agenda te staan).
+    const taskSessions = await getTasksWithSessionOnDateIncludingCompleted(userId, date)
 
     const computedBlocks = sessionsToBlocks(
       taskSessions.map(({ task, session }) => ({

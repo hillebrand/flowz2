@@ -1,6 +1,6 @@
 import { readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
-import { detectAnyShortfall, detectShortfallForDate, generateShortfallRecommendations } from '../../domain/scheduling/shortfall'
+import { detectAnyShortfall, detectShortfallForDateOrOverrun, generateShortfallRecommendations } from '../../domain/scheduling/shortfall'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import { isValidCalendarDate, MAX_MINUTES_PER_DAY } from '../../../shared/utils/availability'
 import type { ShortfallRequestInput, ShortfallResponse } from '../../../shared/types/shortfall'
@@ -40,7 +40,15 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
     return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
-  const body = await readBody<Partial<ShortfallRequestInput>>(event).catch(() => ({}) as Partial<ShortfallRequestInput>)
+  // Review-fix (chunk 3, 2026-09-06): een kapotte/leeg-onparseerbare body werd voorheen
+  // stil behandeld als "geen enkel veld ingevuld" — een client-bug degradeerde dan
+  // stilzwijgend naar `detectAnyShortfall` over de hele horizon i.p.v. een zichtbare
+  // validatiefout, hetzelfde patroon dat elke andere body-lezende route hier wél afdwingt.
+  const body = await readBody<Partial<ShortfallRequestInput>>(event).catch(() => null)
+  if (body === null) {
+    setResponseStatus(event, 400)
+    return envelope(400, ErrorCodes.ValidationError, 'Ongeldig verzoek.')
+  }
   if (body?.date !== undefined && (typeof body.date !== 'string' || !isValidCalendarDate(body.date))) {
     setResponseStatus(event, 400)
     return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
@@ -69,7 +77,7 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
     const targetDate = body?.date ?? todayInAmsterdam()
 
     const shortfall = body?.date || overrideTotalMinutes !== null
-      ? await detectShortfallForDate(session.user.id, targetDate, overrideTotalMinutes ?? undefined)
+      ? await detectShortfallForDateOrOverrun(session.user.id, targetDate, undefined, overrideTotalMinutes ?? undefined)
       : await detectAnyShortfall(session.user.id)
 
     if (!shortfall) {

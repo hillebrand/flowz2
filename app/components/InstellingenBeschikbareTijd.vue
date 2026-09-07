@@ -159,7 +159,7 @@ const homeworkColorError = ref<string | null>(null)
 // paginaverversing weer de "kies een kleur"-placeholder, ook al had de gebruiker al
 // gekozen. Werd relevanter zodra kleur verplicht werd. `server: false`, zelfde reden als
 // de andere fetches op deze pagina.
-const { data: homeworkColorData, error: homeworkColorLoadError } = await useFetch<HomeworkCalendarColorState>(
+const { data: homeworkColorData, error: homeworkColorLoadError, status: homeworkColorStatus } = await useFetch<HomeworkCalendarColorState>(
   '/api/settings/homework-calendar-color',
   { server: false }
 )
@@ -169,6 +169,19 @@ watch(homeworkColorLoadError, (waarde) => {
     navigateTo('/inloggen')
   }
 }, { immediate: true })
+
+// Review-fix (chunk F, 2026-09-07 — Blind Hunter): een niet-401-fout op déze GET liet
+// `homeworkColorId` voorgoed op `null` staan, wat identiek rendert aan "nog nooit een kleur
+// gekozen" (`avail-homework-color-select`'s placeholder) — zonder enige foutmelding of
+// retry-knop, terwijl kleur verplicht is (zie het commentaar bij `homeworkColorId` hierboven).
+const homeworkColorNonAuthLoadError = computed(() => !!homeworkColorLoadError.value && !is401(homeworkColorLoadError.value))
+
+// Review-fix (chunk F, 2026-09-07 — Blind Hunter, verfijnd in ronde 2 — Edge Case Hunter):
+// de select had geen eigen laadstaat — 'm alleen op `homeworkColorPending` blokkeren liet 'm
+// al vóór de rehydratie-GET terugkomt interactief. Op `status` i.p.v. "geen data en geen
+// fout" gebaseerd — dat laatste zou bij een (theoretisch) lege 200-respons de select voorgoed
+// geblokkeerd laten zonder enige foutmelding, `status` kent geen zo'n dubbelzinnige tussenstaat.
+const homeworkColorLoading = computed(() => homeworkColorStatus.value === 'pending' || homeworkColorStatus.value === 'idle')
 
 watch(homeworkColorData, (waarde) => {
   if (waarde) homeworkColorId.value = waarde.colorId
@@ -211,7 +224,13 @@ async function wijzigHomeworkColor(event: Event) {
     // waarde op). Zonder dit expliciete herstel toont de select dus een keuze die nooit
     // is opgeslagen (code review 2026-08-01).
     select.value = homeworkColorId.value === null ? '' : String(homeworkColorId.value)
-    homeworkColorError.value = 'Kon de kleur niet opslaan. Probeer het opnieuw.'
+    // Review-fix (chunk F, 2026-09-07 — Blind Hunter, tekst gecorrigeerd in ronde 2 —
+    // Architecture Auditor): zelfde `foutmeldingUit()`-precedent als
+    // `wijzigAvailabilityCalendar` hierboven. `homework-calendar-color.patch.ts` kent
+    // vandaag maar één validatiefout (colorId moet 1-11 zijn, onbereikbaar vanaf déze
+    // 11-optie-select) — dit dient dus vooral als consistente voorbereiding op een
+    // toekomstige server-side validatieregel, niet als fix voor een vandaag bereikbare fout.
+    homeworkColorError.value = foutmeldingUit(fout, 'Kon de kleur niet opslaan. Probeer het opnieuw.')
     console.error('[beschikbare-tijd] Kon huiswerk-agendakleur niet opslaan:', fout)
   } finally {
     homeworkColorPending.value = false
@@ -293,6 +312,10 @@ async function wijzigHomeworkColor(event: Event) {
         geen is.
       </p>
 
+      <p v-if="homeworkColorNonAuthLoadError" id="avail-homework-color-load-error" class="avail-load-error" role="alert">
+        Kon je opgeslagen kleurkeuze niet ophalen. Probeer de pagina te verversen.
+      </p>
+
       <div class="avail-homework-color-row">
         <span
           v-if="homeworkColorSwatch"
@@ -304,7 +327,7 @@ async function wijzigHomeworkColor(event: Event) {
         <select
           id="avail-homework-color-select"
           class="avail-homework-color-select"
-          :disabled="homeworkColorPending"
+          :disabled="homeworkColorPending || homeworkColorLoading"
           :value="homeworkColorId === null ? '' : String(homeworkColorId)"
           @change="wijzigHomeworkColor"
         >

@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 
 # Correct Course (2026-09-02, sprint-change-proposal-2026-09-02.md): beschikbare tijd komt
 # voortaan uit een door Evelien aangewezen Google Calendar-agenda (AD-10) i.p.v. een
@@ -57,6 +57,14 @@ last_updated: 2026-09-04
 # conflict-detection.ts en session-time-check.ts) — alleen `transparency !== 'transparent'`
 # telt nog als blokkerend. Getypecheckt, gebouwd en opnieuw gedeployed naar flowz.fyi
 # (dev-stage); vastgelegd in de story se Change Log/File List.
+
+# Correct Course (2026-09-05, sprint-change-proposal-2026-09-05.md): Flowz plant per taak
+# voortaan alle benodigde sessies tot het doelmoment vooraf (i.p.v. 1 sessie, hergebruikt
+# bij elke herberekening), zodat tijdgebrek meteen bij taak-aanmaken gedetecteerd wordt
+# (FR15/UJ-6) en sessies daadwerkelijk binnen echte beschikbare-tijd-blokken landen. Geen
+# PRD/architectuurwijziging nodig (AD-1/AD-3 beschreven dit model al) — reopent 3-1, 3-4,
+# 3-5 (Epic 3) en 4-7 (Epic 4). Epic 6 (6-1/6-2/6-5/6-7) blijft done maar moet na deze
+# rework herverifieerd worden (geen AC-tekstwijziging nodig, erft de correctie via 3-5).
 
 project: Flowz
 project_key: NOKEY
@@ -80,12 +88,12 @@ development_status:
   2-5-samenvattende-huiswerk-blokken-per-dag: done # implementation-note toegevoegd 2026-09-02 (plaatsing begrensd door blokken) — raakt Epic 3, niet deze story zelf
   epic-2-retrospective: optional
 
-  epic-3: in-progress
-  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done # 2026-09-03: Task 7 (AD-10-rework) geïmplementeerd, code review (Opus 5) + fixes doorgevoerd, akkoord Hillebrand, zie het bestand se Change Log
+  epic-3: done
+  3-1-taak-aanmaken-kerngegevens-met-doelmoment-berekening: done # HEROPEND 2026-09-05, sprint-change-proposal-2026-09-05.md: plant nu alle sessies t/m doelmoment binnen echte beschikbare-tijd-blokken, verdeeld richting het doelmoment. Task 8 + code review-ronde 2 (Blind Hunter/Edge Case Hunter/Acceptance Auditor, Opus 5 — 3 decisions + 12 patches, alle doorgevoerd) afgerond, live geverifieerd + gedeployed op flowz.fyi. Zie de story se Review Findings/Change Log voor het volledige overzicht.
   3-2-deeltaken-automatische-tijdsom: done
   3-3-benodigdheden-met-auto-suggestie-per-vak: done
-  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done # 2026-09-03: AD-10-note geverifieerd en afgesloten — sortByVolgorde lift automatisch mee met 3.1's Task 7-rework, geen code gewijzigd
-  3-5-idempotente-herberekening-bij-wijzigingen: done # nieuwe AC 2026-09-02: app-open als triggermoment — nog te implementeren, volgt bij 6-7
+  3-4-volgorde-algoritme-bij-meerdere-concurrerende-taken: done # HEROPEND 2026-09-05, sprint-change-proposal-2026-09-05.md. Meegenomen tijdens 3-1 Task 8 + review-ronde 2 (zie 3-1's story-bestand): urgentie/uitloop/prioriteit-criterium geldt nu over de volledige plannings-horizon. Live meegeverifieerd, gedeployed.
+  3-5-idempotente-herberekening-bij-wijzigingen: done # HEROPEND 2026-09-05, sprint-change-proposal-2026-09-05.md. Meegenomen tijdens 3-1 Task 8 + review-ronde 2 (zie 3-1's story-bestand): `recalculateTaskPlanning` regenereert nu atomair de volledige sessiereeks per taak, met herstelde concurrency-lock. Live meegeverifieerd, gedeployed. De nog openstaande "app-open als triggermoment"-AC (2026-09-02) blijft open — ongewijzigd door deze rework.
   epic-3-retrospective: optional
 
   epic-4: done
@@ -95,7 +103,7 @@ development_status:
   4-4-sessie-actief-timer-pauzeren-subtaken-afronden-uitstellen: done
   4-5-sessie-actief-wegnavigeer-bescherming: done
   4-6-sessie-afronden-overzicht-resterende-tijd-aanpassen: done
-  4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten: done
+  4-7-sessie-afronden-fire-and-forget-herplanning-bij-verlaten: done # HEROPEND 2026-09-05, sprint-change-proposal-2026-09-05.md. Meegenomen tijdens 3-1 Task 8 + review-ronde 2 (zie 3-1's story-bestand): `replanAfterSession` geeft de zojuist afgeronde sessie nu expliciet als `excludeSessionId` door aan `recalculateTaskPlanning` (atomair, met herstelde concurrency-lock), en trekt bestede tijd nu ook af als de resterende tijd niet is ingevuld. Live geverifieerd via `POST /api/sessions/{id}/replan`: minder sessies nodig (4→1), meer sessies nodig (1→5), volledig afronden (1→0) — alle drie correct.
   epic-4-retrospective: optional
 
   epic-5: done
@@ -104,14 +112,14 @@ development_status:
   5-3-taak-bewerken-hergebruik-taak-formulier: done
   epic-5-retrospective: optional
 
-  epic-6: done
-  6-1-tijdgebrek-detectie-escalatie-service: done # 2026-09-03: "tijd verruimen" heringevoerd als instructieve tier (geen accept-effect meer); recheck = herhaalde live-detectie, geen nieuwe functie nodig — live geverifieerd
-  6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — alsnog geïmplementeerd 2026-09-04 (was in de code aanwezig maar nooit aan de knop gewired), zie de story se Change Log
+  epic-6: done # LET OP 2026-09-05: 3-1/3-4/3-5/4-7's rework + code review-ronde 2 (sprint-change-proposal-2026-09-05.md) is geland en gedeployed. shortfall.ts/apply-recommendation.ts/energy.ts/session-placement.ts zijn aangepast (sessie-id's expliciet, deadline-overrun-detectie nu taak-specifiek, herplannen/energie-pad blok-bewust). Live geverifieerd: tekort-detectie bij taak-aanmaken (6.1), tekort-oplossen-scherm accept-flow incl. "vervallen" en twee-gelijktijdige-overruns (6.2). NOG NIET apart live getest: 6.4's energie-pad (relocated/pulledForward/shortened met een multi-sessie-taak, nu met de nieuwe block-aware placeSessionOnDate), 6.5's weekoverzicht-recheck-knop, 6.7's opstart-check met een echte auto-herplan-iteratie. Ook genoteerd: herplannen/energie se kandidaat-zoeklus blijft aggregaat-gebaseerd (Story 3.1's Open Question #9) — de uiteindelijke plaatsing faalt hard i.p.v. stil een blok te schenden, dus geen datacorruptie, wel een mogelijke onverwachte foutmelding in een zeldzaam geval. Aanbevolen als aanvullende verificatie.
+  6-1-tijdgebrek-detectie-escalatie-service: done # 2026-09-03: "tijd verruimen" heringevoerd als instructieve tier (geen accept-effect meer); recheck = herhaalde live-detectie, geen nieuwe functie nodig — live geverifieerd. HERTESTEN na sprint-change-proposal-2026-09-05.md
+  6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — alsnog geïmplementeerd 2026-09-04 (was in de code aanwezig maar nooit aan de knop gewired), zie de story se Change Log. HERTESTEN na sprint-change-proposal-2026-09-05.md
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
   6-4-vandaag-niet-als-gepland-te-weinig-energie-pad: done
-  6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — alsnog geïmplementeerd 2026-09-04, zie de story se Change Log
+  6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — alsnog geïmplementeerd 2026-09-04, zie de story se Change Log. HERTESTEN na sprint-change-proposal-2026-09-05.md
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
-  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: done # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + code review (Opus 5, 2 patches: GET→POST, schema-comment) + herdeployed 2026-09-04. Epic 6 hiermee volledig done.
+  6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: done # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + code review (Opus 5, 2 patches: GET→POST, schema-comment) + herdeployed 2026-09-04. Epic 6 hiermee volledig done. HERTESTEN na sprint-change-proposal-2026-09-05.md
   epic-6-retrospective: optional
 
   epic-7: done

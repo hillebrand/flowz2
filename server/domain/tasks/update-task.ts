@@ -51,6 +51,14 @@ export async function updateTask(userId: string, taskId: string, input: UpdateTa
     subtasks: input.subtasks
   })
 
+  // Review-fix (code review-ronde 3, 2026-09-06): een afgeronde of laten-vervallen taak
+  // hoort niet meer herpland te worden — zonder deze guard kreeg zo'n taak via een
+  // bewerking stilzwijgend weer verse toekomstige sessies en Calendar-blokken, alsof ze nog
+  // open stond. De metadata-wijziging hierboven mag wel gewoon doorgaan.
+  if (task.completedAt || task.droppedAt) {
+    return getTaskById(taskId)
+  }
+
   // Ná het committen — de functie leest de actuele taakstaat (AD-1: geen tussentijds
   // opgeslagen planningsstaat, altijd de huidige Task/Session/AvailableTime-staat).
   const { task: updatedTask } = await recalculateTaskPlanning(taskId)

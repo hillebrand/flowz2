@@ -1,7 +1,7 @@
 import { getRouterParam, readBody } from 'h3'
 import { ErrorCodes, type ErrorEnvelope } from '../../../../../domain/errors'
 import { applyShortfallRecommendation } from '../../../../../domain/scheduling/apply-recommendation'
-import { detectShortfallForDate, generateShortfallRecommendations } from '../../../../../domain/scheduling/shortfall'
+import { detectShortfallForDateOrOverrun, generateShortfallRecommendations } from '../../../../../domain/scheduling/shortfall'
 import { isValidCalendarDate } from '../../../../../../shared/utils/availability'
 import type { ShortfallRecommendationActionInput, ShortfallRecommendationAcceptResponse } from '../../../../../../shared/types/shortfall'
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
   }
 
   try {
-    const shortfall = await detectShortfallForDate(session.user.id, body.date)
+    const shortfall = await detectShortfallForDateOrOverrun(session.user.id, body.date, recommendationId)
     if (!shortfall) {
       // Tekort is al opgelost (bv. dubbele klik, of een andere aanbeveling loste het al
       // op) — geen foutstate, de client behandelt dit hetzelfde als "Tekort opgelost!".
@@ -49,7 +49,7 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
 
     await applyShortfallRecommendation(session.user.id, target)
 
-    const updatedShortfall = await detectShortfallForDate(session.user.id, body.date)
+    const updatedShortfall = await detectShortfallForDateOrOverrun(session.user.id, body.date, recommendationId)
     const updatedRecommendations = updatedShortfall
       ? await generateShortfallRecommendations(session.user.id, updatedShortfall)
       : []

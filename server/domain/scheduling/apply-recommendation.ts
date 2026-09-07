@@ -1,4 +1,4 @@
-import { dropTask, getSessionForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
+import { dropTask, getSessionById, getSessionsForTask, getTaskById, updateSessionPlacement } from '../../data/tasks'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { placeSessionOnDate } from './session-placement'
 import type { ShortfallRecommendation } from './shortfall'
@@ -36,6 +36,19 @@ function stripRecommendationIdPrefix(id: string, prefix: string): string {
   return id.slice(prefix.length)
 }
 
+// Story 3.1 Task 8 (Correct Course 2026-09-05) — "herplannen"/"inkorten"-aanbevelingen
+// dragen sinds deze rework `tier:taskId:sessionId` (zie `shortfall.ts`) i.p.v. alleen
+// `tier:taskId`: een taak kan nu meerdere sessies hebben, dus alleen het taak-id is niet
+// meer genoeg om ondubbelzinnig "de sessie die op de tekortdag stond" terug te vinden.
+function parseTaskAndSessionId(id: string, prefix: string): { taskId: string, sessionId: string } {
+  const rest = stripRecommendationIdPrefix(id, prefix)
+  const separatorIndex = rest.lastIndexOf(':')
+  if (separatorIndex === -1) {
+    throw new Error(`Aanbeveling-id ${id} mist een sessie-id.`)
+  }
+  return { taskId: rest.slice(0, separatorIndex), sessionId: rest.slice(separatorIndex + 1) }
+}
+
 // Niveau 1: de sessie verplaatsen naar de al-gevonden alternatieve datum
 // (`recommendation.targetDate`, door `findAlternativeDate` bepaald tijdens het genereren).
 // Mutatie zelf zit in het gedeelde `session-placement.ts` (Story 6.4-extractie — `energy.ts`
@@ -44,19 +57,24 @@ function stripRecommendationIdPrefix(id: string, prefix: string): string {
 // herberekent een nieuw doelmoment vanuit de actuele taakstaat en zou de sessie niet per se
 // op déze specifieke, al-gekozen dag plaatsen (zie Story 6.2's "Belangrijk" punt 3).
 async function applyHerplannen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
-  const taskId = stripRecommendationIdPrefix(recommendation.id, 'herplannen:')
+  const { taskId, sessionId } = parseTaskAndSessionId(recommendation.id, 'herplannen:')
   const targetDate = recommendation.targetDate
   if (!targetDate) {
     throw new Error(`Aanbeveling ${recommendation.id} mist een doeldatum.`)
   }
 
   const task = await getTaskById(taskId)
-  const existingSession = await getSessionForTask(taskId)
-  if (!task || !existingSession) {
+  const existingSession = await getSessionById(sessionId)
+  // Review-fix (2026-09-05): expliciete ownership-/samenhangscheck — voorheen werd een
+  // taak/sessie zonder verdere controle gebruikt zodra ze los bestonden. In de praktijk niet
+  // rechtstreeks bereikbaar (aanbevelingen worden altijd vers geregenereerd, gescopet op
+  // `userId`, vóór een accept — zie `accept.post.ts`), maar deze functie moet dat zelf niet
+  // stilzwijgend aannemen.
+  if (!task || !existingSession || task.userId !== userId || existingSession.taskId !== task.id) {
     throw new Error(`Taak of sessie voor aanbeveling ${recommendation.id} niet gevonden.`)
   }
 
-  await placeSessionOnDate(userId, task, existingSession, targetDate)
+  await placeSessionOnDate(userId, existingSession, targetDate)
 }
 
 // Niveau 2 ("tijd verruimen"): **heeft bewust geen accept-effect** (Correct Course
@@ -70,9 +88,11 @@ async function applyHerplannen(userId: string, recommendation: ShortfallRecommen
 // een herhaalde live-detectie, geen aparte accept-actie). Deze functie blijft staan als
 // expliciete, herkenbare fout — mocht een client onverhoopt toch een `verruimen:`-id naar
 // de accept-route sturen — i.p.v. stilzwijgend te "slagen" zonder enig effect.
-async function applyVerruimen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
+async function applyVerruimen(_userId: string, recommendation: ShortfallRecommendation): Promise<void> {
+  // Review-fix (2026-09-05): `userId` niet meer in de foutmelding geïnterpoleerd — een
+  // gebruikers-id hoort niet in logtekst te belanden zonder functionele reden.
   throw new Error(
-    `"Tijd verruimen" heeft geen accept-actie (aanbeveling ${recommendation.id}, user ${userId}) — `
+    `"Tijd verruimen" heeft geen accept-actie (aanbeveling ${recommendation.id}) — `
     + 'gebruik de recheck-actie (Story 6.1/6.2, AD-10) in plaats van accepteren.'
   )
 }
@@ -80,14 +100,21 @@ async function applyVerruimen(userId: string, recommendation: ShortfallRecommend
 // Niveau 3: de sessie se `plannedMinutes` verkorten met de aanbevolen tijdwinst, zelfde
 // startstijdstip (de sessie wordt korter, niet verplaatst).
 async function applyInkorten(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
-  const taskId = stripRecommendationIdPrefix(recommendation.id, 'inkorten:')
+  const { taskId, sessionId } = parseTaskAndSessionId(recommendation.id, 'inkorten:')
   const task = await getTaskById(taskId)
-  const existingSession = await getSessionForTask(taskId)
-  if (!task || !existingSession) {
+  const existingSession = await getSessionById(sessionId)
+  if (!task || !existingSession || task.userId !== userId || existingSession.taskId !== task.id) {
     throw new Error(`Taak of sessie voor aanbeveling ${recommendation.id} niet gevonden.`)
   }
 
   const newPlannedMinutes = existingSession.plannedMinutes - recommendation.gainMinutes
+  // Review-fix (2026-09-05): `gainMinutes` was alleen gevalideerd tegen de sessiestaat op
+  // genereer-moment — tussen genereren en accepteren kan de sessie alweer gewijzigd zijn
+  // (een andere aanbeveling geaccepteerd, een herberekening). Nooit een niet-positieve
+  // sessieduur wegschrijven.
+  if (newPlannedMinutes <= 0) {
+    throw new Error(`Aanbeveling ${recommendation.id} is niet meer geldig — de sessie is inmiddels te kort om verder in te korten.`)
+  }
 
   await updateSessionPlacement(existingSession.id, {
     startsAt: existingSession.startsAt,
@@ -109,15 +136,22 @@ async function applyInkorten(userId: string, recommendation: ShortfallRecommenda
 // precedent als `replanAfterSession`'s "resterende tijd 0"-tak (Story 4.7).
 async function applyVervallen(userId: string, recommendation: ShortfallRecommendation): Promise<void> {
   const taskId = stripRecommendationIdPrefix(recommendation.id, 'vervallen:')
-  const existingSession = await getSessionForTask(taskId)
+  const task = await getTaskById(taskId)
+  if (!task || task.userId !== userId) {
+    throw new Error(`Taak voor aanbeveling ${recommendation.id} niet gevonden.`)
+  }
+  // Story 3.1 Task 8: ALLE sessies van de taak — een taak laten vervallen maakt élke
+  // toekomstige sessie (niet alleen de op de tekortdag staande) overbodig.
+  const existingSessions = await getSessionsForTask(taskId)
 
   await dropTask(taskId)
 
-  if (existingSession) {
+  const distinctDates = new Set(existingSessions.map(session => session.startsAt.slice(0, 10)))
+  for (const date of distinctDates) {
     try {
-      await syncHomeworkBlocksForDate(userId, existingSession.startsAt.slice(0, 10))
+      await syncHomeworkBlocksForDate(userId, date)
     } catch (fout) {
-      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na vervallen van taak ${taskId}:`, fout)
+      console.error(`[scheduling] Kon huiswerk-Calendar-blokken niet synchroniseren na vervallen van taak ${taskId} (${date}):`, fout)
     }
   }
 }

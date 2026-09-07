@@ -4,6 +4,20 @@ useHead({ title: 'Inloggen' })
 const route = useRoute()
 const loginFailed = computed(() => route.query.login_error === '1')
 
+// Review-fix (chunk E, 2026-09-06 — Edge Case Hunter): enige pagina in de app zonder een
+// `loggedIn`-redirect — een reeds-ingelogde gebruiker (browser-terug ná een geslaagde login,
+// of een verouderde bookmark) kreeg hier een volledig functioneel inlogscherm te zien i.p.v.
+// meteen doorgestuurd te worden.
+//
+// Review-fix (ronde 2, chunk E, 2026-09-06 — Architecture Auditor): expliciete uitzondering
+// voor `login_error=1` — zonder deze uitzondering was de guard hierboven sneller dan
+// `onMounted`'s foutmelding-tekst en stuurde 'm meteen door naar Home, waardoor AC #2's
+// "Inloggen mislukt"-melding nooit zichtbaar werd op precies het pad dat 'm toont.
+const { loggedIn } = useUserSession()
+if (loggedIn.value && !loginFailed.value) {
+  await navigateTo('/', { replace: true })
+}
+
 // De foutmelding wordt bewust pas ná mount in de live-regio gezet. Het foutpad is een
 // volledige paginanavigatie naar `/inloggen?login_error=1`, dus bij SSR staat de tekst al
 // in de HTML van de allereerste render — en een live-regio kondigt alleen wijzigingen áán
@@ -27,6 +41,20 @@ const busy = ref(false)
 function onLoginClick() {
   busy.value = true
 }
+
+// Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): een bfcache-restore (iOS Safari en Firefox doen dit standaard) na het
+// afbreken van de Google-inlogflow (browser-terug vanaf Google's accountkiezer) herstelt de
+// Vue-state één-op-één — inclusief `busy: true`, dat via `pointer-events: none` de knop
+// permanent onklikbaar maakt. `pageshow`'s `event.persisted` is precies het signaal voor
+// "deze pagina komt uit de bfcache terug", niet een gewone eerste load.
+onMounted(() => {
+  const resetBusyFromBfcache = (event: PageTransitionEvent) => {
+    if (event.persisted) busy.value = false
+  }
+  window.addEventListener('pageshow', resetBusyFromBfcache)
+  onUnmounted(() => window.removeEventListener('pageshow', resetBusyFromBfcache))
+})
 
 // UJ-10/AD-9: op een gedeelde schoollaptop mag de sessie niet onbeperkt blijven staan.
 // De knop wordt hierdoor een computed href i.p.v. een statisch pad — Google echoot

@@ -38,9 +38,15 @@ export default defineEventHandler(async (event): Promise<TaskPrepResponse | Erro
 
     let taskSession = await getSessionForTask(taskId)
     if (!taskSession) {
-      // AD-1: elke taak heeft precies 1 sessie — dit is een data-integriteitsschending,
-      // geen legitiem client-scenario zoals de ontbrekende-taak-case hierboven.
-      console.error(`[tasks] Taak ${taskId} bestaat maar heeft geen sessie (AD-1-schending).`)
+      // Review-fix (ronde 3, 2026-09-06): dit was hier gedocumenteerd als "AD-1: elke taak
+      // heeft precies 1 sessie" — sinds Story 3.1 Task 8 kan een taak legitiem 0 sessies
+      // hebben (bv. `totalMinutesOverride: 0`, een geldige invoer die `planSessionSlots`
+      // terecht geen enkele sessie oplevert). Dit is dus niet per se een
+      // data-integriteitsschending meer — kan ook gewoon betekenen dat er niets meer te
+      // plannen viel voor déze taak. Blijft een 500 (de client verwacht hier altijd een
+      // sessie om een werksessie te kunnen starten), maar niet meer met een misleidende
+      // "schending"-claim in de log.
+      console.error(`[tasks] Taak ${taskId} heeft geen sessie om een werksessie voor te starten.`)
       return envelope(event, 500, ErrorCodes.InternalError, 'Kon taak niet ophalen.')
     }
 

@@ -25,8 +25,15 @@ const taakId = computed(() => (Array.isArray(route.query.taak) ? route.query.taa
 // de useState die index.vue vlak vóór de navigatie zet. Alleen bruikbaar als het id
 // overeenkomt met de huidige query-param — anders is dit een stale waarde van een
 // eerdere, andere taak.
-const sessieStartTaak = useState<HomePlanResponse['nextTask']>('sessie-start-taak', () => null)
-const heeftDirecteData = computed(() => sessieStartTaak.value !== null && sessieStartTaak.value.id === taakId.value)
+// Review-fix (chunk E, 2026-09-06 — Edge Case Hunter): eenmalig consumeren en meteen
+// legen — zelfde precedent als `taken/[id]/index.vue`'s `taak-detail`. Zonder dit bleef
+// deze `useState` de vorige taak dragen; een verwijderde taak A waarnaar via
+// browser-terug/-vooruit teruggenavigeerd wordt, rendert dan alsnog instant vanuit deze
+// stale data (`heeftBruikbareData` onderdrukt vervolgens élke foutstaat, zie hieronder).
+const sessieStartTaakRaw = useState<HomePlanResponse['nextTask']>('sessie-start-taak', () => null)
+const directeTaak = sessieStartTaakRaw.value?.id === taakId.value ? sessieStartTaakRaw.value : null
+sessieStartTaakRaw.value = null
+const heeftDirecteData = computed(() => directeTaak !== null)
 
 // Review-patch (Acceptance Auditor): `home-later-list`-items geven altijd `needs: []` mee
 // aan `useState` (index.vue's startSessieVanuitLijst, Story 4.2 — de echte benodigdheden
@@ -38,7 +45,10 @@ const heeftDirecteData = computed(() => sessieStartTaak.value !== null && sessie
 // laadstaat op het primaire pad, UX-spec's eis) terwijl de echte benodigdheden er zodra ze
 // binnen zijn stil overheen geschoven worden.
 const { data: fetchedTaak, error: fetchError, status: fetchStatus, execute: fetchTaak } = useFetch<PrepTaak>(
-  () => `/api/tasks/${taakId.value}`,
+  // Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+  // elkaar gevonden): ontbrekende `encodeURIComponent` — enige plek in deze journey die de
+  // query-param ongecodeerd in een pad-segment plakte.
+  () => `/api/tasks/${encodeURIComponent(taakId.value)}`,
   { server: false, immediate: false }
 )
 // Geen taak-query-param (alleen bereikbaar via een handmatig samengestelde/foutieve URL,
@@ -65,7 +75,7 @@ const heeftOnbekendeFout = computed(() => !heeftBruikbareData.value && !!fetchEr
 // heeft ze straks nodig, zie `startSessieActief`'s eigen afdwinging hieronder).
 const taak = computed<Omit<PrepTaak, 'subtasks' | 'sessionId'> | null>(() => {
   if (fetchedTaak.value) return fetchedTaak.value
-  return heeftDirecteData.value ? sessieStartTaak.value : null
+  return directeTaak
 })
 
 // prep-start-button (AC #2) — nieuwe useState-key (niet dezelfde als 'sessie-start-taak',
@@ -81,22 +91,39 @@ const sessieActiefTaak = useState<SessionActiveTaak | null>('sessie-actief-taak'
 // Review-patch (Blind Hunter): `isStarting`-guard tegen een dubbele klik die twee
 // gelijktijdige fetch/navigatie-pogingen zou starten.
 const isStarting = ref(false)
+// Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+// elkaar gevonden): op het gouden pad (via Home, `heeftDirecteData` waar) onderdrukt
+// `heeftBruikbareData` élke paginabrede foutstaat — ook als de achtergrond-fetch faalt.
+// Vóór deze fix bleef de oude retry-guard (`fetchStatus === 'pending' | 'idle'`) een
+// mislukte fetch (status `'error'`) voorgoed genegeerd: klikken op Start deed dan
+// letterlijk niets, voor altijd, zonder enige melding. `startFout` toont expliciet een
+// eigen foutstaat bij de knop, los van de paginabrede secties hierboven.
+const startFout = ref(false)
 async function startSessieActief() {
   if (isStarting.value) return
   isStarting.value = true
+  startFout.value = false
   try {
-    if (!fetchedTaak.value && taakId.value && (fetchStatus.value === 'pending' || fetchStatus.value === 'idle')) {
-      // Review-patch (Edge Case Hunter): try/catch als extra bescherming — `useFetch`'s
-      // `execute()` vangt fouten normaliter zelf af in `fetchError`, maar een onverwachte
-      // throw mag hier nooit onafgevangen naar boven lekken.
-      await fetchTaak().catch(() => {})
+    if (!fetchedTaak.value && taakId.value) {
+      // Review-fix (chunk E, 2026-09-06): niet langer beperkt tot 'pending'/'idle' — een
+      // eerder mislukte fetch (status 'error') moet juist WEL opnieuw geprobeerd worden op
+      // een expliciete klik, dat is precies het moment waarop een retry zinvol is.
+      // Review-fix (chunk E, 2026-09-06 — Edge Case Hunter): begrensd op 10s — een hangende
+      // `fetchTaak()` (geen resolve, geen reject) hield de Start-knop anders voorgoed
+      // uitgeschakeld zonder enige melding.
+      await Promise.race([
+        fetchTaak(),
+        new Promise(resolve => setTimeout(resolve, 10_000))
+      ]).catch(() => {})
     }
     // Review-patch (Acceptance Auditor + Blind Hunter): zónder gefetchte, subtaak-volledige
     // data niet navigeren — anders zou een mislukte achtergrond-fetch stilzwijgend
     // "geen subtaken" (AC #4's fallback-weergave) tonen op 1.3 voor een taak die er wél
-    // heeft. De al-zichtbare fout-/laadstaat op déze pagina (`heeftOnbekendeFout`) blijft
-    // dan gewoon staan i.p.v. door te navigeren met verzonnen lege data.
-    if (!fetchedTaak.value) return
+    // heeft.
+    if (!fetchedTaak.value) {
+      startFout.value = true
+      return
+    }
     sessieActiefTaak.value = { ...fetchedTaak.value, starttijdstip: new Date().toISOString() }
     navigateTo(`/sessie/actief?taak=${encodeURIComponent(fetchedTaak.value.id)}`)
   } finally {
@@ -135,6 +162,9 @@ async function startSessieActief() {
         </ul>
       </div>
 
+      <p v-if="startFout" id="prep-start-error" class="prep-start-error" role="alert">
+        Kon deze taak niet volledig ophalen. Probeer het opnieuw.
+      </p>
       <button
         id="prep-start-button"
         type="button"
@@ -212,6 +242,13 @@ async function startSessieActief() {
   gap: 0.25rem;
   font-size: 0.9375rem;
   color: var(--color-text);
+}
+
+.prep-start-error {
+  margin: 0;
+  color: var(--color-warning-text);
+  font-size: 0.8125rem;
+  text-align: right;
 }
 
 .prep-start-button {

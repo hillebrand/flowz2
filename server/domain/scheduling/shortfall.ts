@@ -1,4 +1,4 @@
-import { getOpenTasksWithProgress, getTasksWithSessionOnDate, sumPlannedMinutesForUserOnDate } from '../../data/tasks'
+import { getOpenTasksWithProgress, getSessionsForTask, getTasksWithSessionOnDate, sumPlannedMinutesForUserOnDate } from '../../data/tasks'
 import { addDays, availableMinutesForDate, averageDailyAvailableMinutes, calculateDoelmoment } from './doelmoment'
 import { DIFFICULTY_WEIGHT, PRIORITY_WEIGHT, daysBetween, sortByVolgorde, type TaskSession } from './ordering'
 import { getTodayEvents } from '../calendar-sync/day-events'
@@ -13,7 +13,7 @@ import type { Notification, NotificationAction, RecommendationTier } from '../no
 // `POST /api/day/shortfall`) importeren deze functies rechtstreeks, zelfde precedent als
 // `recalculate.ts`.
 
-// Bovengrens op de horizon-scan (zelfde motivatie als `doelmoment.ts`'s MAX_SEARCH_DAYS):
+// Bovengrens op de horizon-scan (zelfde motivatie als `doelmoment.ts`'s MAX_PLAN_SEARCH_DAYS):
 // zonder dit kan een taak met een deadline ver in de toekomst de dag-voor-dag-lus
 // onbegrensd lang laten doorlopen.
 const MAX_SCAN_DAYS = 90
@@ -25,6 +25,17 @@ export interface ShortfallResult {
   // Altijd > 0 — een dag zonder tekort levert `null` op bij de aanroeper, nooit een
   // `ShortfallResult` met een niet-positieve waarde.
   shortfallMinutes: number
+  // Story 3.1 Task 8 (Correct Course 2026-09-05) — gezet wanneer dit tekort betekent dat
+  // déze taak haar eigen deadline niet haalt (één of meer van haar sessies vallen ná
+  // `date`, dat hier de taak se deadline is), i.p.v. een dag-aggregaat-tekort. Zie
+  // `detectDeadlineOverrun` hieronder voor de aanleiding: met meerdere sessies vooruit
+  // gepland (Story 3.1 Task 8) kan een taak voorbij haar deadline lopen zonder dat dit op
+  // enige individuele dag als capaciteitstekort zichtbaar wordt (elke dag past precies
+  // binnen haar eigen beschikbare tijd; alleen het totaal aantal dagen vóór de deadline is
+  // niet genoeg). "Herplannen" kan dit niet oplossen (het plannen zelf heeft al voorwaarts
+  // gezocht, inclusief voorbij het doelmoment) — de escalatie start hier direct bij
+  // "tijd verruimen" (zie `generateShortfallRecommendations`).
+  overrunTaskId?: string
 }
 
 // Tekort voor één specifieke dag: geplande tijd (som van alle sessies die user die dag al
@@ -53,9 +64,90 @@ export async function detectShortfallForDate(userId: string, date: string, avail
 // dag met een tekort. Horizon = de verste deadline onder de user's openstaande taken,
 // gekapt op `MAX_SCAN_DAYS` (zelfde "geen onbegrensde lus"-motivatie als doelmoment.ts).
 // Geen openstaande taken → geen horizon om te scannen, dus geen tekort mogelijk.
+// Story 3.1 Task 8 (Correct Course 2026-09-05) — zie `ShortfallResult.overrunTaskId`'s
+// commentaar. Doorloopt alle openstaande taken en kijkt per taak of er sessies ná de eigen
+// deadline staan (nooit vóór — `planSessionSlots` plant nooit in het verleden). De eerste
+// gevonden overrun wordt teruggegeven; `detectAnyShortfall` scant taken in dezelfde volgorde
+// als `getOpenTasksWithProgress` (op deadline) — bewust geen "ergste eerst"-sortering, dit
+// is dezelfde eenvoud als de bestaande dag-scan hieronder ("eerste gevonden tekort" i.p.v.
+// "grootste tekort").
+// `onlyTaskId` (review-fix 2026-09-05, zie `extractOverrunTaskId` hieronder): beperkt de
+// scan tot één specifieke taak — nodig zodra er méér dan één overrunnende taak tegelijk kan
+// bestaan (anders matcht een accept/recheck/reject-aanroep altijd de EERSTE overrunnende
+// taak, ook als de aanbeveling over een andere taak ging).
+//
+// Review-fix (2026-09-05): slaat taken over waarvan de deadline al vóór vandaag ligt — een
+// al verstreken deadline is een ander, hier niet behandeld probleem (er is geen zinvolle
+// "verruim je agenda vóór die datum"-instructie meer mogelijk); zonder deze uitsluiting
+// blokkeerde zo'n permanent-overrunnende taak `detectAnyShortfall`'s echte dag-scan
+// (en dus Story 6.7's stille auto-herplan) voor altijd, totdat de taak verwijderd werd.
+async function detectDeadlineOverrun(userId: string, onlyTaskId?: string): Promise<ShortfallResult | null> {
+  const openTasks = await getOpenTasksWithProgress(userId)
+  const today = todayInAmsterdam()
+  for (const { task } of openTasks) {
+    if (onlyTaskId && task.id !== onlyTaskId) continue
+    if (task.deadline < today) continue
+
+    const sessions = await getSessionsForTask(task.id)
+    const overrunMinutes = sessions
+      .filter(session => session.startsAt.slice(0, 10) > task.deadline)
+      .reduce((sum, session) => sum + session.plannedMinutes, 0)
+
+    if (overrunMinutes > 0) {
+      return {
+        date: task.deadline,
+        availableMinutes: 0,
+        plannedMinutes: overrunMinutes,
+        shortfallMinutes: overrunMinutes,
+        overrunTaskId: task.id
+      }
+    }
+  }
+  return null
+}
+
+// Review-fix (2026-09-05) — `herplannen`/`inkorten`-id's dragen al `tier:taskId:sessionId`;
+// `vervallen` draagt `tier:taskId`; een overrun-`verruimen`-id draagt `verruimen:overrun:
+// taskId:date` (zie `generateDeadlineOverrunRecommendations`, onderscheiden van de gewone
+// dag-aggregaat-`verruimen:date`-vorm die geen taak-id heeft). Haalt het taak-id eruit,
+// `null` als de id geen taak-specifiek tekort representeert.
+function extractOverrunTaskId(recommendationId: string): string | null {
+  const [tier, ...rest] = recommendationId.split(':')
+  if (tier === 'vervallen' || tier === 'herplannen' || tier === 'inkorten') return rest[0] ?? null
+  if (tier === 'verruimen' && rest[0] === 'overrun') return rest[1] ?? null
+  return null
+}
+
+// Story 3.1 Task 8 — her-detectie voor één specifieke datum (gebruikt door de accept/
+// recheck/reject-routes, Story 6.2, om een eerder getoonde `ShortfallResult` opnieuw af te
+// leiden). Een deadline-overrun se `ShortfallResult.date` is de taak se deadline, niet per
+// se een dag met een eigen dag-aggregaattekort — `detectShortfallForDate` alleen zou zo'n
+// aanbeveling dus nooit opnieuw kunnen terugvinden. Controleert daarom eerst op een overrun
+// die exact op déze datum valt, vóór de gewone aggregaatcheck.
+//
+// `recommendationId` (review-fix 2026-09-05, optioneel voor achterwaartse compatibiliteit):
+// als gegeven, wordt de overrun-check beperkt tot de taak die déze specifieke aanbeveling
+// beschrijft (`extractOverrunTaskId`) — zonder dit matchte een tweede overrunnende taak op
+// dezelfde deadline-datum nooit haar eigen aanbeveling (altijd de eerst-gevonden taak), en
+// leek een accept/recheck/reject stilzwijgend te slagen zonder enig effect.
+export async function detectShortfallForDateOrOverrun(
+  userId: string,
+  date: string,
+  recommendationId?: string,
+  availableMinutesOverride?: number
+): Promise<ShortfallResult | null> {
+  const onlyTaskId = recommendationId ? extractOverrunTaskId(recommendationId) ?? undefined : undefined
+  const overrun = await detectDeadlineOverrun(userId, onlyTaskId)
+  if (overrun && overrun.date === date) return overrun
+  return detectShortfallForDate(userId, date, availableMinutesOverride)
+}
+
 export async function detectAnyShortfall(userId: string): Promise<ShortfallResult | null> {
   const openTasks = await getOpenTasksWithProgress(userId)
   if (openTasks.length === 0) return null
+
+  const deadlineOverrun = await detectDeadlineOverrun(userId)
+  if (deadlineOverrun) return deadlineOverrun
 
   const today = todayInAmsterdam()
   const furthestDeadline = openTasks.reduce(
@@ -181,12 +273,15 @@ function formatDurationLabel(minutes: number): string {
 }
 
 // Alternatieve dag voor `task`'s sessie: eerste dag ná `excludeDate` t/m de taak se eigen
-// deadline met genoeg réstérende capaciteit (zelfde capaciteitscheck als
-// `doelmoment.ts`'s `findSessionDate`, maar hier voorwaarts vanaf de tekortdag i.p.v.
-// terugwaarts vanaf het doelmoment — niveau 1 zoekt "een andere dag binnen de
-// deadline-grens", niet per se een nieuw doelmoment). Gekapt op `MAX_SCAN_DAYS` (review-
+// deadline met genoeg réstérende capaciteit — niveau 1 zoekt "een andere dag binnen de
+// deadline-grens", niet per se een nieuw doelmoment. Gekapt op `MAX_SCAN_DAYS` (review-
 // patch: een taak met een deadline ver in de toekomst liet deze lus anders onbegrensd
-// lang doorlopen, zelfde categorie fix als `doelmoment.ts`'s `MAX_SEARCH_DAYS`).
+// lang doorlopen, zelfde categorie fix als `doelmoment.ts`'s `MAX_PLAN_SEARCH_DAYS`).
+// **Review-fix (ronde 3, 2026-09-06):** deze capaciteitscheck is aggregaat-gebaseerd
+// (`availableMinutesForDate`/`sumPlannedMinutesForUserOnDate`), niet blok-bewust —
+// `placeSessionOnDate` (die de uiteindelijke plaatsing doet) kan dus in zeldzame gevallen
+// alsnog een `Error` gooien op een dag die hier leek te passen. Zie deze story's Open
+// Questions voor de volledige toelichting.
 async function findAlternativeDate(userId: string, task: Task, session: Session, excludeDate: string): Promise<string | null> {
   let candidate = addDays(excludeDate, 1)
   let daysChecked = 0
@@ -230,12 +325,55 @@ export interface ShortfallRecommendation {
   targetDate?: string
 }
 
+// Story 3.1 Task 8 — escalatie voor een deadline-overrun (zie `generateShortfallRecommendations`
+// hierboven). Geen taak-naam nodig in `userId`'s param-lijst hier, wel de taak zelf om de
+// beschrijving/`vervallen`-aanbeveling te kunnen opbouwen.
+async function generateDeadlineOverrunRecommendations(userId: string, shortfall: ShortfallResult): Promise<ShortfallRecommendation[]> {
+  const taskId = shortfall.overrunTaskId!
+  const openTasks = await getOpenTasksWithProgress(userId)
+  const task = openTasks.find(({ task }) => task.id === taskId)?.task
+  // Review-fix (2026-09-05): taak tussen detectie en generatie verdwenen (verwijderd/
+  // afgerond) — val terug op de gewone dag-aggregaatcheck voor déze datum i.p.v. een
+  // doodlopend scherm met 0 aanbevelingen te tonen (AC #2's "altijd een uitweg"-garantie).
+  if (!task) {
+    const fallback = await detectShortfallForDate(userId, shortfall.date)
+    return fallback ? generateShortfallRecommendations(userId, fallback) : []
+  }
+
+  // Review-fix (2026-09-05): `verruimen:overrun:taskId:date` i.p.v. `verruimen:date` — zonder
+  // taak-id kan `detectShortfallForDateOrOverrun` bij twee overrunnende taken op dezelfde
+  // deadline-datum niet weten welke van de twee een accept/recheck/reject-aanroep bedoelt.
+  const recommendations: ShortfallRecommendation[] = [{
+    id: `verruimen:overrun:${task.id}:${shortfall.date}`,
+    tier: 'verruimen',
+    description: `${task.subject} — ${task.title} haalt de deadline (${formatDayLabel(task.deadline)}) niet — verruim je beschikbare-tijd-agenda vóór die datum met minstens ${formatDurationLabel(shortfall.shortfallMinutes)}`,
+    gainMinutes: shortfall.shortfallMinutes
+  }, {
+    id: `vervallen:${task.id}`,
+    tier: 'vervallen',
+    description: `${task.subject} — ${task.title} niet doen`,
+    gainMinutes: shortfall.shortfallMinutes
+  }]
+
+  return recommendations
+}
+
 // Escalerend samenstellen (AC #2): niveau 2 pas zodra niveau 1 het tekort niet dekt,
 // enzovoort. Niveau 1 doorloopt kandidaten "minst urgent eerst" (`sortByVolgorde`
 // omgekeerd — de minst tijdgevoelige taak is de veiligste om te verplaatsen); niveau 3/4
 // doorlopen kandidaten expliciet "laagste prioriteit eerst" (AC #2, letterlijk —
 // `lowestPriorityFirst`, niet `sortByVolgorde`, zie die functie se eigen commentaar).
 export async function generateShortfallRecommendations(userId: string, shortfall: ShortfallResult): Promise<ShortfallRecommendation[]> {
+  // Story 3.1 Task 8 — een deadline-overrun (zie `ShortfallResult.overrunTaskId`) is geen
+  // dag-aggregaat-tekort: "herplannen" kan hier niets oplossen (het plannen zelf heeft al
+  // voorwaarts gezocht, inclusief voorbij het doelmoment, en kwam alsnog niet vóór de
+  // deadline uit) — dus start de escalatie direct bij "tijd verruimen", met "laten
+  // vervallen" van déze specifieke taak als gegarandeerd laatste redmiddel (dekt per
+  // definitie het volledige tekort, AC #2's "niveau 4 dekt altijd het hele tekort"-garantie).
+  if (shortfall.overrunTaskId) {
+    return generateDeadlineOverrunRecommendations(userId, shortfall)
+  }
+
   const recommendations: ShortfallRecommendation[] = []
   let remaining = shortfall.shortfallMinutes
 
@@ -245,14 +383,19 @@ export async function generateShortfallRecommendations(userId: string, shortfall
   const leastUrgentFirst = [...sortByVolgorde(taskSessions, today, avgDailyMinutes)].reverse()
   const lowestPriorityFirstOrder = lowestPriorityFirst(taskSessions)
 
-  // Bijgehouden over niveau 1 heen (review-patch) — een taak die al een niveau 1-
+  // Bijgehouden over niveau 1 heen (review-patch) — een sessie die al een niveau 1-
   // aanbeveling kreeg (verplaatst naar een andere dag) mag geen niveau 3/4-aanbeveling
-  // krijgen: die taak staat na acceptatie niet meer op déze dag, dus "kort in"/"laat
+  // krijgen: die sessie staat na acceptatie niet meer op déze dag, dus "kort in"/"laat
   // vervallen" op déze dag zou dan nergens meer op slaan. Niveau 3 en 4 mógen wél allebei
   // dezelfde taak als kandidaat hebben (zie niveau 4's eigen commentaar hieronder) — dat
   // zijn twee *alternatieve* aanbevelingen voor die taak, geen tegenstrijdig gelijktijdig
   // advies (Story 6.2's toekomstige accept-stap kiest er straks maximaal één van).
-  const relocated = new Set<string>()
+  //
+  // **Review-fix (2026-09-05):** was `relocated: Set<taskId>` — met meerdere sessies per
+  // taak op dezelfde tekortdag (Story 3.1 Task 8) sloot het verplaatsen van ÉÉN sessie
+  // onterecht ook de taak se ANDERE, niet-verplaatste sessie van niveau 3/4 uit. Nu op
+  // sessie-niveau bijgehouden.
+  const relocatedSessionIds = new Set<string>()
 
   // Niveau 1: herplannen
   for (const { task, session } of leastUrgentFirst) {
@@ -261,14 +404,19 @@ export async function generateShortfallRecommendations(userId: string, shortfall
     if (!targetDate) continue
 
     recommendations.push({
-      id: `herplannen:${task.id}`,
+      // Story 3.1 Task 8 (Correct Course 2026-09-05): draagt sinds deze rework ook het
+      // specifieke `session.id` — een taak kan nu meerdere sessies hebben, dus "de sessie
+      // van deze taak" is niet meer eenduidig zonder het exacte id van déze, op de
+      // tekortdag staande sessie mee te geven (zie `apply-recommendation.ts`'s
+      // `applyHerplannen`).
+      id: `herplannen:${task.id}:${session.id}`,
       tier: 'herplannen',
       description: `${task.subject} — ${task.title} verplaatst naar ${formatDayLabel(targetDate)}`,
       gainMinutes: session.plannedMinutes,
       targetDate
     })
     remaining -= session.plannedMinutes
-    relocated.add(task.id)
+    relocatedSessionIds.add(session.id)
   }
 
   // Niveau 2: tijd verruimen — **herzien (Correct Course 2026-09-02, AD-10) en heringevoerd
@@ -292,20 +440,25 @@ export async function generateShortfallRecommendations(userId: string, shortfall
       description: `Verruim ${formatDayLabel(shortfall.date)} met minstens ${formatDurationLabel(gain)} in je beschikbare-tijd-agenda`,
       gainMinutes: gain
     })
-    remaining -= gain
+    // Review-fix (2026-09-05): `remaining` NIET verlagen — "tijd verruimen" heeft geen
+    // accept-effect (`applyVerruimen` gooit altijd een fout, AD-10), dus de winst is nooit
+    // daadwerkelijk verzilverd. Deed dit voorheen wél, waardoor niveau 3/4 hierna precies
+    // `VERRUIMEN_STEP_MINUTES` te weinig kregen aangeboden — de "niveau 4 dekt altijd het
+    // hele tekort"-garantie (AC #2) klopte daardoor niet meer.
   }
 
   // Niveau 3: inkorten — sessies verkorten, laagste prioriteit eerst. Alleen taken die niet
   // al verplaatst zijn (niveau 1) komen in aanmerking.
   for (const { task, session } of lowestPriorityFirstOrder) {
     if (remaining <= 0) break
-    if (relocated.has(task.id)) continue
+    if (relocatedSessionIds.has(session.id)) continue
     const maxReduction = session.plannedMinutes - MIN_MINUTES_AFTER_INKORTEN
     if (maxReduction <= 0) continue
 
     const reduction = Math.min(maxReduction, remaining)
     recommendations.push({
-      id: `inkorten:${task.id}`,
+      // Story 3.1 Task 8 — zelfde reden als niveau 1 hierboven: expliciet sessie-id nodig.
+      id: `inkorten:${task.id}:${session.id}`,
       tier: 'inkorten',
       description: `${task.subject} — ${task.title}: alleen het belangrijkste (${reduction} min korter)`,
       gainMinutes: reduction
@@ -325,16 +478,31 @@ export async function generateShortfallRecommendations(userId: string, shortfall
   // Review-patch: een eerdere versie sloot ook niveau 3-aanbevolen taken uit — daardoor kon
   // niveau 3 alle kandidaten "opgebruiken" zonder het tekort te dekken, met niets meer over
   // voor niveau 4 (de garantie brak dan echt, niet alleen op papier).
+  // Review-fix (2026-09-05): `lowestPriorityFirstOrder` heeft één rij per SESSIE
+  // (`getTasksWithSessionOnDate`), niet per taak — een taak met meerdere sessies op de
+  // tekortdag (Story 3.1 Task 8) leverde vóór deze fix meerdere `vervallen:${task.id}`-
+  // aanbevelingen met hetzelfde id maar verschillende `gainMinutes` op. `applyVervallen`
+  // laat sowieso de hele taak vervallen (alle sessies), dus hier per taak dedupliceren en
+  // de winst optellen over al haar sessies op déze dag.
+  const seenVervallenTaskIds = new Set<string>()
   for (const { task, session } of lowestPriorityFirstOrder) {
     if (remaining <= 0) break
-    if (relocated.has(task.id)) continue
+    if (relocatedSessionIds.has(session.id) || seenVervallenTaskIds.has(task.id)) continue
+    seenVervallenTaskIds.add(task.id)
+
+    // Alleen de nog niet via niveau 1 verplaatste sessies van déze taak meetellen — die
+    // staan straks niet meer op deze dag, dus dragen niet bij aan "vervallen" se winst hier.
+    const taskGainMinutes = lowestPriorityFirstOrder
+      .filter(candidate => candidate.task.id === task.id && !relocatedSessionIds.has(candidate.session.id))
+      .reduce((sum, candidate) => sum + candidate.session.plannedMinutes, 0)
+
     recommendations.push({
       id: `vervallen:${task.id}`,
       tier: 'vervallen',
       description: `${task.subject} — ${task.title} niet doen`,
-      gainMinutes: session.plannedMinutes
+      gainMinutes: taskGainMinutes
     })
-    remaining -= session.plannedMinutes
+    remaining -= taskGainMinutes
   }
 
   return recommendations

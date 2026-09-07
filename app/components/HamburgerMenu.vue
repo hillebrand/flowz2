@@ -34,19 +34,27 @@ function close() {
   open.value = false
 }
 
-function onDocumentClick(event: MouseEvent) {
+function onDocumentClick(event: MouseEvent | TouchEvent) {
   if (rootRef.value && !rootRef.value.contains(event.target as Node)) close()
 }
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') close()
 }
 
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): een gebubbelde `click` op `document`
+// dekt niet betrouwbaar elke tap op iOS Safari — een tik op een niet-interactief element
+// (kale paginatekst, een `<p>`, de achtergrond) synthetiseert daar niet altijd een
+// bubbelende click, en dit is een telefoon-first app met grote niet-interactieve
+// paginadelen onder de header. `touchstart` (passief, verandert niets aan scroll-gedrag)
+// vangt die tap alsnog af.
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
+  document.addEventListener('touchstart', onDocumentClick, { passive: true })
   document.addEventListener('keydown', onKeydown)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
+  document.removeEventListener('touchstart', onDocumentClick)
   document.removeEventListener('keydown', onKeydown)
 })
 </script>

@@ -30,6 +30,14 @@ export interface WeekOverviewResponse {
   days: WeekDayDto[]
 }
 
-// Body van `POST /api/week/{date}/suggestion/accept` — geen velden nodig, `date` komt uit
-// de route-parameter.
+// Review-fix (chunk E, 2026-09-06 — Architecture Auditor): dit commentaar beschreef de
+// oorspronkelijke (2026-09-04) contractvorm — sinds de chunk-3-fix (2026-09-06, `verruimen`-
+// dead-end + ongeziene-aanbeveling-bug) vereist de route wél degelijk een body: het id van de
+// aanbeveling die de client daadwerkelijk toonde. Nooit hier los getypt geweest; nu alsnog.
+export interface WeekSuggestionAcceptInput {
+  id: string
+}
+
+// Respons van `POST /api/week/{date}/suggestion/accept` — de bijgewerkte dagdata, `date`
+// komt uit de route-parameter.
 export type WeekSuggestionAcceptResponse = WeekDayDto

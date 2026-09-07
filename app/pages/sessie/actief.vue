@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { FetchError } from 'ofetch'
 import type { SessieOverzichtLog, SessionActiveTaak } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
@@ -6,8 +7,23 @@ if (!loggedIn.value) {
   await navigateTo('/inloggen')
 }
 
+function is401(fout: unknown): boolean {
+  return (fout as FetchError | undefined)?.statusCode === 401
+}
+
 const route = useRoute()
 const taakId = computed(() => (Array.isArray(route.query.taak) ? route.query.taak[0] : route.query.taak) ?? '')
+
+// Story 4.5, AC #1 — vlag die de wegnavigeer-guard verderop laat weten dat déze navigatie al
+// bewust bevestigd is, zodat de guard zichzelf niet blokkeert.
+//
+// Review-fix (ronde 3, chunk D, 2026-09-06 — Edge Case Hunter): hier bovenaan gedeclareerd
+// i.p.v. verderop in het bestand — de `watch(taakId, ...)` hieronder leest 'm al. Vue's
+// `watch` (zonder `immediate: true`) kan vandaag niet vóór de rest van `<script setup>` is
+// uitgevoerd vuren, dus de oorspronkelijke volgorde was feitelijk veilig, maar wél een
+// stille TDZ-tijdbom voor de eerstvolgende refactor (bv. `immediate: true` toevoegen) die
+// een `ReferenceError` zou opleveren i.p.v. een duidelijke fout.
+const isIntentionalLeave = ref(false)
 
 // Geen eigen fetch-terugvalpad (UX-spec: "Geen aparte Laden/Fout-state... subtaakgegevens
 // komen mee vanuit de taakdata") — ontbreekt de useState (refresh/deep link/mismatch), dan
@@ -74,8 +90,32 @@ const laterIds = reactive(new Set<string>())
 // taak-instantie. Zonder deze reset zou een directe route-wissel tussen twee
 // `/sessie/actief?taak=...`-navigaties (zelfde route-component, Vue hergebruikt 'm) de
 // vorige taak se voortgang/tijd laten "lekken" naar de nieuwe taak.
-watch(taakId, () => {
-  if (!taak.value) return
+watch(taakId, async () => {
+  // Review-fix (chunk D, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
+  // elkaar gevonden): een `return` hier liet exact het scenario onopgelost waarvoor de
+  // `if (!taak.value)`-fallback bovenaan bestaat — een in-place route-wissel (browser
+  // forward/back tussen twee `/sessie/actief`-URL's, of een sessie die elders al gestopt is)
+  // triggert déze watcher, niet de eenmalige setup-guard. Zonder redirect hier bleef de
+  // pagina volledig leeg (`v-if="loggedIn && taak"` faalt), met een spookend interval/queue
+  // op de achtergrond.
+  if (!taak.value) {
+    // Review-fix (ronde 2, chunk D, 2026-09-06 — alle 3 agents, onafhankelijk gevonden):
+    // zonder dit was de redirect zelf een no-op — een gewone in-app-navigatie loopt door
+    // `onBeforeRouteLeave` hieronder, die 'm (niet-intentioneel, niet-gepauzeerd) blokkeerde
+    // en een onzichtbare bevestig-modal opende binnen een al niet-gerenderde `<main>`.
+    //
+    // Review-fix (ronde 3, chunk D, 2026-09-06 — Edge Case Hunter): `try/finally` toegevoegd
+    // rond de navigatie zelf — zonder dit bleef `isIntentionalLeave` permanent `true` staan
+    // als déze navigatie ooit afgebroken/geweigerd werd, wat de leave-guard voor de rest van
+    // de sessie zou uitschakelen (zelfde klasse fout als `stopSessie`'s eigen `finally`).
+    isIntentionalLeave.value = true
+    try {
+      await navigateTo(`/sessie/starten?taak=${encodeURIComponent(taakId.value)}`)
+    } finally {
+      isIntentionalLeave.value = false
+    }
+    return
+  }
   queue.value = taak.value.subtasks.map(s => s.id)
   doneIds.clear()
   laterIds.clear()
@@ -96,22 +136,53 @@ const totaalSubtaken = computed(() => taak.value?.subtasks.length ?? 0)
 // Story 5.1 — fire-and-forget-persistentie van de subtaakstatus (zelfde `.catch`-precedent
 // als de bestaande /stop-/heartbeat-aanroepen), náást de lokale `doneIds`/`laterIds`-state
 // hierboven, die blijft ongewijzigd de bron voor de live-sessie-UI zelf.
+//
+// Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): beide knoppen hadden geen
+// in-flight-guard — twee synchrone aanroepen binnen dezelfde render-tick (bv. een dubbele
+// `click`-event op één tik, vóórdat Vue de nieuwe subtaak-naam heeft gerenderd) verwerkten
+// zo twee subtaken op één interactie. `subtaakBusy` sluit precies dát sub-frame-venster.
+// **Ronde 2-precisering (Blind Hunter):** dit dekt geen twee losse, echt na elkaar getikte
+// klikken (~100-300ms) — tegen die tijd toont het scherm alweer de volgende subtaaknaam, dus
+// zo'n tweede tik is een bewuste keuze van de gebruiker, geen dubbele registratie van dezelfde
+// subtaak.
+const subtaakBusy = ref(false)
 function subtaakKlaar() {
+  if (subtaakBusy.value) return
   const id = queue.value.shift()
   if (id) {
+    subtaakBusy.value = true
+    nextTick(() => { subtaakBusy.value = false })
     doneIds.add(id)
     $fetch(`/api/subtasks/${encodeURIComponent(id)}/done`, { method: 'POST' })
-      .catch(fout => console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout))
+      .catch((fout) => {
+        if (is401(fout)) { navigateTo('/inloggen'); return }
+        console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout)
+      })
   }
 }
 function subtaakLater() {
+  if (subtaakBusy.value) return
+  // Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): met precies 1 resterende subtaak
+  // verstuurde elke tap op "Later" een nieuwe POST, ook al was diezelfde subtaak al als
+  // "later" geregistreerd — nu alleen nog lokaal doorgeschoven, zonder herhaalde
+  // server-aanroep. Blijft ongewijzigd, want inherent aan de functie (geen bug): met 1
+  // resterende subtaak is de knop zelf een zichtbare no-op (er is niets anders om naar te
+  // wisselen), en "Alle subtaken klaar!" blijft terecht onbereikbaar voor wie haar laatste
+  // subtaak uitstelt — "Later" rondt een subtaak per definitie niet af, alleen "Klaar" doet
+  // dat (ronde 2-verificatie, Blind Hunter: dit commentaar claimde eerder ten onrechte dat
+  // ook dát hier "opgelost" was).
   const id = queue.value.shift()
-  if (id) {
-    laterIds.add(id)
-    $fetch(`/api/subtasks/${encodeURIComponent(id)}/later`, { method: 'POST' })
-      .catch(fout => console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout))
-    queue.value.push(id)
-  }
+  if (!id) return
+  queue.value.push(id)
+  if (laterIds.has(id)) return
+  subtaakBusy.value = true
+  nextTick(() => { subtaakBusy.value = false })
+  laterIds.add(id)
+  $fetch(`/api/subtasks/${encodeURIComponent(id)}/later`, { method: 'POST' })
+    .catch((fout) => {
+      if (is401(fout)) { navigateTo('/inloggen'); return }
+      console.error('[sessie] Kon deeltaakstatus niet opslaan:', fout)
+    })
 }
 
 // "Stoppen" — verzamelt de sessie-log en navigeert naar 1.4 (Story 4.6, leest déze state
@@ -119,12 +190,7 @@ function subtaakLater() {
 // eerste tweede-consument naast dit bestand).
 const sessieOverzichtLog = useState<SessieOverzichtLog | null>('sessie-overzicht-log', () => null)
 
-// Story 4.5 — vlag die de wegnavigeer-guard hieronder laat weten dat déze navigatie al
-// bewust bevestigd is (via de Stop-knop zelf, of via de leave-confirm-modal's "Ja, stop"),
-// zodat de guard zichzelf niet blokkeert.
-const isIntentionalLeave = ref(false)
-
-function stopSessie() {
+async function stopSessie() {
   if (!taak.value) return
   sessieOverzichtLog.value = {
     taskId: taak.value.id,
@@ -147,23 +213,60 @@ function stopSessie() {
   // UI-verandering (AC's eis blijft intact), maar wél een spoor bij het debuggen.
   $fetch(`/api/sessions/${encodeURIComponent(taak.value.sessionId)}/stop`, { method: 'POST' })
     .catch(fout => console.error('[sessie] Kon stop-signaal niet versturen:', fout))
-  // Review-patch (Edge Case Hunter): leegmaken vóór het navigeren — anders zou een
-  // browser-terug-navigatie deze pagina met een reset timer/wachtrij kunnen heropenen voor
-  // een sessie die al gestopt is (de `taak`-computed valt dan terug op "geen data",
-  // navigeert alsnog netjes terug naar 1.2 i.p.v. een misleidende "verse" 1.3 te tonen).
-  sessieActiefTaak.value = null
   isIntentionalLeave.value = true
-  navigateTo(`/sessie/overzicht?taak=${encodeURIComponent(id)}`)
+  try {
+    // Review-fix (chunk D, 2026-09-06 — Edge Case Hunter): `sessieActiefTaak` werd voorheen
+    // vóór het navigeren geleegd — `v-if="loggedIn && taak"` unmountte deze pagina dan
+    // meteen, met een zichtbare lege pagina voor de duur van de route-overgang. Nu wordt
+    // eerst de navigatie afgewacht (de pagina blijft intussen gewoon getoond) en pas daarna
+    // de state geleegd; de browser-terug-bescherming die de oorspronkelijke volgorde
+    // motiveerde blijft intact omdat de state al leeg is ruim vóórdat de gebruiker terug zou
+    // kunnen gaan.
+    await navigateTo(`/sessie/overzicht?taak=${encodeURIComponent(id)}`)
+  } finally {
+    // Review-fix (ronde 2, chunk D, 2026-09-06 — alle 3 agents, onafhankelijk gevonden): als
+    // `navigateTo` alsnog afgebroken/geweigerd wordt, moet de state toch geleegd worden en
+    // `isIntentionalLeave` niet permanent `true` blijven staan — anders blijft de leave-guard
+    // voor de rest van de sessie volledig uitgeschakeld voor elke latere, wél legitieme
+    // navigatiepoging.
+    sessieActiefTaak.value = null
+    isIntentionalLeave.value = false
+  }
 }
 
 // Story 4.5, AC #1 — `active-leave-confirm-modal`. Vue Router's `onBeforeRouteLeave` vangt
 // elke in-app-navigatiepoging af (incl. de browser-terugknop, een SPA-interne route-wissel
-// — géén volledige page-reload). Het hamburgermenu bestaat nog niet als navigatiedoel
-// (Story 4.1's review-patch maakte 'm decoratief), maar deze guard vangt architecturaal al
-// élke toekomstige in-app-trigger af, niet alleen de terugknop — zie de story's "Belangrijk".
+// — géén volledige page-reload). Dit vangt dus ook het hamburgermenu (sinds commit 894acbf
+// wél een echt navigatiedoel, niet meer decoratief zoals ten tijde van Story 4.1) — zie de
+// story's "Belangrijk".
 const showLeaveConfirm = ref(false)
-onBeforeRouteLeave(() => {
-  if (isIntentionalLeave.value || isPaused.value) return true
+onBeforeRouteLeave((to) => {
+  // Review-fix (ronde 2, chunk D, 2026-09-06 — alle 3 agents, onafhankelijk gevonden): de
+  // nieuwe 401-afhandeling op de heartbeat-/subtaak-aanroepen hieronder roept
+  // `navigateTo('/inloggen')` aan — zonder deze uitzondering ving deze guard die redirect
+  // zelf af (niet-intentioneel, niet-gepauzeerd) en opende een ongevraagde "Wil je de sessie
+  // stoppen?"-modal die zich elke heartbeat (30s) herhaalt, zonder ooit bij het inlogscherm
+  // uit te komen. Zelfde precedent als `tekort-oplossen.vue`'s eigen `/inloggen`-uitzondering.
+  if (to.path === '/inloggen') return true
+  if (isIntentionalLeave.value) return true
+  // Review-fix (chunk D, ronde 1, 2026-09-06 — Edge Case Hunter) — **teruggedraaid in ronde 2
+  // (Architecture Auditor)**: ronde 1 liet een gepauzeerde in-app-navigatie hetzelfde
+  // stop-signaal sturen als `beforeunload`, met als redenering dat `stoppedAt` anders voorgoed
+  // `null` zou blijven. Dat bleek de verkeerde diagnose: `markSessionStopped` zet alleen
+  // `stoppedAt`, zonder bestede tijd te loggen of `replanAfterSession` aan te roepen — en
+  // `finalizeStaleSessionIfNeeded` (`session-heartbeat-fallback.ts`) begint expliciet met
+  // `if (session.stoppedAt || !session.lastHeartbeatAt) return false`. Met `stoppedAt` al
+  // gezet via déze beacon kan die server-side terugvalroute nooit meer draaien — de bestede
+  // tijd van een gepauzeerde, verlaten sessie werd zo niet "eindelijk als gestopt gemarkeerd"
+  // maar juist **permanent onherstelbaar stilzwijgend weggegooid** (0 minuten gelogd, geen
+  // `replanAfterSession`), erger dan het `stoppedAt: null`-gat dat de ronde-1-fix dacht te
+  // dichten. Een gepauzeerde sessie heeft sowieso geen recente heartbeat (die stopt bij
+  // pauzeren), dus `finalizeStaleSessionIfNeeded` herkent 'm toch al als "verweesd" zodra
+  // Evelien de taak ooit opnieuw opent — precies het bestaande, correcte terugvalpad. Terug
+  // naar het oorspronkelijke gedrag: stilzwijgend toestaan, geen stop-signaal.
+  if (isPaused.value) {
+    return true
+  }
   showLeaveConfirm.value = true
   return false
 })
@@ -206,7 +309,10 @@ let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null
 function stuurHeartbeat() {
   if (!taak.value || isPaused.value) return
   $fetch(`/api/sessions/${encodeURIComponent(taak.value.sessionId)}/heartbeat`, { method: 'POST' })
-    .catch(fout => console.error('[sessie] Kon heartbeat niet versturen:', fout))
+    .catch((fout) => {
+      if (is401(fout)) { navigateTo('/inloggen'); return }
+      console.error('[sessie] Kon heartbeat niet versturen:', fout)
+    })
 }
 
 onMounted(() => {

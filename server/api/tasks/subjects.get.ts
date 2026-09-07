@@ -16,6 +16,12 @@ export default defineEventHandler(async (event): Promise<TaskSubjectsResponse | 
     return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
-  const subjects = await getDistinctSubjectsForUser(session.user.id)
-  return { subjects }
+  // Review-fix (chunk 3, 2026-09-06): zelfde precedent als availability-calendar.get.ts.
+  try {
+    const subjects = await getDistinctSubjectsForUser(session.user.id)
+    return { subjects }
+  } catch (fout) {
+    console.error('[tasks] Kon vakken niet ophalen:', fout)
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon vakken niet laden.')
+  }
 })

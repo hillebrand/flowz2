@@ -109,27 +109,139 @@ const afwijkingTekst = computed(() => {
     : 'Dit duurde iets langer dan verwacht — geen probleem, we plannen de rest gewoon in.'
 })
 
-function terugNaarHome() {
+// Review-fix (ronde 2, chunk E, 2026-09-06 — Architecture Auditor + Edge Case Hunter): een
+// ongeldige waarde (bv. 90 minuten) gaf voorheen op de knop-route een zichtbare inline fout
+// en blokkeerde het versturen — maar de route-guard hieronder stuurde 'm alsnog rauw mee,
+// wat de server met een 400 afwijst (`isValidMinutes` staat max 59 toe) en `.catch`
+// stilzwijgend inslikt: precies het dataverlies dat deze hele guard moest voorkomen, nu
+// alleen voor wie een tikfout maakte.
+//
+// Review-fix (ronde 3, chunk E, 2026-09-06 — Architecture Auditor): ronde 2 liet bij een
+// ongeldige resterende-tijd-invoer de HELE payload vervallen — inclusief `actualMinutes`,
+// die altijd geldig is en volledig onafhankelijk van het optionele resterende-tijd-veld. De
+// server behandelt `remainingHours/Minutes: null` al expliciet als "ongewijzigd"
+// (`replan.post.ts`) — dus bij een ongeldige waarde wordt nu alleen dát veld op `null`
+// gezet (net alsof het leeg gelaten was), i.p.v. de complete, wél bruikbare bestede-tijd
+// ook maar weg te gooien.
+function replanPayload(): { sessionId: string, payload: ReplanSessionInput } | null {
+  if (!log.value) return null
+  return {
+    sessionId: log.value.sessionId,
+    payload: {
+      actualMinutes: Math.round(log.value.spentSeconds / 60),
+      remainingHours: validateRemainingHours() ? null : (isEmptyField(remainingHours.value) ? null : Number(remainingHours.value)),
+      remainingMinutes: validateRemainingMinutes() ? null : (isEmptyField(remainingMinutes.value) ? null : Number(remainingMinutes.value))
+    }
+  }
+}
+
+// Begrensd op 10s — een hangende request mag de gebruiker niet voorgoed op dit scherm
+// vasthouden; de POST blijft ondertussen op de achtergrond doorlopen.
+//
+// Review-fix (ronde 2, chunk E, 2026-09-06 — Architecture Auditor): `replanSubmitted`
+// maakt dit idempotent — zowel de knop als de route-guard kunnen dit aanroepen zonder
+// gevaar op een dubbele POST, ongeacht wie van de twee de navigatie uiteindelijk uitvoert.
+// Dat verving een eerdere aanpak met een `isIntentionalWrapLeave`-vlag die de hele
+// wachttijd van de knop bleef "aan" staan — een gelijktijdige hamburgermenu-klik zag die
+// vlag dan al waar en glipte ongehinderd door de guard heen, wat alsnog de "twee
+// navigatie-eigenaren"-race opleverde die dit juist moest voorkomen.
+//
+// Review-fix (ronde 3, chunk E, 2026-09-06 — Architecture Auditor): de 10s-race-timer wordt
+// nu opgeruimd via `finally` (zelfde `withTimeout`-precedent als de andere pagina's in deze
+// journey) — zonder dit liet een snel geslaagde POST alsnog een 10s-timer voorbij de
+// pagina-unmount doorlopen.
+let replanSubmitted = false
+function ensureReplanSubmitted(): Promise<unknown> {
+  if (replanSubmitted) return Promise.resolve()
+  replanSubmitted = true
+  const request = replanPayload()
+  if (!request) return Promise.resolve()
+  let timeoutId: ReturnType<typeof setTimeout>
+  const timeout = new Promise(resolve => { timeoutId = setTimeout(resolve, 10_000) })
+  return Promise.race([
+    $fetch(`/api/sessions/${encodeURIComponent(request.sessionId)}/replan`, { method: 'POST', body: request.payload })
+      .catch(fout => console.error('[sessie] Kon herplan-verzoek niet versturen:', fout)),
+    timeout
+  ]).finally(() => clearTimeout(timeoutId))
+}
+
+// Review-fix (chunk E, 2026-09-06 — Architecture Auditor + Edge Case Hunter, onafhankelijk
+// van elkaar gevonden): was fire-and-forget, direct gevolgd door het legen van
+// `sessieOverzichtLog` en een niet-afgewachte `navigateTo`. Drie problemen daarmee: (1) de
+// pagina had géén leave-guard, dus het hamburgermenu (zichtbaar in de header) sloeg déze
+// hele functie volledig over — de ingevulde resterende tijd werd dan stilzwijgend nooit
+// verstuurd; (2) een dubbele klik op "Terug naar hoofdscherm" vuurde twee `/replan`-POSTs;
+// (3) `sessieOverzichtLog` werd geleegd vóórdat de navigatie zeker was.
+//
+// Review-fix (ronde 2): `sessieOverzichtLog` wordt niet meer expliciet geleegd in
+// `terugNaarHome`/de guard — dat gebeurt nu altijd in `onUnmounted`, ongeacht via welk pad
+// de pagina verlaten wordt.
+const isSubmittingWrap = ref(false)
+const isIntentionalWrapLeave = ref(false)
+
+async function terugNaarHome() {
   remainingHoursError.value = validateRemainingHours()
   remainingMinutesError.value = validateRemainingMinutes()
   if (remainingHoursError.value || remainingMinutesError.value) return
-  if (log.value) {
-    const payload: ReplanSessionInput = {
-      actualMinutes: Math.round(log.value.spentSeconds / 60),
-      remainingHours: isEmptyField(remainingHours.value) ? null : Number(remainingHours.value),
-      remainingMinutes: isEmptyField(remainingMinutes.value) ? null : Number(remainingMinutes.value)
-    }
-    // Fire-and-forget (UX-spec: client wacht niet op de response) — `.catch` i.p.v. stil
-    // falen, zelfde precedent als Story 4.5/4.6's andere fire-and-forget-aanroepen.
-    $fetch(`/api/sessions/${encodeURIComponent(log.value.sessionId)}/replan`, { method: 'POST', body: payload })
-      .catch(fout => console.error('[sessie] Kon herplan-verzoek niet versturen:', fout))
+  if (isSubmittingWrap.value) return
+  isSubmittingWrap.value = true
+  try {
+    await ensureReplanSubmitted()
+    isIntentionalWrapLeave.value = true
+    await navigateTo('/')
+  } finally {
+    isSubmittingWrap.value = false
+    // Review-fix (ronde 3, chunk E, 2026-09-06 — Architecture Auditor): teruggezet op
+    // `false` — anders blijft deze latch voorgoed `true` als `navigateTo` ooit wordt
+    // afgebroken/geweigerd, wat de leave-guard hieronder permanent zou uitschakelen.
+    isIntentionalWrapLeave.value = false
   }
-  // Review-patch (Edge Case Hunter): leegmaken vóór het navigeren — zelfde precedent als
-  // `sessie/actief.vue`'s `stopSessie()` — voorkomt dat een browser-terug-navigatie deze
-  // pagina heropent op een verouderd (maar niet per se incorrect) log-object.
-  sessieOverzichtLog.value = null
-  navigateTo('/')
 }
+
+// Review-fix (chunk E, 2026-09-06): vangt precies het gat dat "Terug naar hoofdscherm"
+// hierboven niet dekt — het hamburgermenu, browser-terug, of elke andere in-app-navigatie
+// weg van dit scherm. Zonder dit werd de ingevulde resterende tijd stilzwijgend nooit
+// verstuurd (AC #3's hele doel).
+//
+// Review-fix (ronde 2, chunk E, 2026-09-06 — Edge Case Hunter): blokkeert nu (`return
+// false`) zolang `terugNaarHome` al bezig is, i.p.v. de navigatie meteen goed te keuren —
+// dat voorkomt dat een gelijktijdige tweede navigatiepoging de gebruiker later alsnog
+// terugsleept naar Home vanaf waar ze intussen naartoe genavigeerd was.
+onBeforeRouteLeave(async () => {
+  if (isIntentionalWrapLeave.value) return true
+  if (isSubmittingWrap.value) return false
+  await ensureReplanSubmitted()
+  return true
+})
+
+// Review-fix (chunk F, 2026-09-07 — Blind Hunter): `onBeforeRouteLeave` vangt geen enkele
+// echte document-unload — en `HamburgerMenu.vue`'s "Uitloggen"-item is bewust een rauwe
+// `<a href="/auth/logout">` (een volledige paginanavigatie naar een server-route, geen
+// SPA-navigatie), dus dat ene menu-item slaat déze hele guard over. Zonder dit kon Evelien
+// haar sessie afronden, de resterende tijd intypen, en via Uitloggen weggaan zonder dat
+// `/replan` ooit werd aangeroepen — precies het dataverlies dat de guard hierboven moest
+// voorkomen, nu via de ene ingang die geen SPA-navigatie is. Zelfde `beforeunload`/
+// `sendBeacon`-precedent als `sessie/actief.vue`'s `stuurStopBeacon` (AC #2 van Story 4.5):
+// geen zichtbare bevestiging, puur fire-and-forget, `sendBeacon` stuurt cookies automatisch
+// mee (same-origin) dus `requireUserSession` werkt server-side zonder extra plumbing. Een
+// JSON-Blob als body i.p.v. `sendBeacon`'s standaard `Content-Type`, zodat
+// `/api/sessions/{id}/replan`'s `readBody` de payload normaal kan parsen.
+function stuurReplanBeacon() {
+  if (replanSubmitted) return
+  const request = replanPayload()
+  if (!request) return
+  replanSubmitted = true
+  const blob = new Blob([JSON.stringify(request.payload)], { type: 'application/json' })
+  navigator.sendBeacon(`/api/sessions/${encodeURIComponent(request.sessionId)}/replan`, blob)
+}
+
+onMounted(() => {
+  window.addEventListener('beforeunload', stuurReplanBeacon)
+})
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', stuurReplanBeacon)
+  sessieOverzichtLog.value = null
+})
 </script>
 
 <template>
@@ -212,6 +324,7 @@ function terugNaarHome() {
         type="button"
         class="wrap-back-button"
         aria-label="Terug naar hoofdscherm, wijzigingen opslaan"
+        :disabled="isSubmittingWrap"
         @click="terugNaarHome"
       >Terug naar hoofdscherm</button>
     </section>
@@ -335,6 +448,11 @@ function terugNaarHome() {
   color: var(--color-accent-contrast);
   font-weight: 600;
   cursor: pointer;
+}
+
+.wrap-back-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (min-width: 1024px) {

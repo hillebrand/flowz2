@@ -25,7 +25,7 @@ const MAX_DESCRIPTION_LENGTH = 500
 export const MIN_SESSION_DURATION = 5
 // Bovengrens (code review 2026-08-01): zonder dit kan een oversized sessieduur de
 // dag-plaatsingslus onbegrensd lang laten zoeken (zie server/domain/scheduling/
-// doelmoment.ts's MAX_SEARCH_DAYS) en levert het geen zinnig "één zitting"-sessiemodel
+// doelmoment.ts's MAX_PLAN_SEARCH_DAYS) en levert het geen zinnig "één zitting"-sessiemodel
 // meer op. 8 uur is ruim voldoende voor elke realistische huiswerksessie.
 export const MAX_SESSION_DURATION = 480
 const MAX_SUBTASK_NAME_LENGTH = 100

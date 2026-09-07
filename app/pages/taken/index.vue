@@ -26,6 +26,17 @@ watch(error, (waarde) => {
 const isLoading = computed(() => status.value === 'pending' || status.value === 'idle')
 const hasError = computed(() => !!error.value && !is401(error.value))
 
+// Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter + Architecture Auditor,
+// alle drie onafhankelijk gevonden): dezelfde guard als `taken/[id]/index.vue`'s
+// `progressPercentage` — die was destijds bewust toegevoegd omdat `doneSubtasks` in theorie
+// nooit boven `totalSubtasks` hoort uit te komen maar de balkbreedte dat niet zonder guard
+// mag doorzetten. Deze lijstpagina had 'm nooit gekregen: exact dezelfde data, twee
+// inconsistente weergaven.
+function progressPercentage(done: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.min(100, Math.max(0, (done / total) * 100))
+}
+
 const TYPE_LABELS: Record<TaskType, string> = {
   proefwerk: 'Proefwerk',
   so: 'SO',
@@ -143,7 +154,7 @@ onMounted(() => {
             <p class="tasks-item-title">{{ task.title }}</p>
             <div v-if="task.totalSubtasks > 0" class="tasks-item-progress">
               <div class="tasks-item-progress-bar" aria-hidden="true">
-                <div class="tasks-item-progress-bar-fill" :style="{ width: `${(task.doneSubtasks / task.totalSubtasks) * 100}%` }" />
+                <div class="tasks-item-progress-bar-fill" :style="{ width: `${progressPercentage(task.doneSubtasks, task.totalSubtasks)}%` }" />
               </div>
               <p class="tasks-item-progress-text">{{ task.doneSubtasks }} van {{ task.totalSubtasks }} subtaken</p>
             </div>

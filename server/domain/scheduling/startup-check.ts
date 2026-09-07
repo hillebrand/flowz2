@@ -7,7 +7,7 @@ import { applyShortfallRecommendation } from './apply-recommendation'
 // `applyShortfallRecommendation` ongewijzigd — alleen de herhaal-lus zelf is nieuw.
 //
 // Bovengrens op het aantal stil-herplan-rondes (zelfde "geen onbegrensde lus"-motivatie als
-// `doelmoment.ts`'s MAX_SEARCH_DAYS / `shortfall.ts`'s MAX_SCAN_DAYS) — beargumenteerd
+// `doelmoment.ts`'s MAX_PLAN_SEARCH_DAYS / `shortfall.ts`'s MAX_SCAN_DAYS) — beargumenteerd
 // voorstel, ruim boven wat een realistisch aantal gelijktijdige taken ooit zou moeten
 // vergen (story se Open Questions).
 const MAX_AUTO_REPLAN_ITERATIONS = 10
@@ -28,8 +28,20 @@ export async function runStartupReplanCheck(userId: string): Promise<StartupChec
     const herplanRecommendations = recommendations.filter(recommendation => recommendation.tier === 'herplannen')
     if (herplanRecommendations.length === 0) return { resolved: false }
 
-    for (const recommendation of herplanRecommendations) {
-      await applyShortfallRecommendation(userId, recommendation)
+    // Review-fix (ronde 3, 2026-09-06): `applyShortfallRecommendation` (herplannen) kan
+    // gooien als de voorgestelde dag toch geen aaneengesloten blok-ruimte heeft (de
+    // kandidaat-zoeklus is aggregaat-gebaseerd, de plaatsing zelf blok-bewust — zie
+    // `session-placement.ts`'s Open Question). Dit is een stille, automatische achtergrond-
+    // check (AC #2/#3) — een falende herplanning hoort hier niet de hele opstart-check als
+    // 500 te laten crashen, alleen te stoppen en de escalatie (Story 6.1/6.2) te laten
+    // overnemen.
+    try {
+      for (const recommendation of herplanRecommendations) {
+        await applyShortfallRecommendation(userId, recommendation)
+      }
+    } catch (fout) {
+      console.error(`[scheduling] Stille auto-herplanning mislukt voor user ${userId}:`, fout)
+      return { resolved: false }
     }
   }
 

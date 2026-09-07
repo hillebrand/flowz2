@@ -1,4 +1,4 @@
-import { deleteTaskAndSession, getSessionForTask, getTaskById } from '../../data/tasks'
+import { deleteTaskAndSessions, getSessionsForTask, getTaskById } from '../../data/tasks'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 
 // Story 5.2 (review-patch) — symmetrisch met create-task.ts: deze verwijder-orkestratie
@@ -15,22 +15,30 @@ export async function deleteTask(userId: string, taskId: string): Promise<Delete
     return { ok: false, reason: 'not_found' }
   }
 
-  const session = await getSessionForTask(taskId)
-  if (!session) {
-    throw new Error(`Taak ${taskId} bestaat maar heeft geen sessie (AD-3-schending).`)
-  }
+  // Story 3.1 Task 8 (Correct Course 2026-09-05): ALLE sessies van de taak (kan er nu
+  // meerdere, over meerdere datums, hebben).
+  //
+  // **Review-fix (ronde 3, 2026-09-06):** voorheen gooide 0 sessies hier een harde `Error`
+  // ("AD-3-schending") — maar een taak met `totalMinutes: 0` (een geldige invoer,
+  // `validate-task-input.ts` staat 0 toe) krijgt via `planSessionSlots` terecht 0 sessies,
+  // en die taak moet nog steeds verwijderbaar blijven. Deze check was daarmee de enige
+  // uitweg voor de gebruiker aan het blokkeren i.p.v. een écht datagebrek te signaleren.
+  // Gewoon doorgaan met verwijderen — geen sessies om op te ruimen is geen foutstate.
+  const taskSessions = await getSessionsForTask(taskId)
 
   // Story 2.5: volgorde gedraaid t.o.v. vóór deze story — de DB-verwijdering gebeurt nu
   // EERST, zodat `syncHomeworkBlocksForDate` (die de actuele DB-staat leest, AD-1) déze
   // taak al niet meer meetelt. Zelfde "een falende Calendar-aanroep mag een bevestigde
   // lokale verwijdering niet blokkeren"-precedent als vóór deze story: alleen loggen.
-  const date = session.startsAt.slice(0, 10)
-  await deleteTaskAndSession(taskId, session.id)
+  const distinctDates = new Set(taskSessions.map(session => session.startsAt.slice(0, 10)))
+  await deleteTaskAndSessions(taskId)
 
-  try {
-    await syncHomeworkBlocksForDate(task.userId, date)
-  } catch (fout) {
-    console.error(`[tasks] Kon huiswerk-Calendar-blokken niet synchroniseren na verwijderen van taak ${taskId}:`, fout)
+  for (const date of distinctDates) {
+    try {
+      await syncHomeworkBlocksForDate(task.userId, date)
+    } catch (fout) {
+      console.error(`[tasks] Kon huiswerk-Calendar-blokken niet synchroniseren na verwijderen van taak ${taskId} (${date}):`, fout)
+    }
   }
 
   return { ok: true }

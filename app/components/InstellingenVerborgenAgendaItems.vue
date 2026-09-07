@@ -31,10 +31,27 @@ const nieuweTitel = ref('')
 const saving = ref(false)
 const removingTitle = ref<string | null>(null)
 const addError = ref('')
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): `toevoegen`/`verwijderen` bewaakten
+// voorheen alleen zichzelf — een toevoeging tijdens een lopende verwijdering (of andersom)
+// liet twee overlappende POSTs/DELETEs racen, en beide handlers zetten `titles.value` in
+// zijn geheel op de eigen respons, dus de langzaamste-maar-oudere respons kon de snellere-
+// maar-nieuwere overschrijven (een net verwijderde titel herverscheen, of een net
+// toegevoegde verdween weer) tot een pagina-herlaad.
+const removeError = ref('')
+
+// Review-fix (ronde 2, chunk F, 2026-09-07 — Architecture Auditor): zelfde `foutmeldingUit`-
+// precedent als `InstellingenBeschikbareTijd.vue` — de server kent hier een écht bruikbare,
+// niet-generieke 400 (`HiddenCalendarTitleLimitError`, bv. "Maximaal 50 verborgen
+// agenda-items."), die zonder dit werd overschreven door een misleidende "probeer het
+// opnieuw" voor een fout die bij een retry gegarandeerd terugkomt.
+function foutmeldingUit(fout: unknown, fallback: string): string {
+  const data = (fout as FetchError<{ error?: { message?: string } }> | undefined)?.data
+  return data?.error?.message ?? fallback
+}
 
 async function toevoegen() {
   const titel = nieuweTitel.value.trim()
-  if (!titel || saving.value) return
+  if (!titel || saving.value || removingTitle.value) return
   if (titles.value.some(t => t.toLowerCase() === titel.toLowerCase())) {
     nieuweTitel.value = ''
     return
@@ -42,6 +59,7 @@ async function toevoegen() {
 
   saving.value = true
   addError.value = ''
+  removeError.value = ''
   try {
     const respons = await $fetch<HiddenCalendarTitlesResponse>('/api/settings/hidden-calendar-titles', {
       method: 'POST',
@@ -54,15 +72,17 @@ async function toevoegen() {
       await navigateTo('/inloggen')
       return
     }
-    addError.value = 'Kon de titel niet opslaan. Probeer het opnieuw.'
+    addError.value = foutmeldingUit(fout, 'Kon de titel niet opslaan. Probeer het opnieuw.')
   } finally {
     saving.value = false
   }
 }
 
 async function verwijderen(titel: string) {
-  if (removingTitle.value) return
+  if (removingTitle.value || saving.value) return
   removingTitle.value = titel
+  removeError.value = ''
+  addError.value = ''
   try {
     const respons = await $fetch<HiddenCalendarTitlesResponse>(`/api/settings/hidden-calendar-titles/${encodeURIComponent(titel)}`, {
       method: 'DELETE'
@@ -73,6 +93,11 @@ async function verwijderen(titel: string) {
       await navigateTo('/inloggen')
       return
     }
+    // Review-fix (chunk F, 2026-09-07 — Blind Hunter + Architecture Auditor, onafhankelijk
+    // van elkaar gevonden): was volledig stil (alleen `console.error`) — de knop herstelde
+    // zich, de tag bleef staan, en niets vertelde de gebruiker waarom. Zelfde `addError`-
+    // precedent als `toevoegen` hierboven.
+    removeError.value = 'Kon de titel niet verwijderen. Probeer het opnieuw.'
     console.error('[verborgen-agenda-items] Kon titel niet verwijderen:', fout)
   } finally {
     removingTitle.value = null
@@ -103,12 +128,13 @@ async function verwijderen(titel: string) {
             type="button"
             class="hidden-titles-remove-button"
             aria-label="Titel niet meer verbergen"
-            :disabled="removingTitle === titel"
+            :disabled="removingTitle === titel || saving"
             @click="verwijderen(titel)"
           >✕</button>
         </span>
         <p v-if="titles.length === 0" class="hidden-titles-empty">Nog geen titels verborgen.</p>
       </div>
+      <p v-if="removeError" class="hidden-titles-add-error" role="alert">{{ removeError }}</p>
 
       <form class="hidden-titles-add-row" @submit.prevent="toevoegen">
         <input
@@ -117,13 +143,13 @@ async function verwijderen(titel: string) {
           type="text"
           class="hidden-titles-input"
           placeholder="Bijv. Slaapritme"
-          :disabled="saving"
+          :disabled="saving || !!removingTitle"
         >
         <button
           id="hidden-titles-add-button"
           type="submit"
           class="hidden-titles-add-button"
-          :disabled="saving || !nieuweTitel.trim()"
+          :disabled="saving || !!removingTitle || !nieuweTitel.trim()"
         >Toevoegen</button>
       </form>
       <p v-if="addError" class="hidden-titles-add-error" role="alert">{{ addError }}</p>

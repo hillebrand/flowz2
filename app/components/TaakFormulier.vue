@@ -110,7 +110,11 @@ function setSubtaskTimeRef(key: number, el: Element | ComponentPublicInstance | 
   else delete subtaskTimeInputs.value[key]
 }
 
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): geen bovengrens — de server wijst een
+// batch van meer dan `MAX_SUBTASKS` rijen af (`validate-task-input.ts`), wat pas bij het
+// opslaan van de hele, verder correct ingevulde taak zichtbaar werd.
 function addSubtask() {
+  if (subtaskRows.value.length >= MAX_SUBTASKS) return
   subtaskRows.value.push(createSubtaskRow())
   const newKey = subtaskRows.value[subtaskRows.value.length - 1]!.key
   nextTick(() => subtaskNameInputs.value[newKey]?.focus())
@@ -294,7 +298,11 @@ async function fetchNeedsSuggestions(subject: string): Promise<string[]> {
     })
     return response.suggestions
   } catch (fout) {
-    if (is401(fout)) {
+    // Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): geen eigen navigatie meer als
+    // `sessionExpired` al waar is — anders navigeerde één toets in het vak-veld ná de
+    // "sessie verlopen"-melding alsnog stilzwijgend weg en verloor de rest van de
+    // ingevulde, nog onopgeslagen data (precies wat `sessionExpired` moest voorkomen).
+    if (is401(fout) && !sessionExpired.value) {
       await navigateTo('/inloggen')
     }
     // Niet-kritieke verrijking (fresh-context-validatiepas): een mislukte fetch faalt stil,
@@ -419,6 +427,17 @@ const isDirty = computed(() => {
 const MAX_TITLE_LENGTH = 100
 const MAX_DESCRIPTION_LENGTH = 500
 const MIN_SESSION_DURATION = 5
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): ontbrak — de server klemt sessieduur
+// tussen `MIN_SESSION_DURATION` en `MAX_SESSION_DURATION` (`validate-task-input.ts`), maar
+// het clientveld had alleen een ondergrens. Een waarde erboven (bv. 600) haalde de hele
+// verder-correct-ingevulde taak (subtaken, benodigdheden, alles) onderuit met een generieke
+// serverfout, zonder dat de client dat vooraf had kunnen aanwijzen.
+const MAX_SESSION_DURATION = 480
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): zelfde soort ontbrekende bovengrens
+// als hierboven, voor het aantal subtaken resp. de lengte van een subtaaknaam
+// (`validate-task-input.ts`'s `MAX_SUBTASKS`/`MAX_SUBTASK_NAME_LENGTH`).
+const MAX_SUBTASKS = 50
+const MAX_SUBTASK_NAME_LENGTH = 100
 
 function validateSubject(): string {
   return subject.value.trim() ? '' : 'Kies of vul een vak in'
@@ -444,6 +463,9 @@ function validateSessionDuration(): string {
   if (sessionDuration.value === null) return `Vul een sessieduur in van minimaal ${MIN_SESSION_DURATION} minuten`
   if (!Number.isInteger(sessionDuration.value) || sessionDuration.value < MIN_SESSION_DURATION) {
     return `Vul een sessieduur in van minimaal ${MIN_SESSION_DURATION} minuten`
+  }
+  if (sessionDuration.value > MAX_SESSION_DURATION) {
+    return `Sessieduur mag maximaal ${MAX_SESSION_DURATION} minuten zijn`
   }
   return ''
 }
@@ -479,6 +501,17 @@ const fieldRefs = {
 
 // --- Sluiten/annuleren ---
 const showLeaveConfirm = ref(false)
+let savedConfirmationTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => {
+  if (savedConfirmationTimer) clearTimeout(savedConfirmationTimer)
+  // Review-fix (ronde 2, chunk F, 2026-09-07 — Architecture Auditor): `skipSessieVervalRedirect`
+  // is een GLOBALE `useState` — zonder dit bleef 'm op `true` staan voor de rest van de
+  // SPA-sessie als Evelien dit formulier verlaat (✕/Annuleren/`goBack()`) ná een
+  // sessieverval-tijdens-opslaan zonder alsnog op te slaan. Elke latere 401 elders in de app
+  // zou dan wél de sessie legen maar nooit meer naar `/inloggen` navigeren — dezelfde soort
+  // "state overleeft zijn component"-fout als de bug die deze ronde net elders dichtte.
+  skipSessieVervalRedirect.value = false
+})
 
 function goBack() {
   // Story 5.3 — `mode="bewerken"` heeft een vast terugkeer-doel (6.2-taakdetail), geen
@@ -496,7 +529,31 @@ function goBack() {
   }
 }
 
+// Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): `isDirty`/`showLeaveConfirm` waren
+// tot nu toe alleen bereikbaar via de Sluiten-knop/Annuleren-link — een browser-terug-gebaar
+// (het meest gebruikelijke navigatiegebaar op de telefoon die dit project target), een
+// reload, of een toekomstige in-app-link vanaf dit formulier omzeilde de hele
+// dirty-check en verloor een volledig ingevuld formulier zonder enige waarschuwing.
+// `leaveConfirmResolver` laat dezelfde modal ook een écht in-gang-zijnde routernavigatie
+// bevestigen/annuleren — bij bevestigen gaat de OORSPRONKELIJKE navigatie gewoon door (geen
+// aparte `goBack()`-aanroep nodig, die zou een ander doel kunnen kiezen dan waar de gebruiker
+// naartoe probeerde te gaan).
+let leaveConfirmResolver: ((ok: boolean) => void) | null = null
+// Review-fix (ronde 2, chunk F, 2026-09-07 — Blind Hunter + Edge Case Hunter, onafhankelijk
+// van elkaar gevonden): `confirmLeave`'s `else`-tak (de Sluiten-knop/Annuleren-link, geen
+// in-gang-zijnde routernavigatie) riep `goBack()` aan — een echte navigatie, die de
+// onderstaande `onBeforeRouteLeave` opnieuw liet triggeren met `isDirty` nog steeds waar. De
+// bevestigingsmodal verscheen zo een tweede keer, vlak nadat de gebruiker 'm al had bevestigd.
+// Deze vlag laat de guard die ene, al-bevestigde navigatie ongehinderd doorlaten.
+let bypassLeaveGuard = false
+
 function requestLeave() {
+  // Review-fix (ronde 3, chunk F, 2026-09-07 — Edge Case Hunter): `bypassLeaveGuard` is
+  // one-shot, bedoeld voor exact de navigatie die er direct op volgt — een eerdere, nooit
+  // door de guard geconsumeerde waarde (bv. een navigatie die zelf geen leave-fase
+  // doorloopt) zou anders een latere, wél-legitieme wegnavigatiepoging ongezien laten
+  // passeren.
+  bypassLeaveGuard = false
   // Genegeerd tijdens een lopende save (code review 2026-08-01) — anders kon Sluiten/
   // Annuleren wegnavigeren terwijl de opslaan-aanroep nog onderweg is, en landt de respons
   // op een pagina die de gebruiker al verlaten heeft.
@@ -514,12 +571,63 @@ function requestLeave() {
 
 function confirmLeave() {
   showLeaveConfirm.value = false
-  goBack()
+  if (leaveConfirmResolver) {
+    const resolve = leaveConfirmResolver
+    leaveConfirmResolver = null
+    resolve(true)
+  } else {
+    bypassLeaveGuard = true
+    goBack()
+  }
 }
 
 function cancelLeaveConfirm() {
   showLeaveConfirm.value = false
+  if (leaveConfirmResolver) {
+    const resolve = leaveConfirmResolver
+    leaveConfirmResolver = null
+    resolve(false)
+  }
 }
+
+onBeforeRouteLeave(() => {
+  if (bypassLeaveGuard) {
+    bypassLeaveGuard = false
+    return true
+  }
+  // `saving` blijft bewust `true` tot en met de post-save-navigatie (zie de toelichting bij
+  // `onSubmit`) — die navigatie moet hier ongehinderd doorgaan, niet nogmaals om bevestiging
+  // vragen voor data die al is opgeslagen.
+  //
+  // Review-fix (ronde 2, chunk F, 2026-09-07 — Edge Case Hunter, gecorrigeerd in ronde 3 —
+  // Blind Hunter): `requestLeave` negeert een openstaande vak-wijziging-dialoog simpelweg
+  // (de gebruiker blijft dan op de pagina — onschuldig), maar diezelfde `return true` hier
+  // zou een ECHT in gang zijnde navigatie ongehinderd laten doorgaan — het formulier zonder
+  // enige waarschuwing weggooien, precies wat deze guard moest voorkomen. De vak-dialoog
+  // wordt hier daarom eerst gesloten (de suggestie-update die 'm veroorzaakte is toch niet
+  // meer relevant als de gebruiker de pagina verlaat), waarna de gewone dirty-check alsnog
+  // de leave-modal toont.
+  // Review-fix (ronde 4, chunk F, 2026-09-07 — Blind Hunter): `dismissNeedsSubjectChange()`
+  // aanroepen i.p.v. de rauwe toewijzing — die ruimt ook de hint-datalist van het verlaten
+  // vak op, anders blijven diens suggesties zichtbaar als de gebruiker de leave-modal
+  // annuleert en op het formulier blijft.
+  if (showNeedsSubjectChangeDialog.value) dismissNeedsSubjectChange()
+  if (saving.value || !isDirty.value) return true
+  // Review-fix (ronde 2, chunk F, 2026-09-07 — Blind Hunter): een eerdere, nog niet
+  // afgehandelde resolver (browser-terug tweemaal snel na elkaar, vóór Vue Router de eerste
+  // poging heeft afgerond) werd hier stilzwijgend overschreven — de oorspronkelijke promise
+  // bleef voor altijd hangen. Expliciet als geannuleerd afhandelen vóórdat de nieuwe 'm
+  // vervangt.
+  if (leaveConfirmResolver) {
+    const resolve = leaveConfirmResolver
+    leaveConfirmResolver = null
+    resolve(false)
+  }
+  return new Promise<boolean>((resolve) => {
+    leaveConfirmResolver = resolve
+    showLeaveConfirm.value = true
+  })
+})
 
 // --- Opslaan ---
 const saving = ref(false)
@@ -621,7 +729,11 @@ async function onSubmit() {
     // 2026-08-01) — anders heractiveert de knop tijdens dit venster en kan een extra klik
     // een dubbele taak/sessie/Calendar-event aanmaken.
     savedConfirmation.value = true
-    setTimeout(goBack, 800)
+    // Review-fix (chunk E, 2026-09-06 — Blind Hunter): niet opgeruimd bij unmount — een
+    // navigatie weg van dit formulier binnen het 800ms-venster (bv. via het hamburgermenu,
+    // als "saving" dat al toestond) liet de timer alsnog afgaan en `router.back()` uitvoeren
+    // vanaf welke pagina de gebruiker dan ook net bezocht.
+    savedConfirmationTimer = setTimeout(goBack, 800)
   } catch (fout) {
     if (is401(fout)) {
       // Bewust geen `navigateTo` hier — de ingevulde data blijft zo zichtbaar op het scherm
@@ -632,11 +744,24 @@ async function onSubmit() {
       saving.value = false
       return
     }
-    saveError.value = props.mode === 'bewerken' ? 'Kon de taak niet bijwerken. Probeer het opnieuw.' : 'Kon de taak niet opslaan. Probeer het opnieuw.'
+    // Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): toont nu de daadwerkelijke
+    // serverfoutmelding als die beschikbaar is (bv. een validatiefout op sessieduur/
+    // subtaken-aantal/naamlengte die de client zelf niet afving) i.p.v. altijd de generieke
+    // tekst — die was voor zo'n fout misleidend, want "probeer het opnieuw" met dezelfde
+    // invoer geeft weer exact dezelfde fout. Zelfde precedent als
+    // `InstellingenBeschikbareTijd.vue`'s `foutmeldingUit()`.
+    const serverMessage = (fout as FetchError<{ error?: { message?: string } }> | undefined)?.data?.error?.message
+    saveError.value = serverMessage ?? (props.mode === 'bewerken' ? 'Kon de taak niet bijwerken. Probeer het opnieuw.' : 'Kon de taak niet opslaan. Probeer het opnieuw.')
     console.error('[taak-formulier] Kon taak niet opslaan:', fout)
     saving.value = false
   } finally {
-    skipSessieVervalRedirect.value = false
+    // Review-fix (chunk F, 2026-09-07 — Edge Case Hunter): bleef voorheen onvoorwaardelijk
+    // op `false` staan, ook ná een `sessionExpired` — een volgende achtergrond-aanroep vanuit
+    // dít formulier (bv. `fetchNeedsSuggestions` bij het wijzigen van het vak-veld) kon dan
+    // alsnog de globale plugin-redirect triggeren en de zichtbaar gehouden, onopgeslagen data
+    // alsnog laten verdwijnen — precies wat `sessionExpired` moest voorkomen. Blijft nu `true`
+    // zolang `sessionExpired` dat is.
+    skipSessieVervalRedirect.value = sessionExpired.value
   }
 }
 </script>
@@ -772,6 +897,7 @@ async function onSubmit() {
             class="taak-input taak-input--narrow"
             placeholder="bijv. 25"
             min="5"
+            max="480"
             :disabled="saving"
             :aria-invalid="!!errors.sessionDuration"
             @blur="errors.sessionDuration = validateSessionDuration()"
@@ -796,6 +922,7 @@ async function onSubmit() {
               class="taak-input"
               placeholder="Naam van deeltaak"
               aria-label="Naam van deeltaak"
+              :maxlength="MAX_SUBTASK_NAME_LENGTH"
               :disabled="saving || row.status === 'afgerond'"
             >
             <input
@@ -836,9 +963,10 @@ async function onSubmit() {
           id="taak-subtask-add-button"
           type="button"
           class="taak-subtask-add-button"
-          :disabled="saving"
+          :disabled="saving || subtaskRows.length >= MAX_SUBTASKS"
           @click="addSubtask"
         >+ Deeltaak toevoegen</button>
+        <p v-if="subtaskRows.length >= MAX_SUBTASKS" class="taak-error" role="alert">Maximaal {{ MAX_SUBTASKS }} deeltaken toegestaan.</p>
 
         <div class="taak-field taak-total-time-row">
           <span class="taak-label">Totale benodigde tijd</span>

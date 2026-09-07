@@ -24,6 +24,24 @@ const confirmError = ref(false)
 const done = ref(false)
 let redirectTimer: ReturnType<typeof setTimeout> | undefined
 
+// Review-fix (chunk E, 2026-09-06 — Blind Hunter): de vorige `onUnmounted`-fix ruimde
+// alleen een AL LOPENDE timer op — `redirectTimer` wordt pas gezet ná een `await`, dus een
+// unmount vóórdat de confirm-POST terugkomt liet `onUnmounted` een `undefined` opruimen, en
+// de daarna alsnog gearmde timer navigeerde Evelien 2,5s later weg van welke pagina ze
+// intussen ook bezocht. `isMounted` laat `bevestigen()` de timer helemaal niet meer zetten
+// als de pagina dan al verlaten is.
+const isMounted = ref(true)
+
+// Begrensd op 15s — zelfde `withTimeout`-precedent als de andere pagina's in deze journey.
+const ENERGY_TIMEOUT_MS = 15_000
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ENERGY_TIMEOUT_MS)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
+}
+
 const isEmpty = computed(() =>
   relocated.value.length === 0 && pulledForward.value.length === 0 && shortened.value.length === 0
 )
@@ -35,11 +53,17 @@ function applyResponse(response: EnergyProposalResponse | EnergyConfirmResponse)
   notShortenedReason.value = response.notShortenedReason
 }
 
+let loadInFlight = false
 async function loadProposal() {
+  // Review-fix (chunk E, 2026-09-06 — Edge Case Hunter): re-entrancy-guard — de retry-link
+  // had er nog geen, dus een dubbele klik kon twee overlappende POSTs laten racen, met
+  // een niet-gegarandeerde volgorde van de terugkomende responses.
+  if (loadInFlight) return
+  loadInFlight = true
   isLoading.value = true
   loadError.value = false
   try {
-    const response = await $fetch<EnergyProposalResponse>('/api/day/energy-proposal', { method: 'POST' })
+    const response = await withTimeout($fetch<EnergyProposalResponse>('/api/day/energy-proposal', { method: 'POST' }))
     applyResponse(response)
   } catch (fout) {
     if (is401(fout)) {
@@ -49,21 +73,39 @@ async function loadProposal() {
     loadError.value = true
   } finally {
     isLoading.value = false
+    loadInFlight = false
   }
 }
+
+// Review-fix (ronde 2, chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk
+// van elkaar gevonden): `confirm.post.ts` heeft geen idempotency-sleutel (bekende,
+// gedeferde server-side beperking) — een timeout hier betekent NIET per se een mislukte
+// aanpassing, de server-side toepassing kan gewoon zijn doorgelopen. `confirmError` nodigde
+// tot nu toe altijd uit tot een retry via dezelfde levende Bevestigen-knop, wat bij een
+// timeout een tweede toepassing op een al aangepaste dag zou kunnen doen. `confirmTimedOut`
+// toont in plaats daarvan een neutrale "we weten het niet zeker"-boodschap met alleen een
+// "Terug naar Home"-link, geen herhaalbare mutatie-knop.
+const confirmTimedOut = ref(false)
 
 async function bevestigen() {
   if (confirming.value) return
   confirming.value = true
   confirmError.value = false
+  confirmTimedOut.value = false
   try {
-    const response = await $fetch<EnergyConfirmResponse>('/api/day/energy-proposal/confirm', { method: 'POST' })
+    const response = await withTimeout($fetch<EnergyConfirmResponse>('/api/day/energy-proposal/confirm', { method: 'POST' }))
     applyResponse(response)
     done.value = true
-    redirectTimer = setTimeout(() => navigateTo('/'), 2500)
+    if (isMounted.value) {
+      redirectTimer = setTimeout(() => navigateTo('/'), 2500)
+    }
   } catch (fout) {
     if (is401(fout)) {
       await navigateTo('/inloggen')
+      return
+    }
+    if ((fout as Error | undefined)?.message === 'timeout') {
+      confirmTimedOut.value = true
       return
     }
     confirmError.value = true
@@ -77,6 +119,7 @@ onMounted(loadProposal)
 // Review-patch: `redirectTimer` liep door tegen een afgebroken component-context als
 // Evelien binnen de 2,5s-pauze handmatig wegnavigeerde vóór de automatische redirect.
 onUnmounted(() => {
+  isMounted.value = false
   if (redirectTimer) clearTimeout(redirectTimer)
 })
 </script>
@@ -100,8 +143,15 @@ onUnmounted(() => {
         <p id="energy-reassurance-text" class="energy-reassurance-text">Jij hoeft niets te kiezen — we regelen het voor je</p>
       </section>
 
-      <section v-if="isEmpty && !notShortenedReason" id="energy-changes-section" class="energy-changes-section">
+      <!-- Review-fix (chunk E, 2026-09-06 — Edge Case Hunter): eerder vereiste deze sectie
+           `isEmpty && !notShortenedReason` — met alleen een `notShortenedReason` (een
+           reachable, gedocumenteerde serveruitkomst) en verder niets om aan te passen, viel
+           dit toch in de `v-else`-tak hieronder: die toont een levende Bevestigen-knop voor
+           een voorstel dat zichtbaar niets aanpast. `isEmpty` alleen bepaalt nu of er iets
+           te bevestigen valt; `notShortenedReason` blijft zichtbaar als toelichting. -->
+      <section v-if="isEmpty" id="energy-changes-section" class="energy-changes-section">
         <p class="energy-empty-text">Vandaag hoeft er niets aangepast te worden</p>
+        <p v-if="notShortenedReason" id="energy-not-shortened-text" class="energy-empty-text">{{ notShortenedReason }}</p>
       </section>
 
       <section v-else id="energy-changes-section" class="energy-changes-section">
@@ -127,7 +177,11 @@ onUnmounted(() => {
 
       <section v-if="!done" id="energy-action-section" class="energy-action-section">
         <p v-if="confirmError" class="energy-error" role="alert">Kon deze aanpassingen niet doorvoeren. Probeer het opnieuw.</p>
-        <NuxtLink v-if="isEmpty && !notShortenedReason" to="/" class="energy-confirm-button">Terug naar Home</NuxtLink>
+        <template v-if="confirmTimedOut">
+          <p class="energy-error" role="alert">We konden niet zeker vaststellen of dit gelukt is. Ga naar Home om het te controleren.</p>
+          <NuxtLink id="energy-confirm-button" to="/" class="energy-confirm-button">Terug naar Home</NuxtLink>
+        </template>
+        <NuxtLink v-else-if="isEmpty" id="energy-confirm-button" to="/" class="energy-confirm-button">Terug naar Home</NuxtLink>
         <button
           v-else
           id="energy-confirm-button"

@@ -18,5 +18,11 @@ export default defineEventHandler(async (event): Promise<HomeworkCalendarColorSt
     return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
-  return await getHomeworkCalendarColorFor(session.user.id)
+  // Review-fix (chunk 3, 2026-09-06): zelfde precedent als availability-calendar.get.ts.
+  try {
+    return await getHomeworkCalendarColorFor(session.user.id)
+  } catch (fout) {
+    console.error('[settings] Kon huiswerk-agendakleur niet ophalen:', fout)
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon huiswerk-agendakleur niet laden.')
+  }
 })

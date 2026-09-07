@@ -27,6 +27,12 @@ export default defineEventHandler(async (event): Promise<NeedsSuggestionsRespons
   // ook al bestaan er wél matchende taken.
   const subject = rawSubject.trim()
 
-  const suggestions = await getNeedsSuggestionsForSubject(session.user.id, subject)
-  return { suggestions }
+  // Review-fix (chunk 3, 2026-09-06): zelfde precedent als availability-calendar.get.ts.
+  try {
+    const suggestions = await getNeedsSuggestionsForSubject(session.user.id, subject)
+    return { suggestions }
+  } catch (fout) {
+    console.error('[tasks] Kon suggesties niet ophalen:', fout)
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon suggesties niet laden.')
+  }
 })
