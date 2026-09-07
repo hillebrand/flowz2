@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getOpenTasksWithProgress, getSessionById, getSessionsForTask, getTaskById, getTasksWithSessionOnDate, sumPlannedMinutesForUserOnDate, updateSessionPlacement } from '../../data/tasks'
 import { placeSessionOnDate } from './session-placement'
 import { calculateStudiedrukScore, formatDayLabel } from './shortfall'
@@ -309,6 +310,32 @@ export async function generateEnergyProposal(userId: string, date: string): Prom
     : null
 
   return { date, relocated, pulledForward, shortened, notShortenedReason }
+}
+
+// Deferred-work-fix (2026-09-07) — idempotency-token voor `POST /api/day/energy-proposal/
+// confirm`. Vóór deze toevoeging kon een dubbele POST (netwerk-retry, een timeout waarna de
+// client toch "probeer opnieuw" toestond bij een niet-timeout-fout) een ánder, vers
+// herberekend voorstel toepassen op een al gedeeltelijk gemuteerde staat — `confirm.post.ts`
+// herberekent bewust altijd vers (server is gezaghebbend, nooit een client-object
+// vertrouwen), maar had geen manier om te weten of die verse herberekening nog wel
+// overeenkomt met wat de gebruiker daadwerkelijk zag/bevestigde.
+//
+// `generateEnergyProposal`'s uitkomst is deterministisch gegeven dezelfde DB-staat, dus een
+// hash over de mutatie-relevante velden volstaat als token — geen aparte opslag nodig. De
+// client krijgt 'm mee bij het ophalen van het voorstel (`POST /api/day/energy-proposal`) en
+// stuurt 'm terug bij het bevestigen; `confirm.post.ts` herberekent, hasht opnieuw, en
+// vergelijkt. Een mismatch betekent: de onderliggende staat is tussen ophalen en bevestigen
+// gewijzigd (een eerdere confirm-poging is al doorgegaan, of iets anders muteerde
+// intussen) — zelfde "niet meer geldig"-precedent als `shortfall.ts`'s aanbeveling-id's
+// (404, niet blind het nieuwe voorstel toepassen).
+export function computeEnergyProposalToken(proposal: EnergyProposal): string {
+  const relevant = {
+    date: proposal.date,
+    relocated: proposal.relocated.map(i => ({ taskId: i.taskId, sessionId: i.sessionId, targetDate: i.targetDate })),
+    pulledForward: proposal.pulledForward.map(i => ({ taskId: i.taskId, sessionId: i.sessionId, targetDate: i.targetDate })),
+    shortened: proposal.shortened.map(i => ({ taskId: i.taskId, sessionId: i.sessionId, shortenMinutes: i.shortenMinutes }))
+  }
+  return createHash('sha256').update(JSON.stringify(relevant)).digest('hex')
 }
 
 // Past een vers-gegenereerd voorstel daadwerkelijk toe. Nooit een client-aangeleverd

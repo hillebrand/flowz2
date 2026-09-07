@@ -41,11 +41,17 @@ const isEmpty = computed(() =>
   relocated.value.length === 0 && pulledForward.value.length === 0 && shortened.value.length === 0
 )
 
+// Deferred-work-fix (2026-09-07) — idempotency-token, meegestuurd bij `bevestigen()` zodat
+// de server een dubbele/verouderde bevestiging kan herkennen (zie `EnergyConfirmInput`'s
+// eigen commentaar in shared/types/energy.d.ts).
+const proposalToken = ref<string | null>(null)
+
 function applyResponse(response: EnergyProposalResponse | EnergyConfirmResponse) {
   relocated.value = response.relocated
   pulledForward.value = response.pulledForward
   shortened.value = response.shortened
   notShortenedReason.value = response.notShortenedReason
+  proposalToken.value = response.proposalToken
 }
 
 let loadInFlight = false
@@ -88,7 +94,10 @@ async function bevestigen() {
   confirmError.value = false
   confirmTimedOut.value = false
   try {
-    const response = await withTimeout($fetch<EnergyConfirmResponse>('/api/day/energy-proposal/confirm', { method: 'POST' }))
+    const response = await withTimeout($fetch<EnergyConfirmResponse>('/api/day/energy-proposal/confirm', {
+      method: 'POST',
+      body: { proposalToken: proposalToken.value }
+    }))
     applyResponse(response)
     done.value = true
     if (isMounted.value) {
@@ -101,6 +110,15 @@ async function bevestigen() {
     }
     if ((fout as Error | undefined)?.message === 'timeout') {
       confirmTimedOut.value = true
+      return
+    }
+    // Deferred-work-fix (2026-09-07) — een 404 hier betekent dat de meegestuurde
+    // `proposalToken` niet meer overeenkomt met de actuele planning (zie
+    // `confirm.post.ts`'s eigen commentaar) — zelfde "niet meer geldig, herlaad de actuele
+    // staat"-precedent als `tekort-oplossen.vue`'s aanbeveling-kaarten, i.p.v. een
+    // doodlopend pad met een generieke foutmelding.
+    if (is404(fout)) {
+      await loadProposal()
       return
     }
     confirmError.value = true

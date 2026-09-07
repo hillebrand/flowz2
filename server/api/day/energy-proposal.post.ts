@@ -1,5 +1,5 @@
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
-import { generateEnergyProposal } from '../../domain/scheduling/energy'
+import { computeEnergyProposalToken, generateEnergyProposal } from '../../domain/scheduling/energy'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import type { EnergyProposalResponse } from '../../../shared/types/energy'
 
@@ -19,7 +19,8 @@ export default defineEventHandler(async (event): Promise<EnergyProposalResponse 
       relocated: proposal.relocated.map(i => ({ taskId: i.taskId, description: i.description })),
       pulledForward: proposal.pulledForward.map(i => ({ taskId: i.taskId, description: i.description })),
       shortened: proposal.shortened.map(i => ({ taskId: i.taskId, description: i.description })),
-      notShortenedReason: proposal.notShortenedReason
+      notShortenedReason: proposal.notShortenedReason,
+      proposalToken: computeEnergyProposalToken(proposal)
     }
   } catch (fout) {
     console.error('[day] Kon energie-voorstel niet berekenen:', fout)
