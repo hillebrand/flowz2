@@ -572,6 +572,17 @@ export async function reopenTaskWithRemaining(taskId: string, totalMinutes: numb
   await getDb().update(tasks).set({ completedAt: null, totalMinutes, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
 }
 
+// Deferred-work-fix (2026-09-07): compenserende rollback voor `server/domain/tasks/
+// reopen-task.ts` — zet `completedAt`/`totalMinutes` terug naar hun waarde van vóór het
+// heropenen als de vervolg-herberekening (live-Calendar-afhankelijk, kan falen) na een
+// geslaagde `reopenTaskWithRemaining` alsnog mislukt. Zonder dit bleef de taak stil
+// halverwege heropend (`completedAt: null` met verouderde/geen sessies) — zelfde
+// "compenserende rollback bij een falende vervolgstap"-precedent als `create-task.ts`/
+// `school-sessions.post.ts`.
+export async function restoreCompletedTask(taskId: string, completedAt: string, totalMinutes: number): Promise<void> {
+  await getDb().update(tasks).set({ completedAt, totalMinutes, updatedAt: new Date().toISOString() }).where(eq(tasks.id, taskId))
+}
+
 // Story 6.2 — niveau 4 "laten vervallen" (tekort-escalatieketen). Géén `sessionLogs`-rij
 // (in tegenstelling tot `logSessionAndCompleteTask` hierboven): er is geen bestede tijd om
 // te loggen, de taak is nooit uitgevoerd. Zet uitsluitend `droppedAt` — zie schema.ts's
