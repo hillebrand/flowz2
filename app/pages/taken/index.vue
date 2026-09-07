@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { OpenTaskItem, OpenTasksResponse, TaskType } from '#shared/types/tasks'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
 
@@ -8,10 +7,6 @@ if (!loggedIn.value) {
   await navigateTo('/inloggen')
 }
 useHead({ title: 'Takenoverzicht' })
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
 
 // `server: false` (zelfde reden als index.vue/taak/nieuw.vue's eigen fetches): SSR zou de
 // data anders al tijdens het server-render oplossen.

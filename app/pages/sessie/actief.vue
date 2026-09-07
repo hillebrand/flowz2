@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { SessieOverzichtLog, SessionActiveTaak } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
   await navigateTo('/inloggen')
-}
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
 }
 
 const route = useRoute()

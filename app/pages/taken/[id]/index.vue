@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { OpenTaskItem, TaskType } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
@@ -9,10 +8,6 @@ if (!loggedIn.value) {
 
 const route = useRoute()
 const taskId = computed(() => (Array.isArray(route.params.id) ? route.params.id[0] : route.params.id) ?? '')
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
 
 const flashMessageState = useState<string | null>('flash-message', () => null)
 

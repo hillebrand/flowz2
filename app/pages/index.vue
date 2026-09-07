@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { HomePlanResponse } from '#shared/types/tasks'
 import type { StartupCheckResponse } from '#shared/types/startup-check'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
@@ -11,10 +10,6 @@ if (!loggedIn.value) {
 }
 
 useHead({ title: 'Flowz' })
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
 
 // `server: false` (fresh-context-validatiepas): zonder dit lost SSR de data al op tijdens
 // het server-render, waardoor `status === 'pending'` op de eerste page-load in de praktijk

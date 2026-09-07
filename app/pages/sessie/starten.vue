@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { HomePlanResponse, SessionActiveTaak, TaskPrepResponse } from '#shared/types/tasks'
 
 const { loggedIn } = useUserSession()
@@ -8,13 +7,6 @@ if (!loggedIn.value) {
 }
 
 useHead({ title: 'Sessie starten' })
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-function is404(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 404
-}
 
 type PrepTaak = TaskPrepResponse
 

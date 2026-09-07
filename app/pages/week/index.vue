@@ -9,10 +9,6 @@ if (!loggedIn.value) {
 
 useHead({ title: 'Weekoverzicht' })
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 const isLoading = ref(true)
 const loadError = ref(false)
 const days = ref<WeekDayDto[]>([])

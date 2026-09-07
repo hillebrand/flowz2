@@ -6,10 +6,6 @@ import type { HiddenCalendarTitlesResponse } from '#shared/types/settings'
 // instellingen/verborgen-agenda-items.vue-pagina) — logica ongewijzigd, alleen de
 // paginachrome (terug-knop, eigen <main>-wrapper) is eruit.
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 // `server: false`, zelfde reden als InstellingenBeschikbareTijd.vue: authenticated/privé
 // instellingenpagina, SSR-snelheid is hier niet relevant.
 const { data, error } = await useFetch<HiddenCalendarTitlesResponse>('/api/settings/hidden-calendar-titles', {

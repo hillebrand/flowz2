@@ -9,10 +9,6 @@ if (!loggedIn.value) {
 
 useHead({ title: 'Vandaag niet als gepland?' })
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 type Reason = 'time' | 'energy' | null
 const selectedReason = ref<Reason>(null)
 

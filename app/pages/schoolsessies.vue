@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { SchoolSessionTasksResponse, SchoolSessionEntry, SchoolSessionsResponse, OpenTasksResponse, OpenTaskItem, ReopenTaskInput, ReopenTaskResponse } from '#shared/types/tasks'
 import { isValidCalendarDate } from '#shared/utils/availability'
 import { todayInAmsterdam } from '#shared/utils/scheduling'
@@ -16,10 +15,6 @@ if (!loggedIn.value) {
 }
 
 useHead({ title: 'Schoolsessies invoeren' })
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
 
 // Zelfde patroon als app/pages/sessie/overzicht.vue's `isEmptyField` — nodig omdat
 // `v-model.number` op een leeggemaakt getalveld de rauwe lege string `''` laat staan,

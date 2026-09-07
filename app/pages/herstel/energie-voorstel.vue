@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { FetchError } from 'ofetch'
 import type { EnergyConfirmResponse, EnergyProposalItemDto, EnergyProposalResponse } from '#shared/types/energy'
 
 const { loggedIn } = useUserSession()
@@ -8,10 +7,6 @@ if (!loggedIn.value) {
 }
 
 useHead({ title: 'Wat gaan we aanpassen?' })
-
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
 
 const isLoading = ref(true)
 const loadError = ref(false)

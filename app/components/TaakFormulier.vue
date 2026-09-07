@@ -42,10 +42,6 @@ const LEVEL_OPTIONS: { value: Difficulty, label: string }[] = [
   { value: 'hoog', label: 'Hoog' }
 ]
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 // --- Vak-suggesties (Task 4's GET /api/tasks/subjects) ---
 // Bewust géén `await` (code review 2026-08-01): met een top-level await zou de hele
 // pagina wachten op deze niet-kritieke fetch vóórdat er iets rendert (Nuxt's Suspense-

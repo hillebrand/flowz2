@@ -17,10 +17,6 @@ if (!loggedIn.value) {
 
 useHead({ title: 'Tekort oplossen' })
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 // Maximaal 3 kaarten tegelijk zichtbaar (UX-spec, `shortfall-recommendations`).
 const MAX_VISIBLE_RECOMMENDATIONS = 3
 

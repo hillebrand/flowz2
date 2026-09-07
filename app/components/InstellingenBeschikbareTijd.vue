@@ -12,10 +12,6 @@ import type {
 // paginachrome (terug-knop, eigen <main>-wrapper, bredere 2-koloms-lay-out vanaf 1024px)
 // is eruit: dat hoort nu bij de gedeelde /instellingen-shell, niet bij dit paneel.
 
-function is401(fout: unknown): boolean {
-  return (fout as FetchError | undefined)?.statusCode === 401
-}
-
 // Losse, lokale vorm i.p.v. een import uit server/domain/errors.ts — dat bestand hoort
 // niet tot shared/ en app/ importeert alleen typedefinities uit shared/ (zelfde grens als
 // elders in dit project).
