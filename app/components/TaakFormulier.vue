@@ -3,6 +3,7 @@ import type { FetchError } from 'ofetch'
 import type { ComponentPublicInstance } from 'vue'
 import type {
   CreateTaskResponse,
+  CreateTaskResult,
   Difficulty,
   NeedsSuggestionsResponse,
   Priority,
@@ -629,6 +630,10 @@ onBeforeRouteLeave(() => {
 const saving = ref(false)
 const saveError = ref('')
 const savedConfirmation = ref(false)
+// Deferred-work-fix (2026-09-07) — server-side signaal dat de taak wél is opgeslagen, maar
+// (bv.) zonder gekoppelde beschikbare-tijd-agenda met een gedegradeerde planning. Alleen
+// gevuld op het aanmaken-pad (`CreateTaskResult`, niet op `bewerken` — zie shared/types).
+const savedWarnings = ref<CreateTaskResult['warnings']>([])
 // Story 1.3 (deferred-punt opgepakt) — bij een verlopen sessie tijdens het opslaan blijft de
 // ingevulde data nu zichtbaar i.p.v. stilzwijgend weg te navigeren (AC #1's "onopgeslagen
 // data"-clausule, destijds niet-van-toepassing verklaard toen er nog geen formulieren
@@ -716,7 +721,7 @@ async function onSubmit() {
       return
     }
 
-    await $fetch<CreateTaskResponse>('/api/tasks', { method: 'POST', body: payload })
+    const respons = await $fetch<CreateTaskResult>('/api/tasks', { method: 'POST', body: payload })
 
     // Flash-bevestiging (UX-spec) — geen bestaand cross-pagina-toastmechanisme elders in
     // de app op het moment dat déze aanpak (Story 3.1) gebouwd werd, dus een korte inline
@@ -725,11 +730,16 @@ async function onSubmit() {
     // 2026-08-01) — anders heractiveert de knop tijdens dit venster en kan een extra klik
     // een dubbele taak/sessie/Calendar-event aanmaken.
     savedConfirmation.value = true
+    savedWarnings.value = respons.warnings
     // Review-fix (chunk E, 2026-09-06 — Blind Hunter): niet opgeruimd bij unmount — een
     // navigatie weg van dit formulier binnen het 800ms-venster (bv. via het hamburgermenu,
     // als "saving" dat al toestond) liet de timer alsnog afgaan en `router.back()` uitvoeren
     // vanaf welke pagina de gebruiker dan ook net bezocht.
-    savedConfirmationTimer = setTimeout(goBack, 800)
+    //
+    // Deferred-work-fix (2026-09-07) — bij een server-side waarschuwing (bv. geen gekoppelde
+    // beschikbare-tijd-agenda) krijgt Evelien meer tijd om 'm te lezen vóór de automatische
+    // terugnavigatie, i.p.v. het gebruikelijke korte 800ms-checkmark-venster.
+    savedConfirmationTimer = setTimeout(goBack, respons.warnings.length > 0 ? 4000 : 800)
   } catch (fout) {
     if (is401(fout)) {
       // Bewust geen `navigateTo` hier — de ingevulde data blijft zo zichtbaar op het scherm
@@ -1073,6 +1083,15 @@ async function onSubmit() {
           <NuxtLink v-if="sessionExpired" id="taak-save-error-login-link" to="/inloggen">Naar het inlogscherm</NuxtLink>
         </p>
         <p v-if="savedConfirmation" id="taak-save-confirmation" class="taak-save-confirmation" role="status">Taak opgeslagen!</p>
+        <p
+          v-for="(warning, index) in savedWarnings"
+          :key="index"
+          id="taak-save-warning"
+          class="taak-save-warning"
+          role="status"
+        >
+          {{ warning.message }}
+        </p>
 
         <div class="taak-action-row">
           <a
@@ -1401,6 +1420,12 @@ async function onSubmit() {
   margin: 0;
   color: var(--color-success);
   font-weight: 500;
+}
+
+.taak-save-warning {
+  margin: 0.25rem 0 0;
+  color: var(--color-warning-text);
+  font-size: 0.875rem;
 }
 
 .taak-confirm-overlay {

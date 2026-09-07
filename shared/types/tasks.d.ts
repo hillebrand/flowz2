@@ -51,6 +51,21 @@ export interface CreateTaskResponse {
   description: string | null
 }
 
+// `POST /api/tasks`'s eigen respons — `PUT /api/tasks/{id}` (bewerken) blijft bewust op de
+// kale `CreateTaskResponse` staan, geen replanning-warnings hier gemodelleerd (buiten scope
+// van deze deferred-work-fix, die specifiek over het aanmaken-pad ging).
+//
+// Deferred-work-fix (2026-09-07) — vóór deze toevoeging kreeg Evelien geen enkel signaal als
+// ze een taak aanmaakte zonder gekoppelde beschikbare-tijd-agenda: `planSessionSlots` valt
+// dan stil terug op een gestapelde planning vanaf een vast anker i.p.v. echte Calendar-
+// blokken (zie `create-task.ts`). Zelfde lichte `{ type, message }`-vorm als
+// `HomePlanResponse.calendarWarnings` — geen aparte Notification-plumbing nodig (AD-6 bindt
+// aan UJ-6/7/8, niet aan UJ-2). Altijd een array (nooit `null`): bij aanmaken is dit
+// synchroon bekend, geen "kon niet bepalen"-geval zoals bij Calendar-events op Home.
+export interface CreateTaskResult extends CreateTaskResponse {
+  warnings: { type: 'info' | 'warning', message: string }[]
+}
+
 export interface TaskSubjectsResponse {
   subjects: string[]
 }

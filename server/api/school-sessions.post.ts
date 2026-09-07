@@ -152,7 +152,12 @@ export default defineEventHandler(async (event): Promise<SchoolSessionsResponse 
         }
 
         const defaultSessionDuration = toDefaultSessionDuration(entry.actualMinutes)
-        const task = await createTask(session.user.id, {
+        // `warnings` (2026-09-07-toevoeging aan `createTask()`) heeft hier geen bestaande
+        // plek in dit route se per-regel `{rowId, ok, message}`-resultaatvorm — dit
+        // batch-invoerscherm valt buiten de scope van de deferred-work-fix (die specifiek
+        // over het taak-aanmaken-formulier ging), dus bewust genegeerd i.p.v. de
+        // resultaatvorm hier ook uit te breiden.
+        const { task } = await createTask(session.user.id, {
           subject: NEW_TASK_SUBJECT,
           title: entry.newTask.title.trim(),
           type: NEW_TASK_TYPE,

@@ -2,11 +2,11 @@ import { readBody } from 'h3'
 import { createTask } from '../domain/tasks/create-task'
 import { validateTaskInput } from '../domain/tasks/validate-task-input'
 import { ErrorCodes, type ErrorEnvelope } from '../domain/errors'
-import type { CreateTaskResponse } from '../../shared/types/tasks'
+import type { CreateTaskResult } from '../../shared/types/tasks'
 
 // Story 5.3 — validatielogica verplaatst naar `server/domain/tasks/validate-task-input.ts`
 // (nu ook gebruikt door `PUT /api/tasks/{id}`), gedrag ongewijzigd.
-export default defineEventHandler(async (event): Promise<CreateTaskResponse | ErrorEnvelope> => {
+export default defineEventHandler(async (event): Promise<CreateTaskResult | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
     return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
     // `id` op een deeltaak zou hier altijd `undefined` moeten zijn (een nieuwe taak heeft
     // nog geen bestaande deeltaak-id's) — expliciet gestript vóór `createTask()` in plaats
     // van erop te vertrouwen dat de client 'm nooit meestuurt.
-    const task = await createTask(session.user.id, {
+    const { task, warnings } = await createTask(session.user.id, {
       ...result.input,
       subtasks: result.input.subtasks.map(({ name, minutes }) => ({ name, minutes }))
     })
@@ -37,7 +37,8 @@ export default defineEventHandler(async (event): Promise<CreateTaskResponse | Er
       priority: task.priority,
       defaultSessionDuration: task.defaultSessionDuration,
       totalMinutes: task.totalMinutes,
-      description: task.description
+      description: task.description,
+      warnings
     }
   } catch (fout) {
     console.error('[tasks] Kon taak niet aanmaken:', fout)

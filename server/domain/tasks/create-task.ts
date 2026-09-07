@@ -1,4 +1,5 @@
 import { createTaskAndSessions } from '../../data/tasks'
+import { getUserById } from '../../data/users'
 import type { Difficulty, Priority, Task, TaskType } from '../../data/schema'
 import { averageDailyAvailableMinutes, calculateDoelmoment, planSessionSlots } from '../scheduling/doelmoment'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
@@ -49,9 +50,32 @@ export function computeTotalMinutes(input: CreateTaskInput): number {
   return input.defaultSessionDuration
 }
 
-export async function createTask(userId: string, input: CreateTaskInput): Promise<Task> {
+export interface TaskCreationWarning {
+  type: 'info' | 'warning'
+  message: string
+}
+
+export async function createTask(userId: string, input: CreateTaskInput): Promise<{ task: Task, warnings: TaskCreationWarning[] }> {
   const today = todayInAmsterdam()
   const totalMinutes = computeTotalMinutes(input)
+
+  // Deferred-work-fix (2026-09-07, op verzoek van Hillebrand): vóór deze toevoeging kreeg
+  // Evelien geen enkel signaal als ze een taak aanmaakte zonder gekoppelde beschikbare-tijd-
+  // agenda — `planSessionSlots` valt dan stil terug op een gestapelde planning vanaf een vast
+  // anker (zie doelmoment.ts se eigen commentaar bij die terugval), niet op echte Calendar-
+  // blokken. Dat is een bewust geaccepteerde terugval (AD-10), maar het ontbrekende signaal
+  // op déze plek (i.t.t. de instellingenpagina se `avail-no-calendar-notice`) was de
+  // eigenlijke omissie. Eén extra lichte DB-lezing (geen Calendar-call) — geen nieuwe
+  // Notification-plumbing nodig (AD-6 bindt aan UJ-6/7/8, niet aan UJ-2), zelfde lichte
+  // `{ type, message }`-vorm als `HomePlanResponse.calendarWarnings`.
+  const user = await getUserById(userId)
+  const warnings: TaskCreationWarning[] = []
+  if (!user.availabilityCalendarId) {
+    warnings.push({
+      type: 'info',
+      message: 'Geen beschikbare-tijd-agenda gekoppeld — deze taak is gepland met een standaard tijdvak in plaats van je echte agenda. Koppel een agenda bij Instellingen voor een nauwkeurigere planning.'
+    })
+  }
 
   // Story 3.1 Task 7's code review-fix (2026-09-03): sinds Task 7's AD-10-rework doen
   // `averageDailyAvailableMinutes`/`findSessionDate` hieronder voor het eerst live Calendar-
@@ -126,5 +150,5 @@ export async function createTask(userId: string, input: CreateTaskInput): Promis
     }
   }
 
-  return task
+  return { task, warnings }
 }
