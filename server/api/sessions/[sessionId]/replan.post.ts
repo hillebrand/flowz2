@@ -9,11 +9,6 @@ import type { ReplanSessionInput, ReplanSessionResponse } from '../../../../shar
 // een client-side eigenschap (de client wacht niet op de response) — dit endpoint zelf
 // await't alles synchroon, zoals elke andere route (AD-7: Calendar-writes synchroon binnen
 // hetzelfde request, geen losse achtergrondtaak).
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 function isValidHours(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }

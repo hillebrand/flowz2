@@ -14,11 +14,6 @@ import { determineSessionTimeCheck } from '../../domain/calendar-sync/session-ti
 // "engine, nog geen consument"-code. Puur lezend, geen mutatie, dus geen domain-tussenlaag
 // nodig — zelfde patroon als server/api/tasks/subjects.get.ts/needs-suggestions.get.ts, die
 // ook rechtstreeks data-laagfuncties aanroepen.
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<HomePlanResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

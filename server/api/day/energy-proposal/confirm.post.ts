@@ -7,15 +7,10 @@ import type { EnergyConfirmResponse } from '../../../../shared/types/energy'
 // `generateEnergyProposal` vers vanuit de actuele DB-staat en past uitsluitend dát
 // server-berekende voorstel toe — nooit een door de client teruggestuurd voorstel-object
 // vertrouwen. Zelfde precedent als `.../recommendations/[id]/accept.post.ts` (Story 6.2).
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<EnergyConfirmResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   try {
@@ -31,7 +26,6 @@ export default defineEventHandler(async (event): Promise<EnergyConfirmResponse |
     }
   } catch (fout) {
     console.error('[day] Kon energie-voorstel niet toepassen:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon deze aanpassingen niet doorvoeren. Probeer het opnieuw.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon deze aanpassingen niet doorvoeren. Probeer het opnieuw.')
   }
 })

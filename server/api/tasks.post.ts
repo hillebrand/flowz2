@@ -6,11 +6,6 @@ import type { CreateTaskResponse } from '../../shared/types/tasks'
 
 // Story 5.3 — validatielogica verplaatst naar `server/domain/tasks/validate-task-input.ts`
 // (nu ook gebruikt door `PUT /api/tasks/{id}`), gedrag ongewijzigd.
-function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<CreateTaskResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

@@ -14,27 +14,20 @@ import type { ShortfallRecommendationActionInput, ShortfallRecommendationAcceptR
 // cache/tussenstaat, ís een "recheck" simpelweg dezelfde functies nogmaals aanroepen — geen
 // nieuw domain-mechanisme nodig, alleen deze dunne route eromheen (dezelfde vorm als
 // accept.post.ts, min de mutatie-stap).
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<ShortfallRecommendationAcceptResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   const recommendationId = getRouterParam(event, 'id')
   if (!recommendationId) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
   }
 
   const body = await readBody<Partial<ShortfallRecommendationActionInput>>(event).catch(() => null)
   if (!body || typeof body.date !== 'string' || !isValidCalendarDate(body.date)) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
 
   try {
@@ -51,7 +44,6 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
     }
   } catch (fout) {
     console.error('[day] Kon tekort niet opnieuw controleren:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon niet opnieuw controleren. Probeer het opnieuw.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon niet opnieuw controleren. Probeer het opnieuw.')
   }
 })

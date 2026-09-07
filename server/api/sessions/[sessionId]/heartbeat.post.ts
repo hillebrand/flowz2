@@ -5,11 +5,6 @@ import { ErrorCodes, type ErrorEnvelope } from '../../../domain/errors'
 // Story 4.5 — zelfde envelope-/ownership-patroon als stop.post.ts (bewust hier lokaal
 // gedupliceerd i.p.v. gedeeld, zelfde "kleine duplicatie tot een derde consument"-precedent
 // als envelope() elders in dit project).
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<{ ok: true } | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

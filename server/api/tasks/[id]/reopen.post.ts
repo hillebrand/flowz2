@@ -10,11 +10,6 @@ import type { ReopenTaskInput, ReopenTaskResponse } from '../../../../shared/typ
 // (beide leeg) heeft geen zinnige betekenis bij het heropenen van een taak die net op 0
 // stond. Herplaatst de bestaande sessie via `recalculateTaskPlanning` (Story 3.5) — geen
 // nieuwe scheduling-logica.
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 function isValidHours(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }

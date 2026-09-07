@@ -7,11 +7,6 @@ import type { SchoolSessionTasksResponse } from '../../../shared/types/tasks'
 // Story 7.1 — hergebruikt dezelfde databron als server/api/home/plan.get.ts (Story 4.1):
 // alle taken met een geplande sessie vandaag. Puur lezend, geen domain-tussenlaag nodig,
 // zelfde precedent als home/plan.get.ts.
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<SchoolSessionTasksResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

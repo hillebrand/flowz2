@@ -7,11 +7,6 @@ import type { OpenTaskItem } from '../../../../shared/types/tasks'
 // al-bestaande `server/api/tasks/[id].get.ts` (Story 4.3, bedient 1.2-sessie-tussenscherm
 // met een andere respons-vorm, `TaskPrepResponse`) — eigen endpoint, eigen levenscyclus,
 // zelfde precedent als `HomePlanResponse` vs. `TaskPrepResponse` (Story 4.3 Dev Notes).
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<OpenTaskItem | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

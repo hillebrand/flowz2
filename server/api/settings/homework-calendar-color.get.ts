@@ -7,11 +7,6 @@ import type { HomeworkCalendarColorState } from '../../../shared/types/settings'
 // deze route toonde de select na elke paginaverversing weer "Kies een kleur", ook al had
 // de gebruiker al eerder gekozen. Werd relevanter nadat kleur verplicht werd: een
 // terugkerende gebruiker leek dan zijn keuze kwijt te zijn.
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<HomeworkCalendarColorState | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

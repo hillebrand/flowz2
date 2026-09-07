@@ -9,27 +9,20 @@ import type { ShortfallRecommendationActionInput, ShortfallRecommendationAcceptR
 // `generateShortfallRecommendations` vers vanuit de actuele DB-staat, zoekt de aanbeveling
 // met dit `id` erin op, en past uitsluitend dát server-berekende object toe — nooit een
 // client-aangeleverde `gainMinutes`/`description`/`targetDate`.
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<ShortfallRecommendationAcceptResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   const recommendationId = getRouterParam(event, 'id')
   if (!recommendationId) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
   }
 
   const body = await readBody<Partial<ShortfallRecommendationActionInput>>(event).catch(() => null)
   if (!body || typeof body.date !== 'string' || !isValidCalendarDate(body.date)) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
 
   try {
@@ -43,8 +36,7 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
     const recommendations = await generateShortfallRecommendations(session.user.id, shortfall)
     const target = recommendations.find(r => r.id === recommendationId)
     if (!target) {
-      setResponseStatus(event, 404)
-      return envelope(404, ErrorCodes.NotFound, 'Deze aanbeveling is niet meer geldig — de planning is inmiddels gewijzigd.')
+      return envelope(event, 404, ErrorCodes.NotFound, 'Deze aanbeveling is niet meer geldig — de planning is inmiddels gewijzigd.')
     }
 
     await applyShortfallRecommendation(session.user.id, target)
@@ -60,7 +52,6 @@ export default defineEventHandler(async (event): Promise<ShortfallRecommendation
     }
   } catch (fout) {
     console.error('[day] Kon aanbeveling niet accepteren:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon deze aanbeveling niet doorvoeren. Probeer het opnieuw.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon deze aanbeveling niet doorvoeren. Probeer het opnieuw.')
   }
 })

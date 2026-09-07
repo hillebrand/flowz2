@@ -4,11 +4,6 @@ import { getNeedsSuggestionsForSubject } from '../../data/tasks'
 import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 import type { NeedsSuggestionsResponse } from '../../../shared/types/tasks'
 
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 // Databron voor `taak-needs-input`'s auto-suggestie (Story 3.3) — afgeleid server-side uit
 // déze user's eigen eerdere taken voor hetzelfde vak, zelfde structuur als
 // server/api/tasks/subjects.get.ts.

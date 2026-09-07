@@ -9,11 +9,6 @@ import type { TaskPrepResponse } from '../../../shared/types/tasks'
 // server/api/availability/exceptions/[date].patch.ts/week/[day].patch.ts — geen nieuwe
 // helper-abstractie, puur lezend dus geen domain-tussenlaag nodig (zelfde precedent als
 // subjects.get.ts/needs-suggestions.get.ts/plan.get.ts).
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<TaskPrepResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

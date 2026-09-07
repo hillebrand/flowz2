@@ -8,11 +8,6 @@ import type { TaskEditData } from '../../../../shared/types/tasks'
 // heel andere respons-vorm, `TaskPrepResponse`) en van `[id]/detail.get.ts` (Story 5.2,
 // `OpenTaskItem`, ook te beperkt voor bewerken) — eigen endpoint, eigen levenscyclus,
 // zelfde precedent als eerder toegepast.
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<TaskEditData | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

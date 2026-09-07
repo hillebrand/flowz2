@@ -10,11 +10,6 @@ import { ErrorCodes, type ErrorEnvelope } from '../../domain/errors'
 // Review-patch: de orkestratie zelf (Calendar-opruiming + multi-table-delete) leeft in
 // `server/domain/tasks/delete-task.ts` (symmetrisch met `create-task.ts`) — deze route
 // blijft dun, zoals de Consistency Conventions voorschrijven.
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<{ ok: true } | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

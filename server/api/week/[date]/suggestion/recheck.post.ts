@@ -17,35 +17,27 @@ const WEEK_DAYS = 7
 // route is bewust identiek dun: **geen mutatie**, alleen `buildWeekDay` opnieuw aanroepen
 // — `detectShortfallForDate` erin leest toch al live uit de gekoppelde Calendar-agenda,
 // dus een "recheck" is simpelweg dezelfde berekening nogmaals.
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   const date = getRouterParam(event, 'date')
   if (!date || !isValidCalendarDate(date)) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
 
   const today = todayInAmsterdam()
   const lastDayInWindow = addDays(today, WEEK_DAYS - 1)
   if (date < today || date > lastDayInWindow) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Deze datum valt buiten het weekoverzicht.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Deze datum valt buiten het weekoverzicht.')
   }
 
   try {
     return await buildWeekDay(session.user.id, date)
   } catch (fout) {
     console.error('[week] Kon niet opnieuw controleren:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon niet opnieuw controleren. Probeer het opnieuw.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon niet opnieuw controleren. Probeer het opnieuw.')
   }
 })

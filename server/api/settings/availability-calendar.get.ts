@@ -5,11 +5,6 @@ import type { AvailabilityCalendarState } from '../../../shared/types/settings'
 
 // Story 2.1 (herzien 2026-09-02, Correct Course, AD-10) — rehydratie bij het laden van
 // 4.1-beschikbare-tijd-instellen, zelfde patroon als homework-calendar-color.get.ts.
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<AvailabilityCalendarState | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

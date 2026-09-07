@@ -16,11 +16,6 @@ function isValidCalendarId(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<UpdateAvailabilityCalendarResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

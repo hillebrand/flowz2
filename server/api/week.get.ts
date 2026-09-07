@@ -9,15 +9,10 @@ import type { WeekDayDto, WeekOverviewResponse } from '../../shared/types/week'
 // elke getoonde dag is zo altijd vandaag-of-later, dus altijd actionable.
 const WEEK_DAYS = 7
 
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<WeekOverviewResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   try {
@@ -32,7 +27,6 @@ export default defineEventHandler(async (event): Promise<WeekOverviewResponse | 
     return { days }
   } catch (fout) {
     console.error('[week] Kon weekoverzicht niet ophalen:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon het weekoverzicht niet ophalen.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon het weekoverzicht niet ophalen.')
   }
 })

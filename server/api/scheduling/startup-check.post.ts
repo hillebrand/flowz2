@@ -13,15 +13,10 @@ import type { StartupCheckResponse } from '../../../shared/types/startup-check'
 // prefetching/monitoring/proxy's als veilig behandeld kunnen worden en ongewild
 // mutaties triggeren. Zelfde precedent als elke andere mutatie-route in dit project
 // (`shortfall.post.ts`, `.../suggestion/accept.post.ts`, enz.).
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<StartupCheckResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   try {
@@ -34,7 +29,6 @@ export default defineEventHandler(async (event): Promise<StartupCheckResponse | 
     return { calendarLinked: true, resolved }
   } catch (fout) {
     console.error('[scheduling] Opstart-check mislukt:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon de opstart-check niet uitvoeren.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon de opstart-check niet uitvoeren.')
   }
 })

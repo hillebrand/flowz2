@@ -36,11 +36,6 @@ const NEW_TASK_TYPE = 'opdracht' as const
 const NEW_TASK_DIFFICULTY = 'gemiddeld' as const
 const NEW_TASK_PRIORITY = 'gemiddeld' as const
 
-function envelope(event: Parameters<typeof readBody>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 // Zelfde uren/minuten-validatie als sessions/[sessionId]/replan.post.ts (Story 4.7) —
 // bewust hier lokaal gedupliceerd, zelfde precedent als de rest van dit bestand.
 function isValidHours(value: unknown): boolean {

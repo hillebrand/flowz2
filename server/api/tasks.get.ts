@@ -9,11 +9,6 @@ import type { OpenTasksResponse } from '../../shared/types/tasks'
 // enige ondersteunde waarde (geen "alle taken"-weergave gespecificeerd) — de query-param
 // wordt niet apart gevalideerd, elke andere/ontbrekende waarde gedraagt zich hetzelfde
 // als `open` (geen product-eis voor een aparte foutmelding hier).
-function envelope(event: H3Event, statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<OpenTasksResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {

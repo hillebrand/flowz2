@@ -32,35 +32,27 @@ const WEEK_DAYS = 7
 // `buildWeekDay` gebruikt sindsdien ook `detectShortfallForDateOrOverrun` i.p.v.
 // `detectShortfallForDate`, anders zou een overrun-`verruimen:overrun:{taskId}:{date}`-id
 // (zie `shortfall.ts`) nooit gegenereerd/getoond worden om terug te sturen.
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   const date = getRouterParam(event, 'date')
   if (!date || !isValidCalendarDate(date)) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
 
   const today = todayInAmsterdam()
   const lastDayInWindow = addDays(today, WEEK_DAYS - 1)
   if (date < today || date > lastDayInWindow) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Deze datum valt buiten het weekoverzicht.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Deze datum valt buiten het weekoverzicht.')
   }
 
   const body = await readBody<Partial<WeekSuggestionAcceptInput>>(event).catch(() => null)
   const recommendationId = body?.id
   if (!recommendationId) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ontbrekend aanbeveling-id.')
   }
 
   try {
@@ -82,8 +74,7 @@ export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptRes
       // Net als `.../recommendations/[id]/accept.post.ts`: een 404, geen stille 200 — zonder
       // dit kon de client "toegepast" niet onderscheiden van "genegeerd, want niet meer
       // geldig" (`week/index.vue`'s foutmelding wordt alleen getoond bij een non-2xx-respons).
-      setResponseStatus(event, 404)
-      return envelope(404, ErrorCodes.NotFound, 'Deze suggestie is niet meer geldig — de planning is inmiddels gewijzigd.')
+      return envelope(event, 404, ErrorCodes.NotFound, 'Deze suggestie is niet meer geldig — de planning is inmiddels gewijzigd.')
     }
 
     await applyShortfallRecommendation(session.user.id, target)
@@ -91,7 +82,6 @@ export default defineEventHandler(async (event): Promise<WeekSuggestionAcceptRes
     return await buildWeekDay(session.user.id, date)
   } catch (fout) {
     console.error('[week] Kon suggestie niet toepassen:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon deze aanpassing niet doorvoeren. Probeer het opnieuw.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon deze aanpassing niet doorvoeren. Probeer het opnieuw.')
   }
 })

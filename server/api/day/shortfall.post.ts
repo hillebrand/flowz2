@@ -18,10 +18,6 @@ import type { ShortfallRequestInput, ShortfallResponse } from '../../../shared/t
 // `detectShortfallForDate`'s nieuwe `availableMinutesOverride`-parameter mee, uitsluitend
 // voor déze ene aanroep — geen persistente write meer (zie die functie se Dev Notes voor de
 // volledige redenering, en waarom dat een bewuste scope-grens is, geen omissie).
-function envelope(statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  return { error: { code, message } }
-}
-
 // Review-patch: zelfde grenzen als de UX-spec se `ERR_AVAILABLE_HOURS_INVALID`/
 // `ERR_AVAILABLE_MINUTES_INVALID` (`reason-time-hours-input`/`reason-time-minutes-input`,
 // 3.1-reden-kiezen) — nu server-side los afdwingbaar omdat de velden niet meer vooraf tot
@@ -36,8 +32,7 @@ function isValidMinutesOverride(value: unknown): value is number {
 export default defineEventHandler(async (event): Promise<ShortfallResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
-    setResponseStatus(event, 401)
-    return envelope(401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
+    return envelope(event, 401, ErrorCodes.Unauthorized, 'Niet ingelogd.')
   }
 
   // Review-fix (chunk 3, 2026-09-06): een kapotte/leeg-onparseerbare body werd voorheen
@@ -46,24 +41,20 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
   // validatiefout, hetzelfde patroon dat elke andere body-lezende route hier wél afdwingt.
   const body = await readBody<Partial<ShortfallRequestInput>>(event).catch(() => null)
   if (body === null) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldig verzoek.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldig verzoek.')
   }
   if (body?.date !== undefined && (typeof body.date !== 'string' || !isValidCalendarDate(body.date))) {
-    setResponseStatus(event, 400)
-    return envelope(400, ErrorCodes.ValidationError, 'Ongeldige datum.')
+    return envelope(event, 400, ErrorCodes.ValidationError, 'Ongeldige datum.')
   }
   // Beide velden moeten samen aanwezig zijn (of geen van beide) — een override is altijd
   // een volledige uren+minuten-invoer, geen losse halve waarde.
   const hasOverride = body?.availableHoursOverride !== undefined || body?.availableMinutesOverride !== undefined
   if (hasOverride) {
     if (!isValidHoursOverride(body?.availableHoursOverride)) {
-      setResponseStatus(event, 400)
-      return envelope(400, ErrorCodes.ValidationError, 'Vul een geldig aantal uren in (0 of hoger).')
+      return envelope(event, 400, ErrorCodes.ValidationError, 'Vul een geldig aantal uren in (0 of hoger).')
     }
     if (!isValidMinutesOverride(body?.availableMinutesOverride)) {
-      setResponseStatus(event, 400)
-      return envelope(400, ErrorCodes.ValidationError, 'Vul minuten in tussen 0 en 59.')
+      return envelope(event, 400, ErrorCodes.ValidationError, 'Vul minuten in tussen 0 en 59.')
     }
   }
   // Som pas ná losse validatie berekend, en geclamped op `MAX_MINUTES_PER_DAY` (zelfde
@@ -97,7 +88,6 @@ export default defineEventHandler(async (event): Promise<ShortfallResponse | Err
     }
   } catch (fout) {
     console.error('[day] Kon tekort niet berekenen:', fout)
-    setResponseStatus(event, 500)
-    return envelope(500, ErrorCodes.InternalError, 'Kon tekort niet berekenen.')
+    return envelope(event, 500, ErrorCodes.InternalError, 'Kon tekort niet berekenen.')
   }
 })

@@ -7,11 +7,6 @@ import type { CreateTaskResponse } from '../../../shared/types/tasks'
 // Story 5.3 — envelope-/ownership-/validatiepatroon zelfde als tasks.post.ts (nu via de
 // gedeelde `validate-task-input.ts`). Orkestratie (reconciliatie + herberekening) leeft in
 // `server/domain/tasks/update-task.ts`, deze route blijft dun.
-function envelope(event: Parameters<typeof getRouterParam>[0], statusCode: number, code: (typeof ErrorCodes)[keyof typeof ErrorCodes], message: string): ErrorEnvelope {
-  setResponseStatus(event, statusCode)
-  return { error: { code, message } }
-}
-
 export default defineEventHandler(async (event): Promise<CreateTaskResponse | ErrorEnvelope> => {
   const session = await requireUserSession(event).catch(() => null)
   if (!session) {
