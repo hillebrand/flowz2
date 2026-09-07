@@ -361,3 +361,24 @@ export const homeworkBlockSyncLocks = sqliteTable('homework_block_sync_locks', {
 
 export type HomeworkBlockSyncLock = typeof homeworkBlockSyncLocks.$inferSelect
 export type NewHomeworkBlockSyncLock = typeof homeworkBlockSyncLocks.$inferInsert
+
+// Deferred-work-fix (2026-09-07) — voorkomt dat twee gelijktijdige `POST /api/scheduling/
+// startup-check`-aanroepen voor dezelfde gebruiker (twee tabbladen, of een paginaherlaad
+// tijdens een nog lopende trage Calendar-aanroep) allebei de stille auto-herplan-lus
+// draaien: `placeSessionOnDate` (de 'herplannen'-tier se plaatsing) heeft zelf geen lock,
+// dus twee gelijktijdige lussen konden dezelfde sessie daadwerkelijk dubbel plaatsen. In
+// tegenstelling tot de andere lock-tabellen hierboven is dit bewust een niet-blokkerende
+// guard, geen wachtlus (zie `server/data/startup-check-lock.ts`) — een opstart-check kan
+// legitiem meerdere seconden duren (tot `MAX_AUTO_REPLAN_ITERATIONS` Calendar-rondes), en
+// Home's eigen fetch is al bewust niet-blokkerend, dus een aanvrager die de lock al bezet
+// vindt, slaat de check gewoon over i.p.v. te wachten.
+export const startupCheckLocks = sqliteTable('startup_check_locks', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('startup_check_locks_user_unique').on(table.userId)
+])
+
+export type StartupCheckLock = typeof startupCheckLocks.$inferSelect
+export type NewStartupCheckLock = typeof startupCheckLocks.$inferInsert
