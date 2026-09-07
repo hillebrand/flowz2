@@ -259,6 +259,11 @@ const needsInputText = ref('')
 const needsSuggestions = ref<string[]>([])
 const showNeedsSubjectChangeDialog = ref(false)
 const pendingSubjectForDialog = ref('')
+// Toegankelijkheidspas (2026-09-07) — focus-trap/Escape voor deze dialoog (zie
+// `useFocusTrap`'s eigen commentaar). `dismissNeedsSubjectChange` is een hoisted
+// functiedeclaratie (verderop gedefinieerd), dus hier al bruikbaar.
+const needsSubjectChangeDialogEl = ref<HTMLElement | null>(null)
+useFocusTrap(needsSubjectChangeDialogEl, showNeedsSubjectChangeDialog, dismissNeedsSubjectChange)
 // Bewaakt tegen twee races (fresh-context-validatiepas): (1) Evelien typt zelf een item
 // terwijl de AC #1-fetch nog loopt — bij aankomst opnieuw checken dat `needsItems` nog
 // leeg is; (2) ze wijzigt het vak een tweede keer vóórdat de eerste fetch terug is — een
@@ -498,6 +503,10 @@ const fieldRefs = {
 
 // --- Sluiten/annuleren ---
 const showLeaveConfirm = ref(false)
+// Toegankelijkheidspas (2026-09-07) — zie de eerste `useFocusTrap`-aanroep hierboven se
+// commentaar. `cancelLeaveConfirm` is verderop een hoisted functiedeclaratie.
+const leaveConfirmDialogEl = ref<HTMLElement | null>(null)
+useFocusTrap(leaveConfirmDialogEl, showLeaveConfirm, cancelLeaveConfirm)
 let savedConfirmationTimer: ReturnType<typeof setTimeout> | undefined
 onUnmounted(() => {
   if (savedConfirmationTimer) clearTimeout(savedConfirmationTimer)
@@ -1115,9 +1124,9 @@ async function onSubmit() {
       </section>
     </form>
 
-    <div v-if="showNeedsSubjectChangeDialog" id="taak-needs-subject-change-dialog" class="taak-confirm-overlay" role="alertdialog" aria-modal="true">
+    <div v-if="showNeedsSubjectChangeDialog" id="taak-needs-subject-change-dialog" ref="needsSubjectChangeDialogEl" class="taak-confirm-overlay" role="alertdialog" aria-modal="true" aria-labelledby="taak-needs-subject-change-text" tabindex="-1">
       <div class="taak-confirm-dialog">
-        <p>Vak gewijzigd naar {{ pendingSubjectForDialog }} — suggesties bijwerken?</p>
+        <p id="taak-needs-subject-change-text">Vak gewijzigd naar {{ pendingSubjectForDialog }} — suggesties bijwerken?</p>
         <div class="taak-confirm-actions">
           <button type="button" class="taak-confirm-cancel" @click="dismissNeedsSubjectChange">Nee, laat mijn lijst staan</button>
           <button type="button" class="taak-confirm-confirm" @click="confirmNeedsSubjectChange">Ja, suggesties toevoegen</button>
@@ -1125,9 +1134,9 @@ async function onSubmit() {
       </div>
     </div>
 
-    <div v-if="showLeaveConfirm" class="taak-confirm-overlay" role="alertdialog" aria-modal="true">
+    <div v-if="showLeaveConfirm" ref="leaveConfirmDialogEl" class="taak-confirm-overlay" role="alertdialog" aria-modal="true" aria-labelledby="taak-leave-confirm-text" tabindex="-1">
       <div class="taak-confirm-dialog">
-        <p>Wil je stoppen? Je invoer gaat verloren.</p>
+        <p id="taak-leave-confirm-text">Wil je stoppen? Je invoer gaat verloren.</p>
         <div class="taak-confirm-actions">
           <button type="button" class="taak-confirm-cancel" @click="cancelLeaveConfirm">Annuleren</button>
           <button type="button" class="taak-confirm-leave" @click="confirmLeave">Ja, stoppen</button>

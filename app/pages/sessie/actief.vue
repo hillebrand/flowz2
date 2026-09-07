@@ -235,6 +235,10 @@ async function stopSessie() {
 // wél een echt navigatiedoel, niet meer decoratief zoals ten tijde van Story 4.1) — zie de
 // story's "Belangrijk".
 const showLeaveConfirm = ref(false)
+// Toegankelijkheidspas (2026-09-07) — focus-trap/Escape voor deze dialoog, zie
+// `useFocusTrap`'s eigen commentaar. `blijfHier` is een hoisted functiedeclaratie.
+const leaveConfirmDialogEl = ref<HTMLElement | null>(null)
+useFocusTrap(leaveConfirmDialogEl, showLeaveConfirm, blijfHier)
 onBeforeRouteLeave((to) => {
   // Review-fix (ronde 2, chunk D, 2026-09-06 — alle 3 agents, onafhankelijk gevonden): de
   // nieuwe 401-afhandeling op de heartbeat-/subtaak-aanroepen hieronder roept
@@ -373,9 +377,9 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <div v-if="showLeaveConfirm" id="active-leave-confirm-modal" class="active-leave-confirm-modal">
+    <div v-if="showLeaveConfirm" id="active-leave-confirm-modal" ref="leaveConfirmDialogEl" class="active-leave-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="active-leave-confirm-text" tabindex="-1">
       <div class="active-leave-confirm-dialog">
-        <p>Wil je de sessie stoppen?</p>
+        <p id="active-leave-confirm-text">Wil je de sessie stoppen?</p>
         <div class="active-leave-confirm-actions">
           <button type="button" class="active-leave-confirm-yes" @click="bevestigVerlaten">Ja, stop</button>
           <button type="button" class="active-leave-confirm-no" @click="blijfHier">Nee, blijf hier</button>

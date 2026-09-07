@@ -89,6 +89,14 @@ function annuleerVerwijderen() {
   deleteError.value = ''
 }
 
+// Toegankelijkheidspas (2026-09-07) — focus-trap/Escape voor deze dialoog, zie
+// `useFocusTrap`'s eigen commentaar. Escape doet niets tijdens `deleting` — zelfde
+// bezig-staat-guard als de uitgeschakelde Annuleren-knop in de template.
+const deleteConfirmDialogEl = ref<HTMLElement | null>(null)
+useFocusTrap(deleteConfirmDialogEl, showDeleteConfirm, () => {
+  if (!deleting.value) annuleerVerwijderen()
+})
+
 // Story 5.2 — blokkerend (UX-spec: "client wacht op bevestiging voordat naar 6.1 wordt
 // genavigeerd"), bewust géén fire-and-forget zoals de sessie-afronden-stories.
 async function bevestigVerwijderen() {
@@ -158,9 +166,9 @@ async function bevestigVerwijderen() {
       </section>
     </template>
 
-    <div v-if="showDeleteConfirm" id="detail-delete-confirm-modal" class="detail-delete-confirm-modal">
+    <div v-if="showDeleteConfirm" id="detail-delete-confirm-modal" ref="deleteConfirmDialogEl" class="detail-delete-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="detail-delete-confirm-text" tabindex="-1">
       <div class="detail-delete-confirm-dialog">
-        <p>Taak verwijderen? Dit kan niet ongedaan worden gemaakt.</p>
+        <p id="detail-delete-confirm-text">Taak verwijderen? Dit kan niet ongedaan worden gemaakt.</p>
         <p v-if="deleteError" class="detail-delete-error" role="alert">{{ deleteError }}</p>
         <div class="detail-delete-confirm-actions">
           <button type="button" class="detail-delete-cancel-button" :disabled="deleting" @click="annuleerVerwijderen">Annuleren</button>
