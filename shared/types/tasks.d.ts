@@ -108,9 +108,9 @@ export interface HomePlanResponse {
   sessionTimeCheck: SessionTimeCheck | null
   // Story 2.4 — best-effort agenda-lezen (meerdere agenda's, niet alleen primary): `null`
   // als geen enkele agenda opgehaald kon worden (zelfde betekenis als `calendarDayEvents:
-  // null`); `[]` als alles lukte. Eigen, klein shape i.p.v. server/domain/notification.ts's
-  // `Notification`-type — dat is niet importeerbaar vanuit `shared/` (geen precedent in dit
-  // project om die grens te doorbreken), en deze melding heeft nooit `actions` nodig.
+  // null`); `[]` als alles lukte. Eigen, klein shape (server-side types zijn sowieso niet
+  // importeerbaar vanuit `shared/` — geen precedent om die grens te doorbreken), en deze
+  // melding heeft nooit `actions` nodig.
   calendarWarnings: { type: 'info' | 'warning', message: string }[] | null
 }
 

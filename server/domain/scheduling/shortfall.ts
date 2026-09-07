@@ -5,7 +5,6 @@ import { getTodayEvents } from '../calendar-sync/day-events'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import { weekdayFromDate } from '../../../shared/utils/availability'
 import type { Task, Session } from '../../data/schema'
-import type { Notification, NotificationAction, RecommendationTier } from '../notification'
 
 // Story 6.1 — eerste inhoud van de tekort-detectie (AC #1). Puur lezen (AD-1/AD-3): geen
 // enkele write, gebruikt uitsluitend de actuele Task/Session/AvailableTime-staat, net als
@@ -312,6 +311,13 @@ function lowestPriorityFirst(items: TaskSession[]): TaskSession[] {
   })
 }
 
+// Story 6.1 — de vier escalatieniveaus (FR16, letterlijk uit de AC-tekst). Volgorde is de
+// escalatievolgorde. Was `server/domain/notification.ts`'s type; die module is verwijderd
+// (2026-09-07, AD-6-herziening) nadat bleek dat `RecommendationTier` de enige nog-gebruikte
+// export was. `shared/types/shortfall.d.ts` heeft bewust zijn eigen, spiegelende definitie
+// (`app/` mag `server/domain/` niet importeren) — niet hetzelfde type, wel dezelfde waarden.
+export type RecommendationTier = 'herplannen' | 'verruimen' | 'inkorten' | 'vervallen'
+
 export interface ShortfallRecommendation {
   id: string
   tier: RecommendationTier
@@ -506,23 +512,4 @@ export async function generateShortfallRecommendations(userId: string, shortfall
   }
 
   return recommendations
-}
-
-// AC #2's laatste eis: uitsluitend de `Notification`-shape (AD-6), nooit de technische
-// error-envelope, voor deze gebruikersgerichte berichten.
-export function buildShortfallNotification(shortfall: ShortfallResult, recommendations: ShortfallRecommendation[]): Notification {
-  const actions: NotificationAction[] = recommendations.map(r => ({
-    label: r.description,
-    id: r.id,
-    tier: r.tier,
-    gainMinutes: r.gainMinutes
-  }))
-
-  return {
-    notification: {
-      type: 'warning',
-      message: `Nog ${formatDurationLabel(shortfall.shortfallMinutes)} op te lossen op ${formatDayLabel(shortfall.date)}`,
-      actions
-    }
-  }
 }

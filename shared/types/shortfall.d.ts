@@ -1,9 +1,9 @@
 // Story 6.2 — gedeeld tussen `app/` en `server/` via Nuxt's `#shared`-alias, zelfde
 // patroon als shared/types/tasks.d.ts. Eigen typen i.p.v. hergebruik van
-// `server/domain/notification.ts`'s `RecommendationTier` — `app/` mag `server/domain/`
-// nooit rechtstreeks importeren (architectuur se lagen-regel), dus elke server-only-type
-// die de client nodig heeft, krijgt hier zijn eigen, spiegelende definitie (zelfde
-// precedent als `TaskType`/`Difficulty`/`Priority` in tasks.d.ts).
+// `server/domain/scheduling/shortfall.ts`'s `RecommendationTier` — `app/` mag
+// `server/domain/` nooit rechtstreeks importeren (architectuur se lagen-regel), dus elke
+// server-only-type die de client nodig heeft, krijgt hier zijn eigen, spiegelende
+// definitie (zelfde precedent als `TaskType`/`Difficulty`/`Priority` in tasks.d.ts).
 
 export type RecommendationTier = 'herplannen' | 'verruimen' | 'inkorten' | 'vervallen'
 
