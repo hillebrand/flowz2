@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { Weekday } from '../../shared/types/availability'
 import type { Difficulty, Priority, SubtaskStatus, TaskType } from '../../shared/types/tasks'
 import type { LoopSource } from '../../shared/types/replan-log'
@@ -408,11 +408,15 @@ export type ShortfallApplyLock = typeof shortfallApplyLocks.$inferSelect
 export type NewShortfallApplyLock = typeof shortfallApplyLocks.$inferInsert
 
 // Story 6.8 — wijzigingslog voor de vier stille herplan-lussen (`startup-check.ts`). Geen
-// fk op `runId` (puur een group-by-sleutel binnen déze tabel, één per
-// `runStartupReplanCheck`-aanroep, niet een eigen "run"-entiteit). `sessionId` nullable:
-// een taak-herberekening (`recalculateTaskPlanning`) kan een sessie ook laten vervallen
-// (geen nieuwe `newStartsAt`) of toevoegen (geen `oldStartsAt`) — zie session-placement.ts
-// se "Belangrijk"-sectie voor de drie mutatievormen die dit vastlegt.
+// fk op `runId` (puur een group-by-sleutel binnen déze tabel — zie `replanRuns` hieronder
+// voor de eigen "run"-entiteit die wél als losse rij bestaat). `sessionId` nullable: een
+// taak-herberekening (`recalculateTaskPlanning`) kan een sessie ook laten vervallen (geen
+// nieuwe `newStartsAt`) of toevoegen (geen `oldStartsAt`) — zie déze story se eigen
+// "Belangrijk"-sectie (punt 3) voor de drie mutatievormen die dit vastlegt.
+//
+// Code review-fix (2026-09-12): index op `(user_id, created_at)` — `getLatestReplanLog-
+// EntriesForUser` filtert/sorteert hierop bij elke dialoog-open, op een tabel die bewust
+// nooit opgeruimd wordt (zie de story se Open Questions).
 export const replanChangeLog = sqliteTable('replan_change_log', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text('user_id').notNull().references(() => users.id),
@@ -424,7 +428,29 @@ export const replanChangeLog = sqliteTable('replan_change_log', {
   newStartsAt: text('new_starts_at'),
   reason: text('reason').notNull(),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
-})
+}, table => [
+  index('replan_change_log_user_created_idx').on(table.userId, table.createdAt)
+])
 
 export type ReplanChangeLogEntry = typeof replanChangeLog.$inferSelect
 export type NewReplanChangeLogEntry = typeof replanChangeLog.$inferInsert
+
+// Code review-fix (2026-09-12) — vóór deze tabel bepaalde `getLatestReplanLogEntriesForUser`
+// "de recentste run" als "de run van de nieuwste rij in `replanChangeLog`". Een run zonder
+// enkele wijziging schrijft daar nooit een rij (`insertReplanLogEntries` slaat een lege
+// array simpelweg over), dus zo'n "niets aangepast"-run was voor die functie onzichtbaar —
+// ze viel terug op de vorige, wél iets-wijzigende run, en de i-dialoog toonde diens
+// wijzigingen alsof ze net gebeurd waren i.p.v. de bedoelde "Niets aangepast." (AC #3).
+// Deze tabel legt een run onvoorwaardelijk vast (één rij per `runStartupReplanCheck`-
+// aanroep, geschreven vóórdat de vier lussen draaien) — "de recentste run" is nu altijd
+// deze tabel se nieuwste rij voor de user, mét of zonder wijzigingen.
+export const replanRuns = sqliteTable('replan_runs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  index('replan_runs_user_created_idx').on(table.userId, table.createdAt)
+])
+
+export type ReplanRun = typeof replanRuns.$inferSelect
+export type NewReplanRun = typeof replanRuns.$inferInsert

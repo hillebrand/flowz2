@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm'
 import { getDb } from './db'
 import {
+  replanChangeLog,
   sessionLogs,
   sessionPlacementLocks,
   sessions,
@@ -117,6 +118,11 @@ export async function deleteTaskAndSessions(taskId: string): Promise<void> {
     // verwijst ook naar `tasks.id` — zonder deze delete faalde élke taakverwijdering met
     // een FOREIGN KEY constraint-fout zodra de taak ooit gelogde sessietijd had.
     await tx.delete(sessionLogs).where(eq(sessionLogs.taskId, taskId))
+    // Code review-fix (2026-09-12, Story 6.8): `replanChangeLog.taskId` (Story 6.8, ná deze
+    // functie geschreven) verwijst ook naar `tasks.id` — exact dezelfde klasse fout als
+    // hierboven zou terugkomen zodra een taak die ooit door de opstart-check automatisch
+    // herpland is, verwijderd wordt.
+    await tx.delete(replanChangeLog).where(eq(replanChangeLog.taskId, taskId))
     await tx.delete(subtasks).where(eq(subtasks.taskId, taskId))
     // Task 8: ALLE sessies van deze taak, niet één specifieke id — anders blijven de
     // overige N-1 sessies als weeskind-rijen achter (en de daaropvolgende `tasks`-delete

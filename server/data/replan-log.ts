@@ -1,47 +1,56 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { getDb } from './db'
-import { replanChangeLog, tasks } from './schema'
+import { replanChangeLog, replanRuns, tasks } from './schema'
 import type { NewReplanChangeLogEntry } from './schema'
+import type { ReplanLogEntryDto } from '../../shared/types/replan-log'
+
+// Story 6.8 — legt vast dat een `runStartupReplanCheck`-aanroep heeft plaatsgevonden, vóór
+// de vier lussen draaien en onafhankelijk van of er iets gewijzigd is. Code review-fix
+// (2026-09-12): zonder deze onvoorwaardelijke rij was "de recentste run" alleen af te
+// leiden uit `replanChangeLog`, wat een run zonder wijzigingen onzichtbaar maakte (zie
+// `replanRuns`'s eigen schema-commentaar).
+export async function recordReplanRun(userId: string, runId: string): Promise<void> {
+  await getDb().insert(replanRuns).values({ id: runId, userId })
+}
 
 // Story 6.8 — data-laag voor de wijzigingslog van `server/domain/scheduling/
-// startup-check.ts`'s vier stille herplan-lussen. Batch-insert i.p.v. losse `insert`-
-// aanroepen per gewijzigde sessie: één lus-iteratie kan meerdere sessies van dezelfde taak
-// tegelijk herplaatsen (`recalculateTaskPlanning`'s diff), en die horen als één
-// transactie te landen — nooit de helft van een diff zonder de rest.
+// startup-check.ts`'s vier stille herplan-lussen.
+//
+// Code review-fix (2026-09-12): gechunkt — één taak-herberekening kan in theorie genoeg
+// sessies tegelijk regenereren om een SQL bound-variable-limiet te raken bij één ongedeelde
+// insert; een chunk van 100 rijen (ruim boven wat een realistische sessiereeks ooit zou
+// bevatten) blijft daar ver onder, zonder de transactie-per-lus-iteratie-garantie te
+// verliezen (elke chunk landt nog steeds vóór de volgende begint).
+const INSERT_CHUNK_SIZE = 100
+
 export async function insertReplanLogEntries(entries: NewReplanChangeLogEntry[]): Promise<void> {
   if (entries.length === 0) return
-  await getDb().insert(replanChangeLog).values(entries)
+  for (let offset = 0; offset < entries.length; offset += INSERT_CHUNK_SIZE) {
+    await getDb().insert(replanChangeLog).values(entries.slice(offset, offset + INSERT_CHUNK_SIZE))
+  }
 }
 
-export interface ReplanLogEntryRow {
-  taskTitle: string
-  subject: string
-  reason: string
-  count: number
-}
-
-// "De recentste herplan-run" (AC #2) = alle logregels met de `runId` van de meest recent
-// aangemaakte logregel voor deze user — `runId` is puur een group-by-sleutel binnen déze
-// tabel (één per `runStartupReplanCheck`-aanroep), geen aparte "run"-entiteit om apart op
-// te zoeken. Lege array (geen enkele logregel ooit, of de recentste run had geen
-// wijzigingen) is een geldig resultaat (AC #3), geen foutgeval.
+// "De recentste herplan-run" (AC #2) = de nieuwste rij in `replanRuns` voor deze user —
+// altijd aanwezig zodra `runStartupReplanCheck` ooit gedraaid heeft, mét of zonder
+// wijzigingen (zie `replanRuns`'s eigen schema-commentaar). Geen enkele run ooit gedraaid:
+// lege array, zelfde geldige AC #3-resultaat als een run zonder wijzigingen.
 //
-// Bug-fix (2026-09-13) — gegroepeerd per (taak, lus): `recalculateTaskPlanning` regenereert
-// bij één taak-herberekening vaak meteen tíentallen toekomstige sessies (elke sessie tot
-// het doelmoment), wat zonder groepering evenzoveel losse, identieke logregels ("kunst is
-// aangepast, [zelfde reden]") in de i-dialoog gaf. Individuele oude/nieuwe tijdstippen zijn
-// bij zo'n aantal sessies toch niet zinvol te tonen — vandaar een simpel `count` i.p.v. de
-// per-sessie `oldStartsAt`/`newStartsAt` (die blijven wel ruw in de tabel staan, voor
-// toekomstig detail-gebruik, alleen déze leesfunctie vat ze samen).
-export async function getLatestReplanLogEntriesForUser(userId: string): Promise<ReplanLogEntryRow[]> {
-  const [latest] = await getDb()
-    .select({ runId: replanChangeLog.runId })
-    .from(replanChangeLog)
-    .where(eq(replanChangeLog.userId, userId))
-    .orderBy(desc(replanChangeLog.createdAt))
+// Gegroepeerd per (taak, lus): `recalculateTaskPlanning` regenereert bij één
+// taak-herberekening vaak tíentallen toekomstige sessies tegelijk, wat zonder groepering
+// evenzoveel losse, identieke logregels ("kunst is aangepast, [zelfde reden]") in de
+// i-dialoog gaf. Individuele oude/nieuwe tijdstippen zijn bij zo'n aantal sessies toch niet
+// zinvol te tonen — vandaar een simpel `count` i.p.v. de per-sessie `oldStartsAt`/
+// `newStartsAt` (die blijven wel ruw in de tabel staan, voor toekomstig detail-gebruik,
+// alleen déze leesfunctie vat ze samen).
+export async function getLatestReplanLogEntriesForUser(userId: string): Promise<ReplanLogEntryDto[]> {
+  const [latestRun] = await getDb()
+    .select({ id: replanRuns.id })
+    .from(replanRuns)
+    .where(eq(replanRuns.userId, userId))
+    .orderBy(desc(replanRuns.createdAt))
     .limit(1)
 
-  if (!latest) return []
+  if (!latestRun) return []
 
   const rows = await getDb()
     .select({
@@ -54,10 +63,10 @@ export async function getLatestReplanLogEntriesForUser(userId: string): Promise<
     })
     .from(replanChangeLog)
     .innerJoin(tasks, eq(replanChangeLog.taskId, tasks.id))
-    .where(and(eq(replanChangeLog.userId, userId), eq(replanChangeLog.runId, latest.runId)))
+    .where(and(eq(replanChangeLog.userId, userId), eq(replanChangeLog.runId, latestRun.id)))
     .orderBy(replanChangeLog.createdAt)
 
-  const grouped = new Map<string, ReplanLogEntryRow>()
+  const grouped = new Map<string, ReplanLogEntryDto>()
   for (const row of rows) {
     const key = `${row.taskId}:${row.loopSource}`
     const existing = grouped.get(key)

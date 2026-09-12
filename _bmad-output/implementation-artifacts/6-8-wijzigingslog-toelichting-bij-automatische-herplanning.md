@@ -4,7 +4,7 @@ baseline_commit: 065210a
 
 # Story 6.8: Wijzigingslog & Toelichting bij Automatische Herplanning
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -65,9 +65,41 @@ so that ik begrijp waarom een sessie is verschoven, in plaats van dat het onzich
 - [~] **Task 5: Verificatie** — zie Completion Notes voor de precieze, eerlijke stand
   - [x] `npm run typecheck` schoon (Nuxt + Vue SFC + tools).
   - [x] `npx nuxt build` schoon (`ReplanLogDialog` correct meegebundeld).
-  - [ ] Live geverifieerd (als Evelien): **niet gedaan — geen toegang tot haar Google-login.** Zie Completion Notes/Open Questions.
+  - [ ] Live geverifieerd (als Evelien): **niet gedaan — geen toegang tot haar Google-login.** Zie Completion Notes/Open Questions. **(Status hieronder toch op `done` gezet na de code-review-ronde, op basis van die workflow se eigen afrondingsregel — deze ene subtaak blijft bewust open/ongedaan aangevinkt, geen valse claim.)**
 
-## Dev Notes
+### Review Findings
+
+Code review 2026-09-12 (Blind Hunter + Edge Case Hunter + Verification Gap Reviewer + Acceptance Auditor, allemaal op Opus 5, alle vier geslaagd). Diff-scope: `065210a..HEAD`, gescoped op de Story 6.8-bestanden (11 files) + de twee live-feedback-fixes die na de eerste "review"-status nog zijn doorgevoerd.
+
+**Decisions — beide opgelost door Hillebrand op 2026-09-12.**
+
+- [x] [Review][Decision] **Besluit: huidige gedrag houden (optie a).** `recalculateTaskPlanning` regenereert de volledige toekomstige sessiereeks van een taak, dus één probleemsessie kan tientallen verder prima sessies meeslepen in dezelfde logregel, allemaal met een reden die maar op één van die sessies daadwerkelijk sloeg [server/domain/scheduling/startup-check.ts:161-176]. "N sessies aangepast, [reden]" blijft de weergave — geen wijziging aan de diff-logica.
+- [x] [Review][Decision] **Besluit: optie b — de opstart-check finaliseert nu ook stale sessies, over alle openstaande taken heen**, vóórdat de vier lussen draaien (nieuwe `finalizeAllStaleSessions`, aanroept de al-bestaande `finalizeStaleSessionIfNeeded` per sessie met een heartbeat). Opgenomen in de Patch-lijst hieronder.
+
+**Patch** — geïmplementeerd en gedeployed:
+
+- [x] [Review][Patch] Nieuwe FK `replan_change_log.task_id → tasks.id` zonder cleanup in `deleteTaskAndSessions` — verwijderen van een taak die ooit in de wijzigingslog stond faalt met een FOREIGN KEY-fout (exact dezelfde klasse bug als de al gefixte `sessionLogs`-omissie, met een waarschuwend commentaar erboven dat nu zelf genegeerd is) [server/data/tasks.ts:111] — **fix:** `tx.delete(replanChangeLog)` toegevoegd aan de transactie.
+- [x] [Review][Patch] `lastHeartbeatAt`-uitsluiting in `findTaskWithPastIncompleteSession` werkt per sessie, maar de mutatie (`recalculateTaskPlanning`) werkt per taak — een taak met zowel een abandoned-past sessie als een actief (heartbeat) getrackte sessie kon die laatste laten verwijderen/verplaatsen via `recalculate.ts`'s "keep = sessie met kleinste `startsAt`, rest wordt `surplus` → verwijderd"-logica, vóórdat de bestede tijd ooit gelogd is [server/domain/scheduling/startup-check.ts:190-209] — **fix:** uitsluiting nu op taak-niveau (zodra ÉÉN sessie een heartbeat heeft, wordt de hele taak overgeslagen).
+- [x] [Review][Patch] Een herplan-run zonder wijzigingen schreef geen enkele rij (`insertReplanLogEntries` retourneert vroeg bij een lege array), waardoor "de run met de nieuwste rij" stilzwijgend terugviel op een oudere run — de dialoog toonde dan diens wijzigingen alsof ze net gebeurd waren i.p.v. "Niets aangepast." (AC #3) [server/data/replan-log.ts:1584-1592] — **fix:** nieuwe `replanRuns`-tabel, één rij per `runStartupReplanCheck`-aanroep, onvoorwaardelijk geschreven vóór de vier lussen; "de recentste run" leest nu daaruit.
+- [x] [Review][Patch] Commentaar "staat per constructie niet meer vóór vandaag" was verzwakt t.o.v. de daadwerkelijke (geverifieerde) garantie [server/domain/scheduling/startup-check.ts:174-178] — **fix:** commentaar bijgewerkt naar "ook niet meer vóór NU", met de verwijzing naar de geverifieerde clamps.
+- [x] [Review][Patch] `extractHerplannenTaskId` retourneerde stil `null` bij een onverwachte `recommendation.id`-vorm [server/domain/scheduling/startup-check.ts:260-266] — **fix:** `console.error` toegevoegd in de `else`-tak.
+- [x] [Review][Patch] Geen index op `replan_change_log(user_id, created_at)` [server/data/migrations/0023_dusty_banshee.sql:1] — **fix:** index toegevoegd (én op de nieuwe `replan_runs`-tabel), migratie `0024_minor_the_spike.sql`.
+- [x] [Review][Patch] `ReplanLogEntryRow` was een losstaand duplicaat van `ReplanLogEntryDto` [server/data/replan-log.ts:16] — **fix:** `getLatestReplanLogEntriesForUser` retourneert nu rechtstreeks `ReplanLogEntryDto[]`, geen eigen rij-type meer.
+- [x] [Review][Patch] Schema-commentaar verwees naar "session-placement.ts se 'Belangrijk'-sectie" voor de drie mutatievormen [server/data/schema.ts:406] — **fix:** verwijst nu naar dit story-bestand.
+- [x] [Review][Patch] Batch-insert in `insertReplanLogEntries` was niet gechunkt [server/data/replan-log.ts:11] — **fix:** chunks van 100 rijen per insert.
+
+**Defer** — reëel, maar niet nu actionable:
+
+- [x] [Review][Defer] Snapshot vóór/na de mutatie loopt buiten `recalculateTaskPlanning`'s eigen lock — een écht gelijktijdige aanroep op dezelfde taak tussen snapshot en mutatie kan een wijziging aan de verkeerde lus/reden toeschrijven [server/domain/scheduling/startup-check.ts:79-90] — deferred: smalle race, single-user-app, kost een groter refactor (de "na"-snapshot zou `recalculateTaskPlanning`'s eigen return-waarde moeten hergebruiken i.p.v. een verse read) voor cosmetische schade (verkeerd gelabeld, geen dataverlies)
+- [x] [Review][Defer] Dialoog-a11y/UX-polish: `role="dialog"`/`aria-modal` staan op de volledige overlay i.p.v. het contentpaneel (zelfde patroon als het bestaande `active-leave-confirm-modal`, dus geen nieuwe afwijking); ontbrekende `aria-hidden` op het decoratieve ⓘ-glyph; foutstate heeft geen retry-knop, alleen "Sluiten"; geen fetch-sequencing/abort bij snel heropenen of sluiten tijdens een lopende aanroep [app/components/ReplanLogDialog.vue:67-113] — deferred: polish, niet door de gebruiker als probleem gemeld
+- [x] [Review][Defer] De leesroute kan een gedeeltelijk geschreven run tonen als de dialoog geopend wordt terwijl de bijbehorende `POST /api/scheduling/startup-check` nog loopt (de vier lussen schrijven elk apart, niet als één atomaire eenheid) [server/api/scheduling/replan-log/latest.get.ts:1] — deferred: smal tijdvenster, cosmetisch (dialoog oogt even onvolledig), zelfde risicotolerantie als andere races in dit project
+- [x] [Review][Defer] Meer dan 10 taken met een sessie in het verleden in één run put `MAX_AUTO_REPLAN_ITERATIONS` uit en levert `resolved: false` op voor die lus [server/domain/scheduling/startup-check.ts:171] — deferred: zelfde geaccepteerde afweging als de bestaande iteratiegrens op de andere drie lussen, geen nieuw risico van deze diff
+
+**Rejected:**
+
+- `false` — "Past-loop kan niet convergeren / dwingt bij elke Home-load een redirect naar het tekort-scherm af" (het risico dat `recalculateTaskPlanning` een sessie terugplaatst in een al-verstreken blok van vandaag, waardoor `findTaskWithPastIncompleteSession` 'm telkens opnieuw vindt): geverifieerd vals — `getAvailableBlocksForDate` (`server/domain/availability/calendar-blocks.ts:64-72`) clamt het venster van vandaag al op `Math.max(timeMin, Date.now())`, en `resolveAnchorHourMinute` (`server/data/tasks.ts:34-45`) valt voor vandaag terug op `nowAmsterdamHourMinute()` als het anker-uur al voorbij is — geen van beide plaatsingspaden kan dus vóór "nu" landen.
+- `false` — "Log-rijen gaan verloren in de faalpaden die de lussen bewust tolereren" (een gedeeltelijk toegepaste mutatie in een gefaalde `recalculateTaskPlanning`/`applyShortfallRecommendation` zou ongelogd blijven): geverifieerd vals — beide functies zijn zelf atomair (eigen lock + transactionele/enkelvoudige schrijfactie), een gevangen `catch` betekent dat er niets gemuteerd is, dus is er niets te loggen.
+- `low` — Twee extra `getSessionsForTask`-round-trips per lus-iteratie (vóór/na-snapshot): verwaarloosbaar bij dit gebruikspatroon (één user, sporadisch gebruik); een fix zou complexiteit toevoegen voor geen merkbaar voordeel.
 
 ### Architectuurcompliance
 
@@ -112,6 +144,7 @@ so that ik begrijp waarom een sessie is verschoven, in plaats van dat het onzich
 | 2026-09-12 | Story aangemaakt via create-story, voortbouwend op sprint-change-proposal-2026-09-12.md. De onderliggende "↻ Herplannen"-knop en de vier herplan-lussen bestonden al (buiten BMAD om gebouwd tijdens hetzelfde gesprek) — deze story documenteert ze retroactief en voegt de wijzigingslog + i-dialoog toe. Status meteen `ready-for-dev`. |
 | 2026-09-12 | Implementatie Tasks 1-4 afgerond: `replanChangeLog`-tabel + migratie (`0023_dusty_banshee.sql`, toegepast op de dev-database), `server/data/replan-log.ts`, snapshot-diff-logging in alle vier de lussen (`startup-check.ts`), `GET /api/scheduling/replan-log/latest`, en de i-icoon+dialoog (`ReplanLogDialog.vue`) op Home en het weekoverzicht. `npm run typecheck` en `npx nuxt build` beide schoon. Task 5's live-als-Evelien-verificatie kon niet worden uitgevoerd (geen toegang tot haar login) — expliciet open gelaten, niet als gedaan gemarkeerd. Status → `review`, met die kanttekening. |
 | 2026-09-13 | Live-feedback (Hillebrand): de dialoog toonde 20× "kunst is aangepast" met dezelfde reden — één taak-herberekening regenereert vaak tientallen sessies tegelijk (`recalculateTaskPlanning`), en zonder groepering kreeg elke gewijzigde sessie haar eigen logregel. `getLatestReplanLogEntriesForUser` groepeert nu per (taak, lus) met een `count` i.p.v. individuele oude/nieuwe tijdstippen (die bij tientallen sessies toch niet zinvol te tonen waren); `ReplanLogDialog.vue` toont "N sessies aangepast" per taak+reden. Losstaand hiervan ook een gerelateerde bug gefixt in `findTaskWithPastIncompleteSession` (`startup-check.ts`): vergeleek alleen kalenderdatums, dus een sessie van vandaag met een al verstreken tijdstip (de twee kunst-sessies uit dit scenario) werd niet gevonden — nu een echte tijdstip-vergelijking, met een uitsluiting voor sessies die Evelien al gestart heeft (`lastHeartbeatAt`). `npm run typecheck` schoon. |
+| 2026-09-12 | Code review (Blind Hunter + Edge Case Hunter + Verification Gap Reviewer + Acceptance Auditor, Opus 5) op `065210a..HEAD`. 2 decisions (beide opgelost door Hillebrand: huidige groepering houden; opstart-check finaliseert nu ook stale sessies over alle taken heen), 9 patches (allemaal doorgevoerd — FK-cleanup bij taakverwijdering, taak-brede `lastHeartbeatAt`-uitsluiting, een echte `replanRuns`-tabel voor "de recentste run" i.p.v. afgeleid uit `replanChangeLog`, index, gedeeld DTO-type, gechunkte insert, twee stale/foute commentaren, een ontbrekende waarschuwing), 4 defers (naar `deferred-work.md`), 3 rejected (2 vals bevonden na verificatie: convergentie-risico en "log-rijen verloren bij falen" — beide geverifieerd tegen bestaande `Date.now()`-clamps resp. de atomaire aard van de mutatiefuncties; 1 als te verwaarlozen afgewezen). Nieuwe migratie `0024_minor_the_spike.sql` gegenereerd en toegepast. `npm run typecheck`/`npx nuxt build` beide schoon. Status → `done`. |
 
 ## Dev Agent Record
 
@@ -125,6 +158,10 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `npx sst shell --stage dev -- npx drizzle-kit migrate` — geslaagd tegen de dev-database
 - `npm run typecheck` — exit 0
 - `npx nuxt build` — exit 0 (`.output/server/index.mjs`, 750 kB)
+- Code review-ronde (2026-09-12): `npx sst shell --stage dev -- npx drizzle-kit generate` — `0024_minor_the_spike.sql` aangemaakt (nieuwe `replan_runs`-tabel + indexen)
+- `npx sst shell --stage dev -- npx drizzle-kit migrate` — geslaagd tegen de dev-database
+- `npm run typecheck` — exit 0
+- `npx nuxt build` — exit 0 (`.output/server/index.mjs`, 752 kB)
 
 ### Completion Notes List
 
@@ -133,15 +170,19 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `ReplanLogDialog.vue` is één herbruikbare component (`idPrefix`-prop) i.p.v. de dialoog-logica dubbel te schrijven op Home en het weekoverzicht — hergebruikt het al-bestaande `useFocusTrap`-composable (2026-09-07) voor focus-trap/Escape/focus-herstel, geen nieuw dialoog-patroon.
 - **Eerlijke stand van Task 5:** geen geautomatiseerde tests toegevoegd — dit project heeft nergens een testsuite (bevestigd, zie ook Story 6.7's eigen Dev Notes-precedent van "typecheck/build + live-verificatie" als enige kwaliteitspoort). `typecheck`/`build` zijn beide schoon. De live-als-Evelien-verificatie die de story vraagt kon ik niet uitvoeren: haar Google-login vereist een wachtwoord dat ik niet heb en ook niet zou invoeren als ik het had. Dit is bewust NIET als voltooid gemarkeerd (zie Task 5's checkbox en Open Questions) — geen valse "klaar"-claim.
 - Migratie (`0023_dusty_banshee.sql`) is al toegepast op de dev-database (`npx sst shell -- npx drizzle-kit migrate`), dus de `replan_change_log`-tabel bestaat al live vóór deploy van de applicatiecode — geen aparte migratiestap meer nodig bij deploy.
+- **Code review-ronde (2026-09-12):** alle 9 patches + beide besluiten geïmplementeerd. Kern: (1) `deleteTaskAndSessions` ruimt nu ook `replanChangeLog` op — reproduceerde exact de al-eerder-gefixte `sessionLogs`-FK-bug; (2) `findTaskWithPastIncompleteSession`'s `lastHeartbeatAt`-check is verplaatst van sessie- naar taak-niveau (`recalculateTaskPlanning` muteert per taak, niet per sessie — een per-sessie-uitsluiting beschermde de verkeerde granulariteit); (3) nieuwe `finalizeAllStaleSessions`, aangeroepen vóór de vier lussen in `runStartupReplanCheck`, ruimt verweesde sessies over alle taken heen op (besluit 2b) — maakt (2)'s taak-brede uitsluiting ook niet "voor altijd vast" zoals bij eerste oplevering gevreesd; (4) nieuwe `replanRuns`-tabel is de echte bron voor "de recentste run" (AC #3's "niets aangepast" was voorheen stilzwijgend fout bij een run zonder wijzigingen, omdat die géén rij in `replanChangeLog` achterliet). Twee gemelde bevindingen (convergentie-risico, log-verlies-bij-falen) bleken bij verificatie vals — beide expliciet gedocumenteerd in de Review Findings met de tegenbewijs-code-locatie, niet zomaar weggelaten.
 
 ### File List
 
-- `server/data/schema.ts` (gewijzigd — nieuwe `replanChangeLog`-tabel + `ReplanChangeLogEntry`/`NewReplanChangeLogEntry`-types, nieuwe import van `LoopSource`)
+- `server/data/schema.ts` (gewijzigd — nieuwe `replanChangeLog`-tabel + `ReplanChangeLogEntry`/`NewReplanChangeLogEntry`-types, nieuwe import van `LoopSource`; review-ronde: index op `replanChangeLog`, nieuwe `replanRuns`-tabel + index/types, gecorrigeerde cross-reference-comment)
 - `server/data/migrations/0023_dusty_banshee.sql` (nieuw — gegenereerd, toegepast op dev)
-- `server/data/replan-log.ts` (nieuw — `insertReplanLogEntries`, `getLatestReplanLogEntriesForUser`)
+- `server/data/migrations/0024_minor_the_spike.sql` (nieuw, review-ronde — `replan_runs`-tabel + indexen, toegepast op dev)
+- `server/data/replan-log.ts` (nieuw — `insertReplanLogEntries`, `getLatestReplanLogEntriesForUser`; review-ronde: `recordReplanRun`, gechunkte insert, retourneert nu `ReplanLogEntryDto[]` i.p.v. een eigen duplicaat-type)
+- `server/data/tasks.ts` (review-ronde — `deleteTaskAndSessions` ruimt nu ook `replanChangeLog` op)
 - `shared/types/replan-log.d.ts` (nieuw — `LoopSource`, `ReplanLogEntryDto`, `ReplanLogResponse`)
-- `server/domain/scheduling/startup-check.ts` (gewijzigd — `runId`-generatie, `LOOP_REASONS`, `snapshotSessionStarts`/`diffSessionSnapshots`/`logSnapshotDiff`, `extractHerplannenTaskId`, alle vier lussen roepen nu de snapshot-diff-logging aan)
+- `server/domain/scheduling/startup-check.ts` (gewijzigd — `runId`-generatie, `LOOP_REASONS`, `snapshotSessionStarts`/`diffSessionSnapshots`/`logSnapshotDiff`, `extractHerplannenTaskId`, alle vier lussen roepen nu de snapshot-diff-logging aan; review-ronde: `recordReplanRun`-aanroep, nieuwe `finalizeAllStaleSessions`, taak-brede heartbeat-uitsluiting, waarschuwing bij onparseerbaar aanbeveling-id, bijgewerkt commentaar)
 - `server/api/scheduling/replan-log/latest.get.ts` (nieuw)
 - `app/components/ReplanLogDialog.vue` (nieuw)
 - `app/pages/index.vue` (gewijzigd — `<ReplanLogDialog id-prefix="home" />` toegevoegd naast `home-replan-button`)
 - `app/pages/week/index.vue` (gewijzigd — `<ReplanLogDialog id-prefix="week" />` toegevoegd naast `week-replan-button`)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (review-ronde — 4 defer-bevindingen toegevoegd)

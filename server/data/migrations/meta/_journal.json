@@ -169,6 +169,13 @@
       "when": 1789228136694,
       "tag": "0023_dusty_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1789236241529,
+      "tag": "0024_minor_the_spike",
+      "breakpoints": true
     }
   ]
 }

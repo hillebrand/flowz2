@@ -128,7 +128,7 @@ development_status:
   6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — alsnog geïmplementeerd 2026-09-04, zie de story se Change Log. HERTESTEN na sprint-change-proposal-2026-09-05.md
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
   6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: done # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + code review (Opus 5, 2 patches: GET→POST, schema-comment) + herdeployed 2026-09-04. Epic 6 hiermee volledig done. HERTESTEN na sprint-change-proposal-2026-09-05.md
-  6-8-wijzigingslog-toelichting-bij-automatische-herplanning: review # 2026-09-12: Tasks 1-4 geïmplementeerd (typecheck/build schoon), Task 5's live-als-Evelien-verificatie bewust open gelaten (geen toegang tot haar login) — zie de story se Open Questions/Completion Notes
+  6-8-wijzigingslog-toelichting-bij-automatische-herplanning: done # 2026-09-12: Tasks 1-4 + code review (Opus 5, 9 patches + 2 besluiten doorgevoerd) afgerond. Task 5's live-als-Evelien-verificatie blijft bewust open (geen toegang tot haar login) — zie de story se Open Questions/Completion Notes
   epic-6-retrospective: optional
 
   epic-7: done
