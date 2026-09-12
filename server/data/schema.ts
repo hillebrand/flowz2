@@ -1,6 +1,7 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { Weekday } from '../../shared/types/availability'
 import type { Difficulty, Priority, SubtaskStatus, TaskType } from '../../shared/types/tasks'
+import type { LoopSource } from '../../shared/types/replan-log'
 
 export type { Weekday }
 export type { Difficulty, Priority, SubtaskStatus, TaskType }
@@ -405,3 +406,25 @@ export const shortfallApplyLocks = sqliteTable('shortfall_apply_locks', {
 
 export type ShortfallApplyLock = typeof shortfallApplyLocks.$inferSelect
 export type NewShortfallApplyLock = typeof shortfallApplyLocks.$inferInsert
+
+// Story 6.8 — wijzigingslog voor de vier stille herplan-lussen (`startup-check.ts`). Geen
+// fk op `runId` (puur een group-by-sleutel binnen déze tabel, één per
+// `runStartupReplanCheck`-aanroep, niet een eigen "run"-entiteit). `sessionId` nullable:
+// een taak-herberekening (`recalculateTaskPlanning`) kan een sessie ook laten vervallen
+// (geen nieuwe `newStartsAt`) of toevoegen (geen `oldStartsAt`) — zie session-placement.ts
+// se "Belangrijk"-sectie voor de drie mutatievormen die dit vastlegt.
+export const replanChangeLog = sqliteTable('replan_change_log', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  runId: text('run_id').notNull(),
+  taskId: text('task_id').notNull().references(() => tasks.id),
+  sessionId: text('session_id'),
+  loopSource: text('loop_source').$type<LoopSource>().notNull(),
+  oldStartsAt: text('old_starts_at'),
+  newStartsAt: text('new_starts_at'),
+  reason: text('reason').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+})
+
+export type ReplanChangeLogEntry = typeof replanChangeLog.$inferSelect
+export type NewReplanChangeLogEntry = typeof replanChangeLog.$inferInsert

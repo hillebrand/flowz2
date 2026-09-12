@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-09-05
+last_updated: 2026-09-12
 
 # Correct Course (2026-09-02, sprint-change-proposal-2026-09-02.md): beschikbare tijd komt
 # voortaan uit een door Evelien aangewezen Google Calendar-agenda (AD-10) i.p.v. een
@@ -57,6 +57,14 @@ last_updated: 2026-09-05
 # conflict-detection.ts en session-time-check.ts) — alleen `transparency !== 'transparent'`
 # telt nog als blokkerend. Getypecheckt, gebouwd en opnieuw gedeployed naar flowz.fyi
 # (dev-stage); vastgelegd in de story se Change Log/File List.
+
+# Correct Course (2026-09-12, sprint-change-proposal-2026-09-12.md): Evelien wil een
+# huiswerk-Calendar-event handmatig kunnen verplaatsen en dat Flowz dit overneemt. Blijkt
+# een architectuurwijziging (AD-4/AD-7 verbieden het benodigde webhook/cron-mechanisme
+# expliciet) — nieuwe, PROPOSED AD-11 vastgelegd, nieuw Epic 8 (backlog, gated: niet verder
+# dan Story 8-1 zonder expliciet GO van Hillebrand op AD-11 na die spike). Los daarvan:
+# Epic 6 heropend voor Story 6-8 (wijzigingslog + i-dialoog bij de al-gebouwde "↻
+# Herplannen"-knop) — geen architectuurimpact, mag direct door naar dev.
 
 # Correct Course (2026-09-05, sprint-change-proposal-2026-09-05.md): Flowz plant per taak
 # voortaan alle benodigde sessies tot het doelmoment vooraf (i.p.v. 1 sessie, hergebruikt
@@ -112,7 +120,7 @@ development_status:
   5-3-taak-bewerken-hergebruik-taak-formulier: done
   epic-5-retrospective: optional
 
-  epic-6: done # LET OP 2026-09-05: 3-1/3-4/3-5/4-7's rework + code review-ronde 2 (sprint-change-proposal-2026-09-05.md) is geland en gedeployed. shortfall.ts/apply-recommendation.ts/energy.ts/session-placement.ts zijn aangepast (sessie-id's expliciet, deadline-overrun-detectie nu taak-specifiek, herplannen/energie-pad blok-bewust). Live geverifieerd: tekort-detectie bij taak-aanmaken (6.1), tekort-oplossen-scherm accept-flow incl. "vervallen" en twee-gelijktijdige-overruns (6.2). NOG NIET apart live getest: 6.4's energie-pad (relocated/pulledForward/shortened met een multi-sessie-taak, nu met de nieuwe block-aware placeSessionOnDate), 6.5's weekoverzicht-recheck-knop, 6.7's opstart-check met een echte auto-herplan-iteratie. Ook genoteerd: herplannen/energie se kandidaat-zoeklus blijft aggregaat-gebaseerd (Story 3.1's Open Question #9) — de uiteindelijke plaatsing faalt hard i.p.v. stil een blok te schenden, dus geen datacorruptie, wel een mogelijke onverwachte foutmelding in een zeldzaam geval. Aanbevolen als aanvullende verificatie.
+  epic-6: in-progress # HEROPEND 2026-09-12, sprint-change-proposal-2026-09-12.md: nieuwe Story 6-8 (wijzigingslog + i-dialoog). LET OP 2026-09-05: 3-1/3-4/3-5/4-7's rework + code review-ronde 2 (sprint-change-proposal-2026-09-05.md) is geland en gedeployed. shortfall.ts/apply-recommendation.ts/energy.ts/session-placement.ts zijn aangepast (sessie-id's expliciet, deadline-overrun-detectie nu taak-specifiek, herplannen/energie-pad blok-bewust). Live geverifieerd: tekort-detectie bij taak-aanmaken (6.1), tekort-oplossen-scherm accept-flow incl. "vervallen" en twee-gelijktijdige-overruns (6.2). NOG NIET apart live getest: 6.4's energie-pad (relocated/pulledForward/shortened met een multi-sessie-taak, nu met de nieuwe block-aware placeSessionOnDate), 6.5's weekoverzicht-recheck-knop, 6.7's opstart-check met een echte auto-herplan-iteratie. Ook genoteerd: herplannen/energie se kandidaat-zoeklus blijft aggregaat-gebaseerd (Story 3.1's Open Question #9) — de uiteindelijke plaatsing faalt hard i.p.v. stil een blok te schenden, dus geen datacorruptie, wel een mogelijke onverwachte foutmelding in een zeldzaam geval. Aanbevolen als aanvullende verificatie.
   6-1-tijdgebrek-detectie-escalatie-service: done # 2026-09-03: "tijd verruimen" heringevoerd als instructieve tier (geen accept-effect meer); recheck = herhaalde live-detectie, geen nieuwe functie nodig — live geverifieerd. HERTESTEN na sprint-change-proposal-2026-09-05.md
   6-2-tekort-oplossen-scherm: done # nieuwe AC 2026-09-02: recheck-knop-variant — alsnog geïmplementeerd 2026-09-04 (was in de code aanwezig maar nooit aan de knop gewired), zie de story se Change Log. HERTESTEN na sprint-change-proposal-2026-09-05.md
   6-3-vandaag-niet-als-gepland-reden-kiezen-te-weinig-tijd: done
@@ -120,9 +128,16 @@ development_status:
   6-5-weekoverzicht-met-knelpunt-signalering: done # nieuwe AC 2026-09-02: recheck-patroon — alsnog geïmplementeerd 2026-09-04, zie de story se Change Log. HERTESTEN na sprint-change-proposal-2026-09-05.md
   # 6-6-beschikbare-tijd-aanpassen-na-conflict-samenvatting: VERVALLEN 2026-09-02, Correct Course — opgegaan in herziene 6-7
   6-7-opstart-check-planning-versus-beschikbare-tijd-blokken: done # herzien 2026-09-02, Correct Course; vervangt 6-7-agendaconflict-detectie-bij-opstarten; geïmplementeerd + live geverifieerd (als Evelien) + code review (Opus 5, 2 patches: GET→POST, schema-comment) + herdeployed 2026-09-04. Epic 6 hiermee volledig done. HERTESTEN na sprint-change-proposal-2026-09-05.md
+  6-8-wijzigingslog-toelichting-bij-automatische-herplanning: review # 2026-09-12: Tasks 1-4 geïmplementeerd (typecheck/build schoon), Task 5's live-als-Evelien-verificatie bewust open gelaten (geen toegang tot haar login) — zie de story se Open Questions/Completion Notes
   epic-6-retrospective: optional
 
   epic-7: done
   7-1-schoolsessies-verzamelscherm: done
   7-2-onverwachte-taak-toevoegen-vanuit-het-verzamelscherm: done
   epic-7-retrospective: optional
+
+  epic-8: backlog # NIEUW 2026-09-12, sprint-change-proposal-2026-09-12.md — GATED: niet verder dan 8-1 zonder expliciet GO van Hillebrand op AD-11 (PROPOSED) na die spike se uitkomst
+  8-1-alleen-lezen-detectie-spike: backlog
+  8-2-handmatige-verplaatsing-overnemen: backlog # AC's hangen af van 8-1's uitkomst, nog niet definitief
+  8-3-debounce-bij-meerdere-snelle-wijzigingen: backlog
+  epic-8-retrospective: optional

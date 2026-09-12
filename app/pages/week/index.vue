@@ -231,6 +231,7 @@ onMounted(loadWeek)
         aria-label="Herplan nu"
         @click="herplanNu"
       ><span v-if="isReplanning" class="week-spinner" aria-hidden="true" />{{ isReplanning ? 'Bezig...' : '↻ Herplannen' }}</button>
+      <ReplanLogDialog id-prefix="week" />
     </section>
     <p v-if="replanError" id="week-replan-error" class="week-replan-error" role="alert">Kon niet herplannen. Probeer het opnieuw.</p>
 

@@ -2,7 +2,7 @@
 title: PRD: Flowz
 status: final
 created: 2026-07-11
-updated: 2026-09-02
+updated: 2026-09-12
 ---
 
 # PRD: Flowz
@@ -149,6 +149,7 @@ Bewust uitgesteld — architectuur moet hier rekening mee houden zodat latere to
 - Multi-device UX (bv. "laatst bewerkt op ...", gelijktijdig gebruik op meerdere apparaten) — incidentele, niet-gelijktijdige toegang vanaf een tweede apparaat werkt al, omdat de data server-centraal is (zie UJ-10); alleen het apparaat-specifieke ontwerp daarvoor blijft uitgesteld
 - Spraak-naar-tekst taakinvoer
 - Adaptieve tijdschattingen ("Flowz leert van jou" — de kern-differentiator uit de brief, nog niet in v1)
+- Tweewegs Calendar-sync voor de huiswerk-agenda (Evelien verplaatst een huiswerk-event zelf in Google Calendar, Flowz neemt dit over in de planning) — technisch onderzocht (`technical-google-calendar-tweewegs-synchronisatie-voor-huiswerk-blokken-research-2026-09-12.md`), vraagt een architectuurwijziging (AD-11, nieuw). Niet in v1; voorwaardelijk, gefaseerd traject, zie Epic 8. [TOEGEVOEGD 2026-09-12, Correct Course]
 
 Bewust uitgesteld, geen architectuur-impact verwacht:
 

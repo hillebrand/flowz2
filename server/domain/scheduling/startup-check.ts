@@ -6,6 +6,9 @@ import { addDays, isBefore } from './doelmoment'
 import { recalculateTaskPlanning } from './recalculate'
 import { todayInAmsterdam } from '../../../shared/utils/scheduling'
 import type { Session } from '../../data/schema'
+import { insertReplanLogEntries } from '../../data/replan-log'
+import type { NewReplanChangeLogEntry } from '../../data/schema'
+import type { LoopSource } from '../../../shared/types/replan-log'
 
 // Story 6.7 (herzien, AD-10) — orkestreert Story 6.1's bestaande escalatie-service tot een
 // stille, automatische opstart-check (AC #2/#3). Geen nieuwe scheduling-logica: elke
@@ -20,6 +23,76 @@ const MAX_AUTO_REPLAN_ITERATIONS = 10
 
 export interface StartupCheckResult {
   resolved: boolean
+}
+
+// Story 6.8 — schuldvrije (NFR2) toelichting per lus, getoond in de i-dialoog naast de
+// "↻ Herplannen"-knop. Beargumenteerd voorstel, geen vastgesteld exact-woorden-contract
+// (zie de story se Open Questions).
+const LOOP_REASONS: Record<LoopSource, string> = {
+  past: 'Stond nog gepland op een dag die al voorbij is',
+  overlap: 'Overlapte met een andere sessie',
+  shortfall: 'Paste niet meer binnen de beschikbare tijd die dag',
+  out_of_block: 'Paste niet meer binnen een beschikbaar-tijd-blok'
+}
+
+// Snapshot van een taak se sessie-tijden (id → startsAt), vóór een mutatie — vergeleken
+// met een snapshot ná de mutatie levert de wijzigingslog-diff op (zie `logSnapshotDiff`
+// hieronder). `getSessionsForTask` is al elders in dit bestand geïmporteerd.
+async function snapshotSessionStarts(taskId: string): Promise<Map<string, string>> {
+  const sessions = await getSessionsForTask(taskId)
+  return new Map(sessions.map(session => [session.id, session.startsAt]))
+}
+
+// Diff tussen een vóór- en ná-snapshot van dezelfde taak → wijzigingslog-rijen. Een id die
+// in beide voorkomt met een ander tijdstip = "verplaatst"; alleen ná voorkomt = "toegevoegd"
+// (geen oude tijd); alleen vóór voorkomt = "verwijderd" (geen nieuwe tijd, hoort bij
+// `recalculateTaskPlanning`'s eigen regenereer-gedrag, Story 3.5 — geen dataverlies-bug).
+// Ongewijzigde sessies (zelfde tijstip in beide) worden overgeslagen — geen ruis in de log.
+function diffSessionSnapshots(
+  userId: string,
+  runId: string,
+  taskId: string,
+  loopSource: LoopSource,
+  before: Map<string, string>,
+  after: Map<string, string>
+): NewReplanChangeLogEntry[] {
+  const entries: NewReplanChangeLogEntry[] = []
+  const allIds = new Set([...before.keys(), ...after.keys()])
+  for (const id of allIds) {
+    const oldStartsAt = before.get(id) ?? null
+    const newStartsAt = after.get(id) ?? null
+    if (oldStartsAt === newStartsAt) continue
+    entries.push({
+      userId,
+      runId,
+      taskId,
+      sessionId: id,
+      loopSource,
+      oldStartsAt,
+      newStartsAt,
+      reason: LOOP_REASONS[loopSource]
+    })
+  }
+  return entries
+}
+
+// Ná een geslaagde mutatie: ná-snapshot nemen, diffen tegen de meegegeven vóór-snapshot, en
+// wegschrijven. Best-effort (try/catch + loggen) — een falende log-write mag de
+// al-geslaagde herplanning nooit alsnog laten falen, zelfde precedent als de
+// Calendar-sync-aanroepen elders in dit project (`session-placement.ts` e.a.).
+async function logSnapshotDiff(
+  userId: string,
+  runId: string,
+  taskId: string,
+  loopSource: LoopSource,
+  before: Map<string, string>
+): Promise<void> {
+  try {
+    const after = await snapshotSessionStarts(taskId)
+    await insertReplanLogEntries(diffSessionSnapshots(userId, runId, taskId, loopSource, before, after))
+  } catch (fout) {
+    console.error(`[scheduling] Kon wijzigingslog niet schrijven voor user ${userId}, taak ${taskId}:`, fout)
+  }
 }
 
 // Alleen niveau 1 ("herplannen") mag stil toegepast worden (AC #2, story se "Belangrijk"
@@ -49,10 +122,14 @@ export interface StartupCheckResult {
 // hebben die door een verschoven blok buiten de lijnen valt) — vandaar dat #4 apart blijft
 // bestaan.
 export async function runStartupReplanCheck(userId: string): Promise<StartupCheckResult> {
-  const pastResolved = await runPastSessionReplanLoop(userId)
-  const overlapResolved = await runOverlappingSessionReplanLoop(userId)
-  const shortfallResolved = await runShortfallReplanLoop(userId)
-  const blocksResolved = await runOutOfBlockReplanLoop(userId)
+  // Story 6.8 — één `runId` voor de hele aanroep, meegegeven aan alle vier de lussen: de
+  // wijzigingslog groepeert hierop ("de recentste run", AC #2) — puur een group-by-sleutel,
+  // geen eigen "run"-entiteit.
+  const runId = crypto.randomUUID()
+  const pastResolved = await runPastSessionReplanLoop(userId, runId)
+  const overlapResolved = await runOverlappingSessionReplanLoop(userId, runId)
+  const shortfallResolved = await runShortfallReplanLoop(userId, runId)
+  const blocksResolved = await runOutOfBlockReplanLoop(userId, runId)
   return { resolved: pastResolved && overlapResolved && shortfallResolved && blocksResolved }
 }
 
@@ -74,7 +151,7 @@ async function findTaskWithPastIncompleteSession(userId: string): Promise<string
   return null
 }
 
-async function runPastSessionReplanLoop(userId: string): Promise<boolean> {
+async function runPastSessionReplanLoop(userId: string, runId: string): Promise<boolean> {
   for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
     const taskId = await findTaskWithPastIncompleteSession(userId)
     if (!taskId) return true
@@ -84,12 +161,14 @@ async function runPastSessionReplanLoop(userId: string): Promise<boolean> {
     // verleden) — een sessie die hierdoor herplaatst wordt, staat per constructie niet
     // meer vóór vandaag. Zelfde "nooit als 500 laten bubbelen"-precedent als de andere
     // twee lussen hieronder.
+    const before = await snapshotSessionStarts(taskId)
     try {
       await recalculateTaskPlanning(taskId)
     } catch (fout) {
       console.error(`[scheduling] Stille herplanning (sessie in het verleden) mislukt voor user ${userId}, taak ${taskId}:`, fout)
       return false
     }
+    await logSnapshotDiff(userId, runId, taskId, 'past', before)
   }
 
   return false
@@ -140,23 +219,38 @@ async function findTaskWithOverlappingSession(userId: string): Promise<string | 
   return null
 }
 
-async function runOverlappingSessionReplanLoop(userId: string): Promise<boolean> {
+async function runOverlappingSessionReplanLoop(userId: string, runId: string): Promise<boolean> {
   for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
     const taskId = await findTaskWithOverlappingSession(userId)
     if (!taskId) return true
 
+    const before = await snapshotSessionStarts(taskId)
     try {
       await recalculateTaskPlanning(taskId)
     } catch (fout) {
       console.error(`[scheduling] Stille herplanning (overlappende sessies) mislukt voor user ${userId}, taak ${taskId}:`, fout)
       return false
     }
+    await logSnapshotDiff(userId, runId, taskId, 'overlap', before)
   }
 
   return false
 }
 
-async function runShortfallReplanLoop(userId: string): Promise<boolean> {
+// Story 6.8 — `ShortfallRecommendation.id` draagt voor tier 'herplannen' de vorm
+// `herplannen:taskId:sessionId` (zie `apply-recommendation.ts`'s `parseTaskAndSessionId`,
+// dezelfde parse-logica hier lokaal herhaald — bewust niet die interne functie
+// hergebruikt/geëxporteerd, dit is een puur lezende afleiding voor de logging, geen
+// mutatie-concern). `null` als het id onverwacht niet aan die vorm voldoet.
+function extractHerplannenTaskId(recommendationId: string): string | null {
+  if (!recommendationId.startsWith('herplannen:')) return null
+  const rest = recommendationId.slice('herplannen:'.length)
+  const separatorIndex = rest.lastIndexOf(':')
+  if (separatorIndex === -1) return null
+  return rest.slice(0, separatorIndex)
+}
+
+async function runShortfallReplanLoop(userId: string, runId: string): Promise<boolean> {
   for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
     const shortfall = await detectAnyShortfall(userId)
     if (!shortfall) return true
@@ -174,7 +268,10 @@ async function runShortfallReplanLoop(userId: string): Promise<boolean> {
     // overnemen.
     try {
       for (const recommendation of herplanRecommendations) {
+        const taskId = extractHerplannenTaskId(recommendation.id)
+        const before = taskId ? await snapshotSessionStarts(taskId) : null
         await applyShortfallRecommendation(userId, recommendation)
+        if (taskId && before) await logSnapshotDiff(userId, runId, taskId, 'shortfall', before)
       }
     } catch (fout) {
       console.error(`[scheduling] Stille auto-herplanning mislukt voor user ${userId}:`, fout)
@@ -237,7 +334,7 @@ async function findTaskWithSessionOutsideAvailableBlock(userId: string): Promise
   return null
 }
 
-async function runOutOfBlockReplanLoop(userId: string): Promise<boolean> {
+async function runOutOfBlockReplanLoop(userId: string, runId: string): Promise<boolean> {
   for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
     const taskId = await findTaskWithSessionOutsideAvailableBlock(userId)
     if (!taskId) return true
@@ -246,12 +343,14 @@ async function runOutOfBlockReplanLoop(userId: string): Promise<boolean> {
     // vandaag, blok-bewust (`planSessionSlots`) — een sessie die hierdoor herplaatst wordt
     // valt per constructie weer binnen een echt blok. Zelfde "nooit als 500 laten
     // bubbelen"-precedent als `runShortfallReplanLoop` hierboven.
+    const before = await snapshotSessionStarts(taskId)
     try {
       await recalculateTaskPlanning(taskId)
     } catch (fout) {
       console.error(`[scheduling] Stille herplanning (sessie buiten beschikbaar blok) mislukt voor user ${userId}, taak ${taskId}:`, fout)
       return false
     }
+    await logSnapshotDiff(userId, runId, taskId, 'out_of_block', before)
   }
 
   return false

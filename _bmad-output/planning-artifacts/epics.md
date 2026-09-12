@@ -1,9 +1,11 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
-updated: 2026-09-02
+updated: 2026-09-12
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-Flowz-2026-07-11/prd.md
   - _bmad-output/planning-artifacts/sprint-change-proposal-2026-09-02.md
+  - _bmad-output/planning-artifacts/sprint-change-proposal-2026-09-05.md
+  - _bmad-output/planning-artifacts/sprint-change-proposal-2026-09-12.md
   - _bmad-output/planning-artifacts/architecture/architecture-Flowz-2026-07-14/ARCHITECTURE-SPINE.md
   - design-artifacts/C-UX-Scenarios/00-ux-scenarios.md
   - design-artifacts/C-UX-Scenarios/01-evelien-werksessie/01-evelien-werksessie.md
@@ -73,6 +75,7 @@ FR29: Evelien kan via een apart verzamelscherm ("schoolsessies van vandaag invoe
 FR30: Was de taak op school nog niet in Flowz bekend, dan kan Evelien in dezelfde flow een nieuwe taak aanmaken met alleen titel, een verplichte deadline en de bestede tijd; moeilijkheid, prioriteit en standaard sessieduur krijgen de standaardwaarde "Gemiddeld" en zijn later aan te vullen via het gewone bewerkformulier (FR13).
 FR31: Op het inlogscherm kan Evelien "dit is een openbare computer" aanvinken.
 FR32: Een expliciete uitlog-actie is voor elke sessie beschikbaar, niet alleen sessies met het openbare-computer-vinkje.
+FR33: [NIEUW, PROPOSED — Correct Course 2026-09-12/13, gated achter AD-11] Verplaatst Evelien een huiswerk-Calendar-event handmatig, dan neemt Flowz die nieuwe tijd over in de planning (i.p.v. te overschrijven) — mits deze binnen een beschikbaar-tijd-blok valt en niet overlapt met een andere sessie; de bestaande automatische herplan-lussen (Epic 6, Story 6.7 e.v.) respecteren een zo overgenomen sessie voortaan volgens de regels uit Epic 8.
 
 ### NonFunctional Requirements
 
@@ -171,6 +174,7 @@ FR29: Epic 7 - Schoolsessies-verzamelscherm, verwerkt als afgeronde sessie
 FR30: Epic 7 - Verkorte taak-aanmaak (titel + deadline + tijd) vanuit het verzamelscherm
 FR31: Epic 1 - Openbare-computer-vinkje op het inlogscherm
 FR32: Epic 1 - Expliciete uitlog-actie
+FR33: Epic 8 (nieuw, gated) - Tweewegs Calendar-sync, handmatige verplaatsing overnemen
 
 ## Epic List
 
@@ -334,6 +338,8 @@ So that Flowz mijn geplande sessies zichtbaar in mijn agenda zet en nooit meer e
 **Given** Evelien heeft een door Flowz aangemaakt Calendar-event zelf handmatig aangepast of verwijderd
 **When** Flowz die sessie later opnieuw (her)plant
 **Then** overschrijft/hermaakt Flowz het event gewoon (Flowz is bron van waarheid voor eigen events, geen conflict-detectie met handmatige wijzigingen in v1)
+
+> **[Voorbehoud, TOEGEVOEGD Correct Course 2026-09-12/13]:** deze regel blijft gelden binnen Epic 2 se scope. Zie Epic 8 (nieuw, backlog) voor de voorgestelde vervanging zodra tweewegs-sync wordt opgepakt — dan neemt Flowz een handmatige wijziging aan de huiswerk-Calendar juist over i.p.v. te overschrijven, onder AD-11's voorwaarden.
 
 **Given** geen huiswerk-kleur is ingesteld
 **When** een sessie gepland/herpland wordt
@@ -873,6 +879,28 @@ So that een wijziging die ik zelf in Google Calendar heb gemaakt nooit tot een s
 **When** 1.1-Home laadt
 **Then** verschijnt in plaats van de opstart-check een verwijzing naar de instellingenpagina om er eerst een te koppelen
 
+### Story 6.8: Wijzigingslog & Toelichting bij Automatische Herplanning [NIEUW, Correct Course 2026-09-12/13]
+
+As Evelien,
+I want kunnen zien wat de automatische herplanning heeft aangepast en waarom,
+So that ik begrijp waarom een sessie is verschoven, in plaats van dat het onzichtbaar gebeurt.
+
+**Acceptance Criteria:**
+
+**Given** een van de vier stille herplan-lussen (Story 6.7 e.v., `startup-check.ts`) verplaatst een sessie
+**When** dit gebeurt
+**Then** wordt een wijzigingslog-rij geschreven: welke sessie/taak, oude/nieuwe tijd, welke lus, en waarom (bv. "sessie stond nog in het verleden")
+
+**Given** Evelien staat op Home of het weekoverzicht
+**When** ze op het i-icoon naast de "↻ Herplannen"-knop klikt
+**Then** opent een dialoog met de wijzigingslog-rijen van de recentste herplan-run, in schuldvrije taal (NFR2)
+
+**Given** er zijn geen wijzigingen in de recentste run
+**When** de dialoog opent
+**Then** toont die een neutrale "niets aangepast"-boodschap, geen lege/verwarrende lijst
+
+**Implementation Notes:** de "↻ Herplannen"-knop zelf (roept `POST /api/scheduling/startup-check` aan) is al gebouwd en live gedeployed (buiten BMAD om, tijdens hetzelfde gesprek als dit proposal) — deze story documenteert 'm retroactief en voegt de wijzigingslog/dialoog toe. Onafhankelijk van Epic 8 bruikbaar, en tevens een randvoorwaarde daarvoor (dezelfde log kan later "je verplaatsing is overgenomen"-berichten tonen).
+
 ### Epic 7: Schoolsessies Invoeren (Papieren Agenda)
 Evelien kan huiswerk dat ze op school deed — waar haar telefoon verplicht in het kluisje blijft — 's avonds thuis alsnog in Flowz vastleggen, op basis van wat ze op papier bijhield.
 **FRs covered:** FR29, FR30
@@ -919,3 +947,32 @@ So that ik niet eerst apart een volledig taak-formulier hoef in te vullen voorda
 **Then** wordt een `Task`-rij aangemaakt (Epic 3's `POST /api/tasks`-pad) met moeilijkheid, prioriteit en standaard sessieduur op de standaardwaarde "Gemiddeld" (FR30)
 **And** berekent de scheduling-engine (Epic 3, ongewijzigd) op basis van de ingevulde deadline meteen een doelmoment, zoals bij elke andere taak
 **And** is de taak nadien via 6.3-bewerkformulier (Epic 5) verder aan te vullen, net als elke andere taak
+
+### Epic 8: Google Calendar Tweewegs-sync voor Huiswerk-blokken [NIEUW, backlog, Correct Course 2026-09-12/13]
+Evelien kan een gepland huiswerk-event rechtstreeks in Google Calendar verplaatsen; Flowz herkent dit en neemt de nieuwe tijd over in haar planning, in plaats van hem bij de volgende sync te overschrijven.
+**FRs covered:** FR33 (nieuw)
+**Architectuur:** AD-11 (nieuw, PROPOSED)
+**Status: gated — start niet vóór Story 8.1 (alleen-lezen spike) is uitgevoerd, besproken met Hillebrand, en AD-11 een expliciet GO heeft gekregen.**
+**Implementation Notes:** volledige technische onderbouwing, faalmodi, en de aanbevolen 4-fasen-opbouw in `technical-google-calendar-tweewegs-synchronisatie-voor-huiswerk-blokken-research-2026-09-12.md`. Stories hieronder zijn bewust op hoog niveau — de precieze AC's van 8.2/8.3 hangen af van wat Story 8.1's spike oplevert (met name de echo-detectie-aanname, Google's `updated`/`etag`-gedrag).
+
+### Story 8.1: Alleen-lezen Detectie-spike
+
+As developer,
+I want een watch-kanaal + syncToken-sync bouwen die uitsluitend logt wat er gedetecteerd wordt,
+So that de echo-detectie-aanname (Google's `updated`/`etag`-gedrag) tegen de échte Calendar gevalideerd is vóór er iets gemuteerd wordt.
+
+### Story 8.2: Handmatige Verplaatsing Overnemen
+
+As Evelien,
+I want dat een door mij handmatig verplaatst huiswerk-event wordt overgenomen in de planning,
+So that ik niet naar Flowz hoef om te verplaatsen.
+
+**Implementation Notes:** vereist `manuallyPlacedAt` op `sessions` en de beslisregels per bestaande herplan-lus (zie research se Architecturale sectie) — deze regels zijn een voorstel, geen vastgestelde AC, en moeten vóór implementatie bevestigd worden met Hillebrand.
+
+### Story 8.3: Debounce bij Meerdere Snelle Wijzigingen
+
+As Evelien,
+I want dat Flowz niet reageert op de eerste helft van een ruil van twee sessies alsof het een op-zichzelf-staand probleem is,
+So that een sessie-ruil in twee stappen niet tot een voortijdige, ongewenste herplanning leidt.
+
+**Implementation Notes:** via de Cron-tick uit Story 8.1 (`lastChangeNotifiedAt`-timestamp per user), geen apart AWS-primitief.

@@ -349,6 +349,7 @@ const outsideWindowCalendarEvents = computed(() =>
         aria-label="Herplan nu"
         @click="herplanNu"
       ><span v-if="isReplanning" class="home-spinner" aria-hidden="true" />{{ isReplanning ? 'Bezig...' : '↻ Herplannen' }}</button>
+      <ReplanLogDialog id-prefix="home" />
     </header>
     <p v-if="replanError" id="home-replan-error" class="home-replan-error" role="alert">Kon niet herplannen. Probeer het opnieuw.</p>
 
