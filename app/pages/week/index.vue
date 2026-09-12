@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FetchError } from 'ofetch'
 import type { WeekDayDto, WeekOverviewResponse } from '#shared/types/week'
+import type { StartupCheckResponse } from '#shared/types/startup-check'
 
 const { loggedIn } = useUserSession()
 if (!loggedIn.value) {
@@ -14,6 +15,8 @@ const loadError = ref(false)
 const days = ref<WeekDayDto[]>([])
 const busyDate = ref<string | null>(null)
 const acceptErrorDate = ref<string | null>(null)
+const isReplanning = ref(false)
+const replanError = ref(false)
 
 // Review-fix (chunk E, 2026-09-06 — Blind Hunter + Edge Case Hunter, onafhankelijk van
 // elkaar gevonden): gedeelde 15s-timeout, zelfde precedent als
@@ -167,6 +170,29 @@ async function controlerenOpnieuw(day: WeekDayDto) {
   }
 }
 
+// Handmatige herplan-trigger (op verzoek van Hillebrand) — dezelfde `/api/scheduling/
+// startup-check` als Home's stille opstart-check (Story 6.7), nu ook op aanvraag vanuit het
+// weekoverzicht. Los van `busyDate` (die is per-dag-suggestie, dit is een pagina-brede
+// actie) — allebei kunnen dus in theorie tegelijk actief zijn; de server se eigen
+// `startupCheckLocks`/`sessionPlacementLocks` beschermen tegen een daadwerkelijke botsing.
+async function herplanNu() {
+  if (isReplanning.value) return
+  isReplanning.value = true
+  replanError.value = false
+  try {
+    await withTimeout($fetch<StartupCheckResponse>('/api/scheduling/startup-check', { method: 'POST' }))
+    await loadWeek()
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    replanError.value = true
+  } finally {
+    isReplanning.value = false
+  }
+}
+
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
   const hours = Math.floor(minutes / 60)
@@ -197,7 +223,16 @@ onMounted(loadWeek)
     <section id="week-header-section" class="week-header-section">
       <HamburgerMenu />
       <h1 id="week-page-heading" class="week-page-heading">Weekoverzicht</h1>
+      <button
+        id="week-replan-button"
+        type="button"
+        class="week-replan-button"
+        :disabled="isReplanning"
+        aria-label="Herplan nu"
+        @click="herplanNu"
+      ><span v-if="isReplanning" class="week-spinner" aria-hidden="true" />{{ isReplanning ? 'Bezig...' : '↻ Herplannen' }}</button>
     </section>
+    <p v-if="replanError" id="week-replan-error" class="week-replan-error" role="alert">Kon niet herplannen. Probeer het opnieuw.</p>
 
     <div v-if="isLoading" class="week-skeleton" aria-hidden="true">
       <div v-for="n in 3" :key="n" class="week-skeleton-row" />
@@ -278,6 +313,31 @@ onMounted(loadWeek)
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+.week-replan-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: auto;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.week-replan-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.week-replan-error {
+  margin: 0 0 1rem;
+  color: var(--color-warning-text);
+  font-size: 0.8125rem;
 }
 
 .week-status {

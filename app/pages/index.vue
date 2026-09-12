@@ -15,7 +15,7 @@ useHead({ title: 'Flowz' })
 // het server-render, waardoor `status === 'pending'` op de eerste page-load in de praktijk
 // nooit waar is en de skeleton (AC #1) niet waarneembaar is — zelfde reden als
 // `taak/nieuw.vue`'s eigen `server: false` op zijn `subjects`-fetch.
-const { data: plan, error: planError, status: planStatus } = useFetch<HomePlanResponse>('/api/home/plan', { server: false })
+const { data: plan, error: planError, status: planStatus, refresh: refreshPlan } = useFetch<HomePlanResponse>('/api/home/plan', { server: false })
 watch(planError, (waarde) => {
   if (is401(waarde)) navigateTo('/inloggen')
 }, { immediate: true })
@@ -58,6 +58,46 @@ watch(startupCheck, (waarde) => {
     navigateTo('/herstel/tekort-oplossen')
   }
 })
+
+// Handmatige herplan-trigger (op verzoek van Hillebrand) — dezelfde `/api/scheduling/
+// startup-check` als hierboven (stil bij elke Home-load), nu ook op aanvraag. Zelfde
+// 15s-timeout-precedent als `week/index.vue`'s `withTimeout` (bewust hier lokaal herhaald,
+// geen gedeelde composable in dit project).
+const REPLAN_TIMEOUT_MS = 15_000
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), REPLAN_TIMEOUT_MS)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
+}
+
+const isReplanning = ref(false)
+const replanError = ref(false)
+
+async function herplanNu() {
+  if (isReplanning.value) return
+  isReplanning.value = true
+  replanError.value = false
+  try {
+    const result = await withTimeout($fetch<StartupCheckResponse>('/api/scheduling/startup-check', { method: 'POST' }))
+    // Ná de herplanning de dagplanning altijd verversen, ongeacht `resolved` — een
+    // (deels) gelukte herplanning verandert de getoonde sessietijden/-taken al, ook als er
+    // uiteindelijk toch een escalatie volgt.
+    await refreshPlan()
+    if (result.calendarLinked && !result.resolved) {
+      navigateTo('/herstel/tekort-oplossen')
+    }
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return
+    }
+    replanError.value = true
+  } finally {
+    isReplanning.value = false
+  }
+}
 
 const isLoading = computed(() => planStatus.value === 'pending' || planStatus.value === 'idle')
 const nextTask = computed(() => plan.value?.nextTask ?? null)
@@ -301,7 +341,16 @@ const outsideWindowCalendarEvents = computed(() =>
         id="home-header-time-indicator"
         class="home-header-time-indicator"
       >{{ formatMinutes(plan.remainingMinutesToday) }} resterend</span>
+      <button
+        id="home-replan-button"
+        type="button"
+        class="home-replan-button"
+        :disabled="isReplanning"
+        aria-label="Herplan nu"
+        @click="herplanNu"
+      ><span v-if="isReplanning" class="home-spinner" aria-hidden="true" />{{ isReplanning ? 'Bezig...' : '↻ Herplannen' }}</button>
     </header>
+    <p v-if="replanError" id="home-replan-error" class="home-replan-error" role="alert">Kon niet herplannen. Probeer het opnieuw.</p>
 
     <div v-if="isLoading" id="home-skeleton" class="home-skeleton" aria-hidden="true">
       <div class="home-skeleton-block home-skeleton-block--title" />
@@ -433,6 +482,52 @@ const outsideWindowCalendarEvents = computed(() =>
 .home-header-time-indicator {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
+}
+
+.home-replan-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.home-replan-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.home-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-text-muted);
+  border-radius: 999px;
+  animation: home-spin 700ms linear infinite;
+}
+
+@keyframes home-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-spinner {
+    animation: none;
+  }
+}
+
+.home-replan-error {
+  margin: 0.5rem 1.5rem 0;
+  color: var(--color-warning-text);
+  font-size: 0.8125rem;
 }
 
 .home-warning-banner {
