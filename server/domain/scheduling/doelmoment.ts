@@ -16,6 +16,15 @@ import { amsterdamLocalToUtcIso, todayInAmsterdam } from '../../../shared/utils/
 // `shared/utils/scheduling.ts` voor een vergelijkbaar layering-probleem.
 export const SESSION_ANCHOR_HOUR = 16
 
+// Bug-fix (2026-09-12) — pauze tussen twee opeenvolgende sessies (voor het pakken van
+// spullen), best-effort: telt mee bij het plaatsen (`packSlotsInBlocks`) en bij het
+// terugval-stapelpad hieronder, maar dwingt niets af op de "hoeveel is er al bezet"-som
+// (`sumPlannedMinutesForUserOnDate` telt alleen `plannedMinutes`, geen pauzes) — een blok
+// dat na de pauze te weinig aaneengesloten ruimte overhoudt wordt gewoon overgeslagen (zelfde
+// bestaand gedrag als een blok dat sowieso te klein is), nooit een taak laten vervallen puur
+// om deze pauze.
+const SESSION_BREAK_MINUTES = 5
+
 // Eerste echte inhoud van deze map (Story 3.1) — de Structural Seed reserveerde 'm al
 // sinds Story 1.1.
 //
@@ -151,9 +160,14 @@ function packSlotsInBlocks(
   remainingMinutes: number
 ): { startsAt: string, endsAt: string, plannedMinutes: number }[] {
   const slots: { startsAt: string, endsAt: string, plannedMinutes: number }[] = []
-  let skipMs = skipMinutes * 60_000
+  // Bug-fix (2026-09-12): staat er al iets op deze dag (`skipMinutes > 0`), laat dan eerst
+  // de pauze verstrijken vóórdat het eerste nieuwe slot begint — anders sluit een sessie uit
+  // een andere plannings-aanroep (een andere taak, of een eerdere sessie van dezelfde taak
+  // die niet via déze aanroep is geplaatst) direct op de vorige aan.
+  let skipMs = (skipMinutes > 0 ? skipMinutes + SESSION_BREAK_MINUTES : skipMinutes) * 60_000
   let remainingMs = remainingMinutes * 60_000
   const sessionMs = sessionMinutes * 60_000
+  const breakMs = SESSION_BREAK_MINUTES * 60_000
 
   for (const block of blocks) {
     if (remainingMs <= 0) break
@@ -178,6 +192,9 @@ function packSlotsInBlocks(
       })
       cursorMs = endMs
       remainingMs -= thisSessionMs
+      // Bug-fix (2026-09-12): pauze vóór een eventuele volgende sessie in dit blok — geen
+      // pauze ná de allerlaatste sessie (die zou hier niets meer beschermen).
+      if (remainingMs > 0) cursorMs += breakMs
     }
   }
 
@@ -283,7 +300,9 @@ export async function planSessionSlots(
     const alreadyUsedMinutes = anyBlocksSeen ? await sumPlannedMinutesForUserOnDate(userId, fallbackDate, excludeTaskIds) : 0
     const anchor = resolveAnchorHourMinute(fallbackDate, SESSION_ANCHOR_HOUR)
     let cursorDate = fallbackDate
-    let cursorMinutes = anchor.hour * 60 + anchor.minute + alreadyUsedMinutes
+    // Bug-fix (2026-09-12): zelfde pauze-vóór-het-eerste-nieuwe-slot-logica als
+    // `packSlotsInBlocks` hierboven, voor dit blokloze terugvalpad.
+    let cursorMinutes = anchor.hour * 60 + anchor.minute + alreadyUsedMinutes + (alreadyUsedMinutes > 0 ? SESSION_BREAK_MINUTES : 0)
 
     while (remainingMinutes > 0) {
       // Dagdoorloop: stapelen kan voorbij middernacht groeien — schuif dan door naar de
@@ -305,6 +324,8 @@ export async function planSessionSlots(
       slots.push({ date: startsAt.slice(0, 10), startsAt, endsAt, plannedMinutes: thisSessionMinutes })
       cursorMinutes = endMinutes
       remainingMinutes -= thisSessionMinutes
+      // Bug-fix (2026-09-12): pauze vóór een eventuele volgende gestapelde sessie.
+      if (remainingMinutes > 0) cursorMinutes += SESSION_BREAK_MINUTES
     }
   }
 

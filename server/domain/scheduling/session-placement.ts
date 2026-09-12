@@ -1,4 +1,4 @@
-import { getTaskById, updateSessionPlacement } from '../../data/tasks'
+import { getTaskById, updateSessionPlacement, withSessionPlacementLocks } from '../../data/tasks'
 import { syncHomeworkBlocksForDate } from '../calendar-sync/homework-blocks'
 import { findBlockAwareSlot } from './doelmoment'
 import type { Session } from '../../data/schema'
@@ -34,12 +34,30 @@ export async function placeSessionOnDate(userId: string, session: Session, targe
   }
 
   const oudeDatum = session.startsAt.slice(0, 10)
-  const slot = await findBlockAwareSlot(userId, targetDate, session.plannedMinutes, session.id)
-  if (!slot) {
-    throw new Error(`Geen ruimte binnen een beschikbaar-tijd-blok voor sessie ${session.id} op ${targetDate}.`)
-  }
 
-  await updateSessionPlacement(session.id, { startsAt: slot.startsAt, plannedMinutes: session.plannedMinutes })
+  // Bug-fix (2026-09-12): `findBlockAwareSlot` doet een lees-dan-schrijf ("hoeveel is er al
+  // bezet op deze dag?" → "plaats op het eerste vrije plekje") — precies de TOCTOU-race
+  // die `sessionPlacementLocks`/`withSessionPlacementLocks` (`server/data/tasks.ts`) al
+  // afdwingt voor `createTaskAndSessions`/`recalculateTaskPlanning`. Deze functie (haar
+  // twee aanroepers, `apply-recommendation.ts`'s `applyHerplannen` en `energy.ts`'s
+  // `applyEnergyProposal`) sloeg die bescherming tot nu toe over — de eerdere aanname
+  // ("een bestaande sessie naar een al-gekozen datum verplaatsen is geen nieuwe-plaatsing,
+  // dus geen race") klopt niet: de race zit in de lees-dan-schrijf-sectie zelf, niet in of
+  // de sessie nieuw is. Zonder deze lock kon `energy.ts`'s confirm-route (die geen enkele
+  // lock had) gelijktijdig met de automatische opstart-herplanning of zichzelf (dubbele
+  // klik/retry) twee sessies op exact hetzelfde blok-begin plaatsen. `targetDate` én
+  // `oudeDatum` beide claimen: een verplaatsing "leegt" de oude dag en "vult" de nieuwe,
+  // dus beide moeten gelockt zijn tegen een gelijktijdige plaatsing op diezelfde dagen.
+  // Vinden ÉN schrijven samen binnen de lock — een lock die alleen de leesactie dekt zou
+  // de race niet daadwerkelijk sluiten (de schrijfactie kan dan nog steeds interleaven met
+  // een andere aanvrager se leesactie).
+  await withSessionPlacementLocks(userId, [targetDate, oudeDatum], async () => {
+    const slot = await findBlockAwareSlot(userId, targetDate, session.plannedMinutes, session.id)
+    if (!slot) {
+      throw new Error(`Geen ruimte binnen een beschikbaar-tijd-blok voor sessie ${session.id} op ${targetDate}.`)
+    }
+    await updateSessionPlacement(session.id, { startsAt: slot.startsAt, plannedMinutes: session.plannedMinutes })
+  })
 
   // Story 2.5: beide betrokken datums herberekenen — de nieuwe (waar het blok groeit) en,
   // als de sessie daadwerkelijk van dag wisselde, ook de oude (waar het blok krimpt/
