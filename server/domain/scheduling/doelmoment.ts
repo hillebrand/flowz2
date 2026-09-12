@@ -1,4 +1,4 @@
-import { resolveAnchorHourMinute, sumPlannedMinutesForUserOnDate } from '../../data/tasks'
+import { latestSessionEndForUserOnDate, resolveAnchorHourMinute, sumPlannedMinutesForUserOnDate } from '../../data/tasks'
 import type { Difficulty, Priority } from '../../data/schema'
 import { getAvailableBlocksForDate, getAvailableMinutesForDate } from '../availability/calendar-blocks'
 import { amsterdamLocalToUtcIso, todayInAmsterdam } from '../../../shared/utils/scheduling'
@@ -146,25 +146,31 @@ export interface PlannedSessionSlot {
 const MAX_PLAN_SEARCH_DAYS = 90
 
 // Packt zoveel mogelijk sessies van (ten hoogste) `sessionMinutes` binnen de gegeven,
-// chronologisch gesorteerde blokken, na het overslaan van `skipMinutes` (tijd die op déze
-// dag al door andere sessies bezet is — zelfde "stapelen vanaf het begin"-precedent als de
-// rest van dit bestand, nu toegepast op de daadwerkelijke blokgrenzen i.p.v. een los anker +
-// capaciteitsgetal). Een blok dat na het overslaan te weinig aaneengesloten ruimte
-// overhoudt voor nog een sessie wordt met de resterende ruimte overgeslagen (nooit gesplitst
-// over blokken heen — een sessie is altijd aaneengesloten). De allerlaatste sessie mag
-// korter zijn dan `sessionMinutes` (de laatste hap van `remainingMinutes`).
+// chronologisch gesorteerde blokken, ná `skipUntilMs` (een daadwerkelijk tijdstip — epoch
+// ms — vóór welke de dag al bezet is door andere sessies; `0` betekent "niets staat er nog,
+// begin vanaf het eerste blok").
+//
+// **Bug-fix (2026-09-13):** was voorheen `skipMinutes: number` (een optelling van reeds
+// geplande sessieduren), doorgegeven via `sumPlannedMinutesForUserOnDate` en "vanaf het
+// begin van de blokreeks doorgeteld". Dat ging fout zodra er een pauze tussen twee eerder
+// geplaatste sessies zat (`SESSION_BREAK_MINUTES`, hieronder): die pauze-minuten telden niet
+// mee in de optelling, dus een latere, aparte plaatsingsaanroep voor een ándere taak rekende
+// met te wéinig verstreken tijd en kon zo een net-geplaatste sessie overlappen (live
+// geconstateerd, 2026-09-13: natuurkunde eindigde 17:32, kunst begon al 17:27). Een echt
+// tijdstip i.p.v. een optelling heeft dit probleem per definitie niet — het maakt niet uit
+// wélke pauzes/gaten er vóór dat tijdstip zaten.
+//
+// Een blok dat na het clippen op `skipUntilMs` te weinig aaneengesloten ruimte overhoudt
+// voor nog een sessie wordt overgeslagen (nooit gesplitst over blokken heen — een sessie is
+// altijd aaneengesloten). De allerlaatste sessie mag korter zijn dan `sessionMinutes` (de
+// laatste hap van `remainingMinutes`).
 function packSlotsInBlocks(
   blocks: { start: string, end: string }[],
-  skipMinutes: number,
+  skipUntilMs: number,
   sessionMinutes: number,
   remainingMinutes: number
 ): { startsAt: string, endsAt: string, plannedMinutes: number }[] {
   const slots: { startsAt: string, endsAt: string, plannedMinutes: number }[] = []
-  // Bug-fix (2026-09-12): staat er al iets op deze dag (`skipMinutes > 0`), laat dan eerst
-  // de pauze verstrijken vóórdat het eerste nieuwe slot begint — anders sluit een sessie uit
-  // een andere plannings-aanroep (een andere taak, of een eerdere sessie van dezelfde taak
-  // die niet via déze aanroep is geplaatst) direct op de vorige aan.
-  let skipMs = (skipMinutes > 0 ? skipMinutes + SESSION_BREAK_MINUTES : skipMinutes) * 60_000
   let remainingMs = remainingMinutes * 60_000
   const sessionMs = sessionMinutes * 60_000
   const breakMs = SESSION_BREAK_MINUTES * 60_000
@@ -173,14 +179,10 @@ function packSlotsInBlocks(
     if (remainingMs <= 0) break
     const blockStartMs = new Date(block.start).getTime()
     const blockEndMs = new Date(block.end).getTime()
-    const blockLenMs = blockEndMs - blockStartMs
-    if (skipMs >= blockLenMs) {
-      skipMs -= blockLenMs
-      continue
-    }
 
-    let cursorMs = blockStartMs + skipMs
-    skipMs = 0
+    let cursorMs = Math.max(blockStartMs, skipUntilMs)
+    if (cursorMs >= blockEndMs) continue
+
     while (remainingMs > 0) {
       const thisSessionMs = Math.min(sessionMs, remainingMs)
       if (blockEndMs - cursorMs < thisSessionMs) break
@@ -192,13 +194,21 @@ function packSlotsInBlocks(
       })
       cursorMs = endMs
       remainingMs -= thisSessionMs
-      // Bug-fix (2026-09-12): pauze vóór een eventuele volgende sessie in dit blok — geen
-      // pauze ná de allerlaatste sessie (die zou hier niets meer beschermen).
+      // Pauze vóór een eventuele volgende sessie in dit blok — geen pauze ná de
+      // allerlaatste sessie (die zou hier niets meer beschermen).
       if (remainingMs > 0) cursorMs += breakMs
     }
   }
 
   return slots
+}
+
+// Rekent een `latestSessionEndForUserOnDate`-resultaat (`null` of een epoch-ms-tijdstip) om
+// naar `packSlotsInBlocks`'s `skipUntilMs` — `null`/niets bestaand wordt `0` (geen enkele
+// blokstart ligt vóór epoch 0, dus `Math.max(blockStart, 0)` is altijd een no-op), anders
+// dat tijdstip plus de verplichte pauze erna.
+function toSkipUntilMs(latestEndMs: number | null): number {
+  return latestEndMs === null ? 0 : latestEndMs + SESSION_BREAK_MINUTES * 60_000
 }
 
 // Kalenderdagen tussen twee YYYY-MM-DD-strings (`to` - `from`). Lokaal gehouden i.p.v.
@@ -263,7 +273,7 @@ export async function planSessionSlots(
     const blocks = await getAvailableBlocksForDate(userId, candidate)
     if (blocks.length > 0) anyBlocksSeen = true
 
-    const alreadyUsedMinutes = await sumPlannedMinutesForUserOnDate(userId, candidate, excludeTaskIds)
+    const skipUntilMs = toSkipUntilMs(await latestSessionEndForUserOnDate(userId, candidate, excludeTaskIds))
 
     // Dagtarget voor spreiding (zie functie-commentaar) — `Infinity` (geen limiet) zodra
     // `candidate` het doelmoment gepasseerd is: dan is er geen buffer meer om te bewaken,
@@ -274,7 +284,7 @@ export async function planSessionSlots(
       ? remainingMinutes
       : Math.min(remainingMinutes, Math.max(1, Math.ceil(sessionsNeeded / daysLeftIncl)) * sessionMinutes)
 
-    const daySlots = packSlotsInBlocks(blocks, alreadyUsedMinutes, sessionMinutes, targetMinutesToday)
+    const daySlots = packSlotsInBlocks(blocks, skipUntilMs, sessionMinutes, targetMinutesToday)
     for (const slot of daySlots) {
       // Review-fix (2026-09-05): `date` altijd afgeleid van `startsAt` (UTC), nooit van
       // `candidate` (Amsterdam-lokale kalenderdag) — dat waren twee verschillende
@@ -350,7 +360,7 @@ export async function findBlockAwareSlot(
   excludeSessionId: string
 ): Promise<{ startsAt: string, endsAt: string } | null> {
   const blocks = await getAvailableBlocksForDate(userId, date)
-  const alreadyUsedMinutes = await sumPlannedMinutesForUserOnDate(userId, date, undefined, excludeSessionId)
-  const [slot] = packSlotsInBlocks(blocks, alreadyUsedMinutes, sessionMinutes, sessionMinutes)
+  const skipUntilMs = toSkipUntilMs(await latestSessionEndForUserOnDate(userId, date, undefined, excludeSessionId))
+  const [slot] = packSlotsInBlocks(blocks, skipUntilMs, sessionMinutes, sessionMinutes)
   return slot ? { startsAt: slot.startsAt, endsAt: slot.endsAt } : null
 }

@@ -26,26 +26,34 @@ export interface StartupCheckResult {
 // punt 4) — niveau 2 heeft sinds AD-10 geen accept-effect meer, niveau 3/4 wijzigen de taak
 // zelf op een manier die zonder Eveliens tussenkomst niet stil hoort te gebeuren.
 //
-// Bug-fix (2026-09-12): drie onafhankelijke stille checks, ná elkaar.
+// Bug-fix (2026-09-12/13): vier onafhankelijke stille checks, ná elkaar.
 // 1. `runPastSessionReplanLoop` — een sessie die in het verleden ligt en waarvan de taak
 //    niet is afgerond/vervallen (Evelien heeft 'm overgeslagen, geen enkel ander mechanisme
 //    in dit project verplaatst zo'n sessie ooit uit zichzelf vooruit) blijft anders voor
-//    altijd in het verleden staan — géén van de twee checks hieronder kijkt ooit vóór
-//    vandaag, ze scannen allebei uitsluitend voorwaarts vanaf `today`.
-// 2. `runShortfallReplanLoop` (bestaand) — aggregaat: geplande vs. beschikbare MINUTEN per
+//    altijd in het verleden staan — géén van de drie checks hieronder kijkt ooit vóór
+//    vandaag, ze scannen allemaal uitsluitend voorwaarts vanaf `today`.
+// 2. `runOverlappingSessionReplanLoop` — twee sessies (van verschillende taken) die elkaar
+//    in tijd overlappen: elk afzonderlijk kan prima "binnen een blok" liggen (check #4),
+//    dus dat merkt dit niet. Reparatie voor sessies die al vóór de `doelmoment.ts`-
+//    bug-fix van 2026-09-13 (zie die fix se eigen commentaar — een gemiste pauze tussen
+//    twee sessies van dezelfde taak liet een latere, aparte taak te vroeg beginnen) al
+//    verkeerd geplaatst waren — die fix voorkomt nieuwe gevallen, repareert geen bestaande.
+// 3. `runShortfallReplanLoop` (bestaand) — aggregaat: geplande vs. beschikbare MINUTEN per
 //    dag.
-// 3. `runOutOfBlockReplanLoop` — merkt, in tegenstelling tot #2, ook een sessie die stil
+// 4. `runOutOfBlockReplanLoop` — merkt, in tegenstelling tot #3, ook een sessie die stil
 //    buiten een verschoven beschikbaar-tijd-blok is komen te staan (zelfde totaal aantal
 //    minuten, andere positie).
-// Bewust in deze volgorde: #1 lost de meeste gevallen van #3 meteen mee op (`recalculate-
-// TaskPlanning` plant altijd blok-bewust vanaf vandaag), maar dekt niet élk #3-geval (een
-// taak zonder enige sessie in het verleden kan nog steeds een sessie hebben die door een
-// ná #1 verschoven blok buiten de lijnen valt) — vandaar dat #3 apart blijft bestaan.
+// Bewust in deze volgorde: #1/#2 lossen de meeste gevallen van #4 meteen mee op
+// (`recalculateTaskPlanning` plant altijd blok-bewust vanaf vandaag), maar dekken niet élk
+// #4-geval (een taak zonder overlap of sessie in het verleden kan nog steeds een sessie
+// hebben die door een verschoven blok buiten de lijnen valt) — vandaar dat #4 apart blijft
+// bestaan.
 export async function runStartupReplanCheck(userId: string): Promise<StartupCheckResult> {
   const pastResolved = await runPastSessionReplanLoop(userId)
+  const overlapResolved = await runOverlappingSessionReplanLoop(userId)
   const shortfallResolved = await runShortfallReplanLoop(userId)
   const blocksResolved = await runOutOfBlockReplanLoop(userId)
-  return { resolved: pastResolved && shortfallResolved && blocksResolved }
+  return { resolved: pastResolved && overlapResolved && shortfallResolved && blocksResolved }
 }
 
 // Zoekt de eerste openstaande taak (niet afgerond, niet vervallen) met een sessie op een
@@ -80,6 +88,67 @@ async function runPastSessionReplanLoop(userId: string): Promise<boolean> {
       await recalculateTaskPlanning(taskId)
     } catch (fout) {
       console.error(`[scheduling] Stille herplanning (sessie in het verleden) mislukt voor user ${userId}, taak ${taskId}:`, fout)
+      return false
+    }
+  }
+
+  return false
+}
+
+// Bovengrens op de horizon-scan — zelfde "geen onbegrensde lus"-motivatie als
+// `MAX_BLOCK_CHECK_HORIZON_DAYS` hieronder.
+const MAX_OVERLAP_CHECK_HORIZON_DAYS = 90
+
+function sessionsOverlap(a: Session, b: Session): boolean {
+  const aStartMs = new Date(a.startsAt).getTime()
+  const aEndMs = aStartMs + a.plannedMinutes * 60_000
+  const bStartMs = new Date(b.startsAt).getTime()
+  const bEndMs = bStartMs + b.plannedMinutes * 60_000
+  return aStartMs < bEndMs && bStartMs < aEndMs
+}
+
+// Zoekt vanaf vandaag voorwaarts (tot de verste deadline onder de openstaande taken) naar
+// de eerste dag met twee sessies (van verschillende taken) die elkaar in tijd overlappen.
+// Retourneert het taak-id van de LAATST-beginnende van het overlappende paar — na de
+// `doelmoment.ts`-bug-fix (2026-09-13) plaatst een herberekening van die taak haar sessie
+// correct ná het daadwerkelijke eindtijdstip van de andere, niet-verplaatste sessie.
+async function findTaskWithOverlappingSession(userId: string): Promise<string | null> {
+  const openTasks = await getOpenTasksWithProgress(userId)
+  if (openTasks.length === 0) return null
+
+  const today = todayInAmsterdam()
+  const furthestDeadline = openTasks.reduce(
+    (furthest, { task }) => (task.deadline > furthest ? task.deadline : furthest),
+    today
+  )
+
+  let candidate = today
+  let daysChecked = 0
+  while (!isBefore(furthestDeadline, candidate) && daysChecked < MAX_OVERLAP_CHECK_HORIZON_DAYS) {
+    const taskSessions = await getTasksWithSessionOnDate(userId, candidate)
+    const sorted = [...taskSessions].sort((a, b) => a.session.startsAt.localeCompare(b.session.startsAt))
+    for (let i = 1; i < sorted.length; i++) {
+      if (sessionsOverlap(sorted[i - 1]!.session, sorted[i]!.session)) {
+        return sorted[i]!.task.id
+      }
+    }
+
+    candidate = addDays(candidate, 1)
+    daysChecked++
+  }
+
+  return null
+}
+
+async function runOverlappingSessionReplanLoop(userId: string): Promise<boolean> {
+  for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
+    const taskId = await findTaskWithOverlappingSession(userId)
+    if (!taskId) return true
+
+    try {
+      await recalculateTaskPlanning(taskId)
+    } catch (fout) {
+      console.error(`[scheduling] Stille herplanning (overlappende sessies) mislukt voor user ${userId}, taak ${taskId}:`, fout)
       return false
     }
   }

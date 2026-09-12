@@ -264,6 +264,48 @@ export async function sumPlannedMinutesForUserOnDate(
     .reduce((sum, row) => sum + row.plannedMinutes, 0)
 }
 
+// Bug-fix (2026-09-13) — voor blok-bewuste sessieplaatsing (`findBlockAwareSlot`/
+// `planSessionSlots`, `doelmoment.ts`) is niet "hoeveel minuten staan er al gepland" nodig
+// (`sumPlannedMinutesForUserOnDate` hierboven) maar "tot welk daadwerkelijk tijdstip is de
+// dag al bezet". Het verschil deed zich concreet voor zodra een taak twee sessies dezelfde
+// dag kreeg met een pauze ertussen (`SESSION_BREAK_MINUTES`, doelmoment.ts): die pauze telt
+// niet mee in de plannedMinutes-som, dus een latere, aparte plaatsingsaanroep voor een
+// ándere taak rekende met te wéinig verstreken tijd en kon zo een net-geplaatste sessie
+// overlappen (live geconstateerd, 2026-09-13: natuurkunde eindigde 17:32, kunst begon al
+// 17:27 — precies de gemiste pauze). Retourneert het laatste eindtijdstip (epoch ms) onder
+// de bestaande sessies van die dag, of `null` als er niets staat. Zelfde
+// filters/uitsluitingen als `sumPlannedMinutesForUserOnDate` hierboven (bewust lokaal
+// herhaald, niet hergebruikt — losse aanroepers met een eigen faalscenario, zelfde
+// precedent als de rest van dit bestand).
+export async function latestSessionEndForUserOnDate(
+  userId: string,
+  date: string,
+  excludeTaskId?: string | string[],
+  excludeSessionId?: string
+): Promise<number | null> {
+  const excludeIds = excludeTaskId === undefined ? [] : Array.isArray(excludeTaskId) ? excludeTaskId : [excludeTaskId]
+  const rows = await getDb()
+    .select({ plannedMinutes: sessions.plannedMinutes, startsAt: sessions.startsAt })
+    .from(sessions)
+    .innerJoin(tasks, eq(sessions.taskId, tasks.id))
+    .where(and(
+      eq(tasks.userId, userId),
+      isNull(tasks.completedAt),
+      isNull(tasks.droppedAt),
+      sql`substr(${sessions.startsAt}, 1, 10) = ${date}`,
+      excludeIds.length > 0 ? notInArray(tasks.id, excludeIds) : undefined,
+      excludeSessionId ? sql`${sessions.id} != ${excludeSessionId}` : undefined
+    ))
+
+  const now = Date.now()
+  const today = todayInAmsterdam()
+  const endTimesMs = rows
+    .map(row => new Date(row.startsAt).getTime() + row.plannedMinutes * 60_000)
+    .filter(endMs => date !== today || endMs > now)
+
+  return endTimesMs.length > 0 ? Math.max(...endTimesMs) : null
+}
+
 // Voor `taak-subject-select`'s suggestielijst (Task 4) — geen aparte Subject-tabel, zie
 // schema.ts's commentaar bij `tasks.subject`.
 export async function getDistinctSubjectsForUser(userId: string): Promise<string[]> {
