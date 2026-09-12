@@ -10,12 +10,15 @@ export type LoopSource = 'past' | 'overlap' | 'shortfall' | 'out_of_block'
 // erbij gejoined (zodat de i-dialoog leesbare tekst kan tonen zonder een aparte
 // taak-lookup). Lege `entries`-array betekent "geen wijzigingen in de recentste run" —
 // geen 404, dat is een geldig, veelvoorkomend resultaat.
+//
+// Gegroepeerd per (taak, lus) — `count` i.p.v. individuele oude/nieuwe tijdstippen: één
+// taak-herberekening kan tientallen sessies tegelijk verplaatsen, en die tonen als
+// evenzoveel losse, identieke regels was niet zinvol (bug-fix 2026-09-13).
 export interface ReplanLogEntryDto {
   taskTitle: string
   subject: string
-  oldStartsAt: string | null
-  newStartsAt: string | null
   reason: string
+  count: number
 }
 
 export interface ReplanLogResponse {

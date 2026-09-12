@@ -16,9 +16,8 @@ export async function insertReplanLogEntries(entries: NewReplanChangeLogEntry[])
 export interface ReplanLogEntryRow {
   taskTitle: string
   subject: string
-  oldStartsAt: string | null
-  newStartsAt: string | null
   reason: string
+  count: number
 }
 
 // "De recentste herplan-run" (AC #2) = alle logregels met de `runId` van de meest recent
@@ -26,6 +25,14 @@ export interface ReplanLogEntryRow {
 // tabel (één per `runStartupReplanCheck`-aanroep), geen aparte "run"-entiteit om apart op
 // te zoeken. Lege array (geen enkele logregel ooit, of de recentste run had geen
 // wijzigingen) is een geldig resultaat (AC #3), geen foutgeval.
+//
+// Bug-fix (2026-09-13) — gegroepeerd per (taak, lus): `recalculateTaskPlanning` regenereert
+// bij één taak-herberekening vaak meteen tíentallen toekomstige sessies (elke sessie tot
+// het doelmoment), wat zonder groepering evenzoveel losse, identieke logregels ("kunst is
+// aangepast, [zelfde reden]") in de i-dialoog gaf. Individuele oude/nieuwe tijdstippen zijn
+// bij zo'n aantal sessies toch niet zinvol te tonen — vandaar een simpel `count` i.p.v. de
+// per-sessie `oldStartsAt`/`newStartsAt` (die blijven wel ruw in de tabel staan, voor
+// toekomstig detail-gebruik, alleen déze leesfunctie vat ze samen).
 export async function getLatestReplanLogEntriesForUser(userId: string): Promise<ReplanLogEntryRow[]> {
   const [latest] = await getDb()
     .select({ runId: replanChangeLog.runId })
@@ -38,10 +45,10 @@ export async function getLatestReplanLogEntriesForUser(userId: string): Promise<
 
   const rows = await getDb()
     .select({
+      taskId: replanChangeLog.taskId,
       taskTitle: tasks.title,
       subject: tasks.subject,
-      oldStartsAt: replanChangeLog.oldStartsAt,
-      newStartsAt: replanChangeLog.newStartsAt,
+      loopSource: replanChangeLog.loopSource,
       reason: replanChangeLog.reason,
       createdAt: replanChangeLog.createdAt
     })
@@ -50,5 +57,16 @@ export async function getLatestReplanLogEntriesForUser(userId: string): Promise<
     .where(and(eq(replanChangeLog.userId, userId), eq(replanChangeLog.runId, latest.runId)))
     .orderBy(replanChangeLog.createdAt)
 
-  return rows.map(({ createdAt: _createdAt, ...rest }) => rest)
+  const grouped = new Map<string, ReplanLogEntryRow>()
+  for (const row of rows) {
+    const key = `${row.taskId}:${row.loopSource}`
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.count += 1
+    } else {
+      grouped.set(key, { taskTitle: row.taskTitle, subject: row.subject, reason: row.reason, count: 1 })
+    }
+  }
+
+  return [...grouped.values()]
 }

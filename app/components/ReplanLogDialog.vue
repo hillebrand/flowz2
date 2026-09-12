@@ -49,18 +49,11 @@ function close() {
   isOpen.value = false
 }
 
-function formatTime(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '?'
-  return new Intl.DateTimeFormat('nl-NL', {
-    timeZone: 'Europe/Amsterdam',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  }).format(date)
+// Bug-fix (2026-09-13): server groepeert nu per (taak, lus) — hier alleen nog een
+// leesbare "1 sessie"/"N sessies"-telling, geen individuele tijdstippen meer (die waren bij
+// tientallen sessies per taak toch niet zinvol te tonen, zie `replan-log.ts`).
+function formatCount(count: number): string {
+  return count === 1 ? '1 sessie' : `${count} sessies`
 }
 </script>
 
@@ -93,7 +86,7 @@ function formatTime(iso: string | null): string {
         <li v-for="(entry, index) in entries" :key="index" class="replan-log-dialog-item">
           <span class="replan-log-dialog-item-task">{{ entry.subject }} — {{ entry.taskTitle }}</span>
           <span class="replan-log-dialog-item-reason">{{ entry.reason }}</span>
-          <span v-if="entry.oldStartsAt || entry.newStartsAt" class="replan-log-dialog-item-times">{{ formatTime(entry.oldStartsAt) }} → {{ formatTime(entry.newStartsAt) }}</span>
+          <span class="replan-log-dialog-item-times">{{ formatCount(entry.count) }} aangepast</span>
         </li>
       </ul>
 
