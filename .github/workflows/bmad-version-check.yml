@@ -1,0 +1,120 @@
+name: BMAD version check
+
+on:
+  schedule:
+    # Weekly, Monday 07:13 UTC (off-the-hour to avoid load spikes)
+    - cron: "13 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-bmad-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare installed vs latest versions for every BMAD module
+        id: check
+        run: |
+          set -euo pipefail
+
+          # Parse manifest.yaml modules into "name|version|npmPackage|repoUrl" lines,
+          # using the top-level bmad-method package for built-in modules
+          # (npmPackage: null, e.g. core/bmm).
+          modules=$(python3 - <<'PY'
+          import re
+
+          with open("_bmad/_config/manifest.yaml") as f:
+              text = f.read()
+
+          blocks = re.split(r"\n  - name: ", text)[1:]
+          for block in blocks:
+              name = block.splitlines()[0].strip()
+              version = re.search(r"version:\s*\"?([^\"\n]+?)\"?\s*$", block, re.M)
+              pkg = re.search(r"npmPackage:\s*\"?([^\"\n]+?)\"?\s*$", block, re.M)
+              repo = re.search(r"repoUrl:\s*\"?([^\"\n]+?)\"?\s*$", block, re.M)
+              version = version.group(1).strip() if version else ""
+              pkg = pkg.group(1).strip() if pkg else "null"
+              repo = repo.group(1).strip() if repo else "null"
+              print(f"{name}|{version}|{pkg}|{repo}")
+          PY
+          )
+
+          bmad_method_latest=$(npm view bmad-method version)
+
+          report=""
+          any_outdated=false
+
+          while IFS='|' read -r name installed pkg repo; do
+            [ -z "$name" ] && continue
+
+            if [ "$pkg" = "null" ]; then
+              # Built-in module (core/bmm), bundled with the bmad-method package itself.
+              latest="$bmad_method_latest"
+              ref="bmad-method"
+            else
+              # External modules are installed from GitHub release tags (per manifest
+              # channel: stable), not npm publishes — the npm registry lags behind for
+              # these, so resolve the latest stable tag from the repo instead.
+              latest=$(git ls-remote --tags --refs "$repo" \
+                | awk -F/ '{print $NF}' \
+                | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -V | tail -1)
+              ref="$repo"
+            fi
+
+            # strip a leading "v" so sort -V compares like-for-like
+            cmp_installed="${installed#v}"
+            cmp_latest="${latest#v}"
+
+            echo "Module $name ($ref): installed=$installed latest=$latest"
+
+            if [ "$cmp_installed" != "$cmp_latest" ] && [ "$(printf '%s\n%s\n' "$cmp_installed" "$cmp_latest" | sort -V | tail -1)" = "$cmp_latest" ]; then
+              any_outdated=true
+              report="${report}- **${name}** (\`${ref}\`): \`${installed}\` -> \`${latest}\`\n"
+            fi
+          done <<< "$modules"
+
+          echo "outdated=$any_outdated" >> "$GITHUB_OUTPUT"
+          {
+            echo "report<<REPORT_EOF"
+            printf '%b' "$report"
+            echo "REPORT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update issue
+        if: steps.check.outputs.outdated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          set -euo pipefail
+          title="BMAD Method update available"
+          existing=$(gh issue list --search "in:title \"BMAD Method update available\"" --state open --json number --jq '.[0].number' || true)
+
+          body=$(cat <<EOF
+          One or more BMAD modules have a newer release available:
+
+          $REPORT
+          To update the framework locally, run from the repo root:
+
+          \`\`\`
+          npx bmad-method@latest install --action update -y
+          \`\`\`
+
+          To update a single external module to a specific version, use \`--pin <code>=<tag>\` (see \`npx bmad-method install --help\`).
+
+          Review the diff before committing — the installer regenerates \`_bmad/\`. Durable overrides belong in \`_bmad/custom/config.toml\` / \`config.user.toml\`, which the installer never touches.
+
+          This issue was opened automatically by the "BMAD version check" workflow. It only notifies — it does not install anything.
+          EOF
+          )
+
+          if [ -n "${existing:-}" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
