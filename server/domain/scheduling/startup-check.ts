@@ -1,6 +1,6 @@
 import { detectAnyShortfall, generateShortfallRecommendations } from './shortfall'
 import { applyShortfallRecommendation } from './apply-recommendation'
-import { getOpenTasksWithProgress, getTasksWithSessionOnDate } from '../../data/tasks'
+import { getOpenTasksWithProgress, getSessionsForTask, getTasksWithSessionOnDate } from '../../data/tasks'
 import { getAvailableBlocksForDate } from '../availability/calendar-blocks'
 import { addDays, isBefore } from './doelmoment'
 import { recalculateTaskPlanning } from './recalculate'
@@ -26,15 +26,65 @@ export interface StartupCheckResult {
 // punt 4) — niveau 2 heeft sinds AD-10 geen accept-effect meer, niveau 3/4 wijzigen de taak
 // zelf op een manier die zonder Eveliens tussenkomst niet stil hoort te gebeuren.
 //
-// Bug-fix (2026-09-12): twee onafhankelijke stille checks, ná elkaar — `detectAnyShortfall`
-// (aggregaat: geplande vs. beschikbare MINUTEN per dag) merkt het niet als Evelien een blok
-// beschikbare studietijd binnen dezelfde dag verschuift (zelfde totaal, andere positie), dus
-// `runOutOfBlockReplanLoop` hieronder controleert daarnaast of elke al-geplande sessie nog
-// daadwerkelijk binnen een echt blok valt.
+// Bug-fix (2026-09-12): drie onafhankelijke stille checks, ná elkaar.
+// 1. `runPastSessionReplanLoop` — een sessie die in het verleden ligt en waarvan de taak
+//    niet is afgerond/vervallen (Evelien heeft 'm overgeslagen, geen enkel ander mechanisme
+//    in dit project verplaatst zo'n sessie ooit uit zichzelf vooruit) blijft anders voor
+//    altijd in het verleden staan — géén van de twee checks hieronder kijkt ooit vóór
+//    vandaag, ze scannen allebei uitsluitend voorwaarts vanaf `today`.
+// 2. `runShortfallReplanLoop` (bestaand) — aggregaat: geplande vs. beschikbare MINUTEN per
+//    dag.
+// 3. `runOutOfBlockReplanLoop` — merkt, in tegenstelling tot #2, ook een sessie die stil
+//    buiten een verschoven beschikbaar-tijd-blok is komen te staan (zelfde totaal aantal
+//    minuten, andere positie).
+// Bewust in deze volgorde: #1 lost de meeste gevallen van #3 meteen mee op (`recalculate-
+// TaskPlanning` plant altijd blok-bewust vanaf vandaag), maar dekt niet élk #3-geval (een
+// taak zonder enige sessie in het verleden kan nog steeds een sessie hebben die door een
+// ná #1 verschoven blok buiten de lijnen valt) — vandaar dat #3 apart blijft bestaan.
 export async function runStartupReplanCheck(userId: string): Promise<StartupCheckResult> {
+  const pastResolved = await runPastSessionReplanLoop(userId)
   const shortfallResolved = await runShortfallReplanLoop(userId)
   const blocksResolved = await runOutOfBlockReplanLoop(userId)
-  return { resolved: shortfallResolved && blocksResolved }
+  return { resolved: pastResolved && shortfallResolved && blocksResolved }
+}
+
+// Zoekt de eerste openstaande taak (niet afgerond, niet vervallen) met een sessie op een
+// datum vóór vandaag — zo'n sessie is nooit gestart/afgerond (anders was de taak via
+// `replanAfterSession`/`logSessionAndCompleteTask` al afgerond of herpland) en zonder deze
+// check blijft ze voor altijd op haar oude datum staan.
+async function findTaskWithPastIncompleteSession(userId: string): Promise<string | null> {
+  const openTasks = await getOpenTasksWithProgress(userId)
+  const today = todayInAmsterdam()
+
+  for (const { task } of openTasks) {
+    const sessions = await getSessionsForTask(task.id)
+    if (sessions.some(session => session.startsAt.slice(0, 10) < today)) {
+      return task.id
+    }
+  }
+
+  return null
+}
+
+async function runPastSessionReplanLoop(userId: string): Promise<boolean> {
+  for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
+    const taskId = await findTaskWithPastIncompleteSession(userId)
+    if (!taskId) return true
+
+    // `recalculateTaskPlanning` herberekent de volledige sessiereeks van de taak vanaf
+    // vandaag (`planSessionSlots` begint expliciet bij `today`, plant nooit in het
+    // verleden) — een sessie die hierdoor herplaatst wordt, staat per constructie niet
+    // meer vóór vandaag. Zelfde "nooit als 500 laten bubbelen"-precedent als de andere
+    // twee lussen hieronder.
+    try {
+      await recalculateTaskPlanning(taskId)
+    } catch (fout) {
+      console.error(`[scheduling] Stille herplanning (sessie in het verleden) mislukt voor user ${userId}, taak ${taskId}:`, fout)
+      return false
+    }
+  }
+
+  return false
 }
 
 async function runShortfallReplanLoop(userId: string): Promise<boolean> {
