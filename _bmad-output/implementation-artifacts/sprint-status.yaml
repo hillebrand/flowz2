@@ -136,8 +136,8 @@ development_status:
   7-2-onverwachte-taak-toevoegen-vanuit-het-verzamelscherm: done
   epic-7-retrospective: optional
 
-  epic-8: backlog # NIEUW 2026-09-12, sprint-change-proposal-2026-09-12.md — GATED: niet verder dan 8-1 zonder expliciet GO van Hillebrand op AD-11 (PROPOSED) na die spike se uitkomst
-  8-1-alleen-lezen-detectie-spike: backlog
+  epic-8: in-progress # NIEUW 2026-09-12, sprint-change-proposal-2026-09-12.md — GATED: niet verder dan 8-1 zonder expliciet GO van Hillebrand op AD-11 (PROPOSED) na die spike se uitkomst
+  8-1-alleen-lezen-detectie-spike: ready-for-dev
   8-2-handmatige-verplaatsing-overnemen: backlog # AC's hangen af van 8-1's uitkomst, nog niet definitief
   8-3-debounce-bij-meerdere-snelle-wijzigingen: backlog
   epic-8-retrospective: optional
