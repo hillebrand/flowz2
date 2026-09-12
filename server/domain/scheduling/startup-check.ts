@@ -133,19 +133,35 @@ export async function runStartupReplanCheck(userId: string): Promise<StartupChec
   return { resolved: pastResolved && overlapResolved && shortfallResolved && blocksResolved }
 }
 
-// Zoekt de eerste openstaande taak (niet afgerond, niet vervallen) met een sessie op een
-// datum vóór vandaag — zo'n sessie is nooit gestart/afgerond (anders was de taak via
-// `replanAfterSession`/`logSessionAndCompleteTask` al afgerond of herpland) en zonder deze
-// check blijft ze voor altijd op haar oude datum staan.
+// Zoekt de eerste openstaande taak (niet afgerond, niet vervallen) met een sessie waarvan
+// het geplande tijdstip al voorbij is, die Evelien nooit gestart heeft.
+//
+// Bug-fix (2026-09-13): was `session.startsAt.slice(0, 10) < today` — puur een
+// kalenderdatum-vergelijking, dus een sessie die WEL op vandaag staat maar waarvan de
+// geplande tijd al voorbij is (bv. 14:00-14:15, nu 20:00) werd hier niet gevonden: "vandaag"
+// is niet "vóór vandaag". Live geconstateerd: twee kunst-sessies van vandaag, niet
+// afgerond, tijdstip al voorbij, bleven onaangeroerd staan. Nu een echte tijdstip-
+// vergelijking (`startsAt + plannedMinutes < nu`) i.p.v. alleen de datum.
+//
+// `lastHeartbeatAt`-check: een sessie die Evelien al GESTART heeft (heeft een
+// `lastHeartbeatAt`, ongeacht of hij inmiddels stale is) wordt hier bewust overgeslagen —
+// die hoort bij `session-heartbeat-fallback.ts`'s bestaande afhandeling (die de werkelijk
+// bestede tijd logt via `replanAfterSession` zodra Evelien de taak weer opent), niet bij
+// deze check. Zonder deze uitsluiting zou `recalculateTaskPlanning` hier een sessie kunnen
+// verplaatsen/verwijderen vóórdat die andere afhandeling de bestede tijd heeft kunnen
+// vastleggen — stil dataverlies van al bestede tijd.
 async function findTaskWithPastIncompleteSession(userId: string): Promise<string | null> {
   const openTasks = await getOpenTasksWithProgress(userId)
-  const today = todayInAmsterdam()
+  const now = Date.now()
 
   for (const { task } of openTasks) {
     const sessions = await getSessionsForTask(task.id)
-    if (sessions.some(session => session.startsAt.slice(0, 10) < today)) {
-      return task.id
-    }
+    const hasAbandonedPastSession = sessions.some((session) => {
+      if (session.lastHeartbeatAt) return false
+      const endMs = new Date(session.startsAt).getTime() + session.plannedMinutes * 60_000
+      return endMs < now
+    })
+    if (hasAbandonedPastSession) return task.id
   }
 
   return null
