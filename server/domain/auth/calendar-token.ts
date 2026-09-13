@@ -13,6 +13,18 @@ interface RefreshTokenResponse {
   access_token: string
 }
 
+// Story 8.1 — `process.env.NUXT_OAUTH_OIDC_CLIENT_ID` i.p.v. `useRuntimeConfig()`, zelfde
+// reden als `server/data/db.ts`'s `getTursoDatabaseUrl`: moet ook werken vanuit de losse
+// Cron-Lambda-bundel (geen Nitro-runtime, dus geen `useRuntimeConfig()`). Nuxt populeert
+// `runtimeConfig.oauth.oidc.clientId` zelf al uit exact deze env var (nuxt.config.ts).
+function getOAuthClientId(): string {
+  const clientId = process.env.NUXT_OAUTH_OIDC_CLIENT_ID
+  if (!clientId) {
+    throw new Error('NUXT_OAUTH_OIDC_CLIENT_ID is niet ingesteld')
+  }
+  return clientId
+}
+
 // Probeer-dan-ververs-bij-401, geen vervaltijd-kolom en geen proactieve refresh (Dev
 // Notes) — de aanroeper (calendar-sync) roept dit pas aan ná een 401 van de Calendar API.
 export async function refreshCalendarAccessToken(userId: string): Promise<string> {
@@ -22,7 +34,7 @@ export async function refreshCalendarAccessToken(userId: string): Promise<string
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: useRuntimeConfig().oauth.oidc.clientId,
+      client_id: getOAuthClientId(),
       client_secret: Resource.GoogleOAuthClientSecret.value,
       refresh_token: user.calendarRefreshToken,
       grant_type: 'refresh_token'

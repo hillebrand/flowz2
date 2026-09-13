@@ -75,7 +75,7 @@ FR29: Evelien kan via een apart verzamelscherm ("schoolsessies van vandaag invoe
 FR30: Was de taak op school nog niet in Flowz bekend, dan kan Evelien in dezelfde flow een nieuwe taak aanmaken met alleen titel, een verplichte deadline en de bestede tijd; moeilijkheid, prioriteit en standaard sessieduur krijgen de standaardwaarde "Gemiddeld" en zijn later aan te vullen via het gewone bewerkformulier (FR13).
 FR31: Op het inlogscherm kan Evelien "dit is een openbare computer" aanvinken.
 FR32: Een expliciete uitlog-actie is voor elke sessie beschikbaar, niet alleen sessies met het openbare-computer-vinkje.
-FR33: [NIEUW, PROPOSED — Correct Course 2026-09-12/13, gated achter AD-11] Verplaatst Evelien een huiswerk-Calendar-event handmatig, dan neemt Flowz die nieuwe tijd over in de planning (i.p.v. te overschrijven) — mits deze binnen een beschikbaar-tijd-blok valt en niet overlapt met een andere sessie; de bestaande automatische herplan-lussen (Epic 6, Story 6.7 e.v.) respecteren een zo overgenomen sessie voortaan volgens de regels uit Epic 8.
+FR33: [Correct Course 2026-09-12/13; AD-11 op 2026-09-13 ADOPTED, niet langer gated] Verplaatst Evelien een huiswerk-Calendar-event handmatig, dan neemt Flowz die nieuwe tijd over in de planning (i.p.v. te overschrijven) — mits deze binnen een beschikbaar-tijd-blok valt en niet overlapt met een andere sessie; de bestaande automatische herplan-lussen (Epic 6, Story 6.7 e.v.) respecteren een zo overgenomen sessie voortaan volgens de regels uit Epic 8.
 
 ### NonFunctional Requirements
 
@@ -339,7 +339,7 @@ So that Flowz mijn geplande sessies zichtbaar in mijn agenda zet en nooit meer e
 **When** Flowz die sessie later opnieuw (her)plant
 **Then** overschrijft/hermaakt Flowz het event gewoon (Flowz is bron van waarheid voor eigen events, geen conflict-detectie met handmatige wijzigingen in v1)
 
-> **[Voorbehoud, TOEGEVOEGD Correct Course 2026-09-12/13]:** deze regel blijft gelden binnen Epic 2 se scope. Zie Epic 8 (nieuw, backlog) voor de voorgestelde vervanging zodra tweewegs-sync wordt opgepakt — dan neemt Flowz een handmatige wijziging aan de huiswerk-Calendar juist over i.p.v. te overschrijven, onder AD-11's voorwaarden.
+> **[Voorbehoud, TOEGEVOEGD Correct Course 2026-09-12/13; AD-11 op 2026-09-13 ADOPTED]:** deze regel blijft gelden binnen Epic 2 se scope totdat Story 8.2 daadwerkelijk is geïmplementeerd. Zie Epic 8 voor de vervanging — Flowz neemt dan een handmatige wijziging aan de huiswerk-Calendar over i.p.v. te overschrijven, onder AD-11's (inmiddels ADOPTED) voorwaarden.
 
 **Given** geen huiswerk-kleur is ingesteld
 **When** een sessie gepland/herpland wordt
@@ -948,12 +948,12 @@ So that ik niet eerst apart een volledig taak-formulier hoef in te vullen voorda
 **And** berekent de scheduling-engine (Epic 3, ongewijzigd) op basis van de ingevulde deadline meteen een doelmoment, zoals bij elke andere taak
 **And** is de taak nadien via 6.3-bewerkformulier (Epic 5) verder aan te vullen, net als elke andere taak
 
-### Epic 8: Google Calendar Tweewegs-sync voor Huiswerk-blokken [NIEUW, backlog, Correct Course 2026-09-12/13]
+### Epic 8: Google Calendar Tweewegs-sync voor Huiswerk-blokken [Correct Course 2026-09-12/13]
 Evelien kan een gepland huiswerk-event rechtstreeks in Google Calendar verplaatsen; Flowz herkent dit en neemt de nieuwe tijd over in haar planning, in plaats van hem bij de volgende sync te overschrijven.
-**FRs covered:** FR33 (nieuw)
-**Architectuur:** AD-11 (nieuw, PROPOSED)
-**Status: gated — start niet vóór Story 8.1 (alleen-lezen spike) is uitgevoerd, besproken met Hillebrand, en AD-11 een expliciet GO heeft gekregen.**
-**Implementation Notes:** volledige technische onderbouwing, faalmodi, en de aanbevolen 4-fasen-opbouw in `technical-google-calendar-tweewegs-synchronisatie-voor-huiswerk-blokken-research-2026-09-12.md`. Stories hieronder zijn bewust op hoog niveau — de precieze AC's van 8.2/8.3 hangen af van wat Story 8.1's spike oplevert (met name de echo-detectie-aanname, Google's `updated`/`etag`-gedrag).
+**FRs covered:** FR33
+**Architectuur:** AD-11 (ADOPTED, 2026-09-13)
+**Status: niet langer gated.** Story 8.1 (alleen-lezen spike) is uitgevoerd, gerapporteerd en code-reviewed; Hillebrand heeft op 2026-09-13 expliciet GO gegeven op AD-11. 8.2/8.3 zijn nu `backlog`, klaar om via `create-story` opgepakt te worden.
+**Implementation Notes:** volledige technische onderbouwing, faalmodi, en de aanbevolen 4-fasen-opbouw in `technical-google-calendar-tweewegs-synchronisatie-voor-huiswerk-blokken-research-2026-09-12.md`. Stories hieronder zijn bewust op hoog niveau — de precieze AC's van 8.2/8.3 hangen af van wat Story 8.1's spike heeft opgeleverd (met name de echo-detectie-aanname, Google's `updated`/`etag`-gedrag, bevestigd — zie Story 8.1's Completion Notes) en van de bevindingen/fixes uit Story 8.1's code review (o.a. de `stopWatchChannel`-teardown, 410-only syncToken-reset, `userId`-scoping) — 8.2/8.3 bouwen hierop verder, niet op de oorspronkelijke, ongereviewde schets.
 
 ### Story 8.1: Alleen-lezen Detectie-spike
 

@@ -139,12 +139,12 @@ export async function syncHomeworkBlocksForDate(userId: string, date: string): P
     for (const { computed, existing } of pairs) {
       try {
         if (computed && existing) {
-          await updateHomeworkEvent(userId, existing.googleEventId, { title: formatBlockTitle(computed), startsAt: computed.startsAt, endsAt: computed.endsAt })
-          await updateHomeworkBlockTimes(existing.id, computed.startsAt, computed.endsAt)
+          const result = await updateHomeworkEvent(userId, existing.googleEventId, { title: formatBlockTitle(computed), startsAt: computed.startsAt, endsAt: computed.endsAt })
+          await updateHomeworkBlockTimes(existing.id, computed.startsAt, computed.endsAt, result?.updated)
         } else if (computed && !existing) {
           const result = await createHomeworkEvent(userId, { title: formatBlockTitle(computed), startsAt: computed.startsAt, endsAt: computed.endsAt })
           if (result) {
-            await insertHomeworkBlock(userId, date, computed.startsAt, computed.endsAt, result.googleEventId)
+            await insertHomeworkBlock(userId, date, computed.startsAt, computed.endsAt, result.googleEventId, result.updated)
           }
         } else if (!computed && existing) {
           await deleteHomeworkEvent(userId, existing.googleEventId)

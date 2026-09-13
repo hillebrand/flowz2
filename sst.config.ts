@@ -57,5 +57,28 @@ export default $config({
         redirects: ["www.flowz.fyi"],
       },
     });
+
+    // Story 8.1 (AD-11, PROPOSED-spike) — eerste autonoom draaiende proces in dit project.
+    // Uitsluitend voor de alleen-lezen huiswerk-Calendar-detectie-spike (server/cron/
+    // calendar-watch-tick.ts): kanaal-hernieuwing + syncToken-diff + echo-detectie-logging.
+    // Nooit `sessions`/`tasks` aanraken — zie de uitgebreide scope-waarschuwing in de story
+    // en in de handler zelf.
+    //
+    // Zelfde env vars/secrets als FlowzWeb hierboven: de Cron-handler hergebruikt
+    // `server/data/db.ts`/`server/domain/auth/calendar-token.ts` ONGEWIJZIGD (portability-
+    // fix, "Belangrijk" punt 4) — die lezen inmiddels rechtstreeks `process.env.NUXT_*`
+    // i.p.v. `useRuntimeConfig()`, dus met dezelfde env vars hier werken ze ook buiten Nitro.
+    new sst.aws.Cron("CalendarWatchTick", {
+      schedule: "rate(2 minutes)",
+      function: {
+        handler: "server/cron/calendar-watch-tick.handler",
+        link: [tursoAuthToken, tokenEncryptionKey, googleOAuthClientSecret],
+        environment: {
+          NUXT_OAUTH_OIDC_CLIENT_ID: requireEnv("GOOGLE_OAUTH_CLIENT_ID"),
+          NUXT_TURSO_DATABASE_URL: requireEnv("TURSO_DATABASE_URL"),
+          NUXT_PUBLIC_SITE_URL: "https://flowz.fyi",
+        },
+      },
+    });
   },
 });

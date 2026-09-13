@@ -13,6 +13,11 @@ const PUBLIC_PREFIXES = [
   '/inloggen',
   '/auth/', // de OAuth-start en -callback moeten per definitie zonder sessie bereikbaar zijn
   '/api/_auth/', // nuxt-auth-utils' eigen sessie-endpoint; afschermen geeft een oneindige lus
+  // Story 8.1 — Google Calendar roept dit aan, nooit Eveliens browser: er is per definitie
+  // geen Flowz-sessiecookie. Authenticatie loopt volledig via `X-Goog-Channel-Token`
+  // ("Belangrijk" punt 6, geverifieerd in de route zelf) — exact deze ene route, niet de
+  // hele `/api/calendar/homework-watch/`-map (de registratieroute blijft wél sessie-gated).
+  '/api/calendar/homework-watch/notifications',
   '/_nuxt/',
   '/_ipx/',
   '/__nuxt',

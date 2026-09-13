@@ -16,21 +16,40 @@ export async function getHomeworkBlocksForDate(userId: string, date: string): Pr
     .orderBy(asc(homeworkCalendarBlocks.startsAt))
 }
 
+// Story 8.1 — `lastKnownUpdated` (optioneel, nullable kolom): Google's `updated`-veld op
+// het moment van deze schrijfactie, voor de alleen-lezen detectie-spike se echo-detectie.
+// Ongebruikt door de bestaande write-sync-flow zelf — optioneel houden i.p.v. verplicht
+// voorkomt dat elke bestaande/toekomstige aanroeper die dit niet meegeeft moet wijzigen.
 export async function insertHomeworkBlock(
   userId: string,
   date: string,
   startsAt: string,
   endsAt: string,
-  googleEventId: string
+  googleEventId: string,
+  lastKnownUpdated?: string
 ): Promise<void> {
-  await getDb().insert(homeworkCalendarBlocks).values({ userId, date, startsAt, endsAt, googleEventId })
+  await getDb().insert(homeworkCalendarBlocks).values({ userId, date, startsAt, endsAt, googleEventId, lastKnownUpdated })
 }
 
-export async function updateHomeworkBlockTimes(id: string, startsAt: string, endsAt: string): Promise<void> {
+export async function updateHomeworkBlockTimes(id: string, startsAt: string, endsAt: string, lastKnownUpdated?: string): Promise<void> {
   await getDb()
     .update(homeworkCalendarBlocks)
-    .set({ startsAt, endsAt, updatedAt: new Date().toISOString() })
+    .set({ startsAt, endsAt, updatedAt: new Date().toISOString(), ...(lastKnownUpdated ? { lastKnownUpdated } : {}) })
     .where(eq(homeworkCalendarBlocks.id, id))
+}
+
+// Story 8.1 — voor de Cron-handler se echo-detectie ("Belangrijk" punt 3): een gewijzigd
+// event uit `events.list` heeft alleen een `googleEventId`, niet de interne `id`.
+// `userId` verplicht meegeven (code review 2026-09-13) — de PRD vereist expliciet dat de
+// architectuur later geen redesign nodig heeft om multi-user te ondersteunen; zonder deze
+// scoping zou een `googleEventId`-botsing tussen twee users se agenda's het verkeerde blok
+// matchen en verkeerd toeschrijven.
+export async function getHomeworkBlockByGoogleEventId(userId: string, googleEventId: string): Promise<HomeworkCalendarBlock | undefined> {
+  const [block] = await getDb()
+    .select()
+    .from(homeworkCalendarBlocks)
+    .where(and(eq(homeworkCalendarBlocks.userId, userId), eq(homeworkCalendarBlocks.googleEventId, googleEventId)))
+  return block
 }
 
 export async function deleteHomeworkBlock(id: string): Promise<void> {

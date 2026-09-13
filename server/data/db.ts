@@ -20,10 +20,25 @@ type Db = ReturnType<typeof drizzle>
 // die is deep-frozen op het moment dat deze module voor het eerst laadt).
 let _db: Db | undefined
 
+// Story 8.1 — `process.env.NUXT_TURSO_DATABASE_URL` i.p.v. `useRuntimeConfig()`:
+// dit bestand wordt straks ook aangeroepen vanuit de losse Cron-Lambda-bundel voor
+// de Calendar-watch-tick (server/cron/), die GEEN Nitro-runtime is en dus geen
+// `useRuntimeConfig()` auto-import heeft. Nuxt populeert `runtimeConfig.tursoDatabaseUrl`
+// zelf al uit exact deze env var (nuxt.config.ts) — rechtstreeks lezen is voor de
+// bestaande Nuxt-Lambda dus gedragsgelijk, en maakt deze functie tegelijk bruikbaar
+// buiten Nitro, zolang sst.config.ts dezelfde env var ook op het Cron-component zet.
+function getTursoDatabaseUrl(): string {
+  const url = process.env.NUXT_TURSO_DATABASE_URL
+  if (!url) {
+    throw new Error('NUXT_TURSO_DATABASE_URL is niet ingesteld')
+  }
+  return url
+}
+
 export function getDb(): Db {
   if (!_db) {
     const client = createClient({
-      url: useRuntimeConfig().tursoDatabaseUrl,
+      url: getTursoDatabaseUrl(),
       authToken: Resource.TursoAuthToken.value
     })
     _db = drizzle(client, { schema })

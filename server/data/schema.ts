@@ -339,6 +339,14 @@ export const homeworkCalendarBlocks = sqliteTable('homework_calendar_blocks', {
   startsAt: text('starts_at').notNull(),
   endsAt: text('ends_at').notNull(),
   googleEventId: text('google_event_id').notNull(),
+  // Story 8.1 — Google's `updated`-veld op het Calendar-event, zoals het stond op het
+  // moment dat Flowz dit blok zelf het laatst schreef (`createHomeworkEvent`/
+  // `updateHomeworkEvent`'s respons). Nullable: bestaande rijen (vóór deze story) hebben
+  // 'm niet, en dat is geen probleem — de echo-detectie (`server/cron/calendar-watch-
+  // tick.ts`) behandelt "geen bekende waarde" gewoon als "geen match", nooit als een
+  // crash. Uitsluitend gelezen door de alleen-lezen detectie-spike, nooit door de
+  // bestaande write-sync-flow zelf.
+  lastKnownUpdated: text('last_known_updated'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
@@ -454,3 +462,34 @@ export const replanRuns = sqliteTable('replan_runs', {
 
 export type ReplanRun = typeof replanRuns.$inferSelect
 export type NewReplanRun = typeof replanRuns.$inferInsert
+
+// Story 8.1 — alleen-lezen detectie-spike (AD-11, PROPOSED). Eén rij per user (unique op
+// `userId` — deze spike registreert bewust maar één actief watch-kanaal per user, voor de
+// huiswerk-Calendar, nooit voor de beschikbare-tijd-agenda, zie de story se "Belangrijk"
+// punt 7). `channelToken` is geen app-secret (AD-5 is hier niet van toepassing) — een
+// zelfgekozen, per-kanaal geheim dat Google in elke notificatie teruggeeft
+// (`X-Goog-Channel-Token`), hier gebruikt om te verifiëren dat een binnenkomende
+// notificatie daadwerkelijk van Google voor dít kanaal komt (server/api/calendar/
+// homework-watch/notifications.post.ts). `syncToken` nullable tot de eerste volledige
+// sync ooit gedraaid heeft. `lastChangeNotifiedAt` is de debounce-markering (de story se
+// "Belangrijk" punt 2) — gezet door de webhook-route, gelezen én teruggezet op `null` door
+// de Cron-tick (`server/cron/calendar-watch-tick.ts`) zodra die de user daadwerkelijk
+// verwerkt heeft.
+export const calendarWatchChannels = sqliteTable('calendar_watch_channels', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id),
+  channelId: text('channel_id').notNull(),
+  channelToken: text('channel_token').notNull(),
+  resourceId: text('resource_id').notNull(),
+  syncToken: text('sync_token'),
+  expiresAt: text('expires_at').notNull(),
+  lastChangeNotifiedAt: text('last_change_notified_at'),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
+}, table => [
+  uniqueIndex('calendar_watch_channels_user_unique').on(table.userId),
+  index('calendar_watch_channels_channel_id_idx').on(table.channelId)
+])
+
+export type CalendarWatchChannel = typeof calendarWatchChannels.$inferSelect
+export type NewCalendarWatchChannel = typeof calendarWatchChannels.$inferInsert

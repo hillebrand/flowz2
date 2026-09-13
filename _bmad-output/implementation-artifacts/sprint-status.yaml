@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-26
-last_updated: 2026-09-12
+last_updated: 2026-09-13 (AD-11 GO, Story 8.2 aangemaakt)
 
 # Correct Course (2026-09-02, sprint-change-proposal-2026-09-02.md): beschikbare tijd komt
 # voortaan uit een door Evelien aangewezen Google Calendar-agenda (AD-10) i.p.v. een
@@ -136,8 +136,8 @@ development_status:
   7-2-onverwachte-taak-toevoegen-vanuit-het-verzamelscherm: done
   epic-7-retrospective: optional
 
-  epic-8: in-progress # NIEUW 2026-09-12, sprint-change-proposal-2026-09-12.md — GATED: niet verder dan 8-1 zonder expliciet GO van Hillebrand op AD-11 (PROPOSED) na die spike se uitkomst
-  8-1-alleen-lezen-detectie-spike: ready-for-dev
-  8-2-handmatige-verplaatsing-overnemen: backlog # AC's hangen af van 8-1's uitkomst, nog niet definitief
+  epic-8: in-progress # NIEUW 2026-09-12, sprint-change-proposal-2026-09-12.md. Gate opgeheven 2026-09-13: Hillebrand heeft na Story 8.1's spike-uitkomst expliciet GO gegeven op AD-11 (nu ADOPTED, zie ARCHITECTURE-SPINE.md). 8.2/8.3 mogen nu opgepakt worden.
+  8-1-alleen-lezen-detectie-spike: done # 2026-09-13: Tasks 1-6 afgerond, live-experiment geslaagd tegen echte Google Calendar (ECHO/EXTERNAL-CHANGE correct onderscheiden, kanaal-hernieuwing met behouden sync-continuïteit). Code review (Opus 5, 4 lagen): 1 decision + 14 patches doorgevoerd, gedeployed, orphan-testkanaal netjes opgeruimd via de nieuwe teardown-route. Zie de story se Completion Notes/Review Findings voor het volledige bewijs + aanbeveling. AD-11 GO/NO-GO staat nog open, aan Hillebrand.
+  8-2-handmatige-verplaatsing-overnemen: ready-for-dev # 2026-09-13: story aangemaakt via create-story, bouwt op Story 8.1's gepatchte infrastructuur. Vijf productbeslissingen (Beslissing A-E) als concreet voorstel verwerkt — ter bevestiging bij Hillebrand vóór dev-story start.
   8-3-debounce-bij-meerdere-snelle-wijzigingen: backlog
   epic-8-retrospective: optional
