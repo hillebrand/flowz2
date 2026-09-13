@@ -3,7 +3,12 @@
 // vier stille herplan-lussen (`server/domain/scheduling/startup-check.ts`) een
 // wijzigingslog-rij veroorzaakte.
 
-export type LoopSource = 'past' | 'overlap' | 'shortfall' | 'out_of_block'
+// Story 8.2 — `manual_accepted`: een handmatige verplaatsing/verwijdering in Google
+// Calendar is overgenomen (AC #1/#4). `manual_rejected`: een handmatige verplaatsing is
+// geweigerd (AC #3, buiten een blok/overlap/verleden) — twee losse waarden i.p.v. één
+// `manual`, zodat `hasUnreadRejection` hieronder precies op de weigering gericht kan
+// worden, niet op elke handmatige-sync-gebeurtenis.
+export type LoopSource = 'past' | 'overlap' | 'shortfall' | 'out_of_block' | 'manual_accepted' | 'manual_rejected'
 
 // Respons van `GET /api/scheduling/replan-log/latest` — de wijzigingslog-rijen van de
 // meest recente `runStartupReplanCheck`-aanroep voor de ingelogde user, met taak-titel/vak
@@ -21,6 +26,9 @@ export interface ReplanLogEntryDto {
   count: number
 }
 
+// Story 8.2, AC #7 — `true` als er een `manual_rejected`-logregel bestaat die nog niet
+// gelezen is (`users.lastReadManualRejectionAt`) — stuurt het rode i-icoon aan.
 export interface ReplanLogResponse {
   entries: ReplanLogEntryDto[]
+  hasUnreadRejection: boolean
 }

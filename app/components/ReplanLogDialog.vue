@@ -12,6 +12,9 @@ const isLoading = ref(false)
 const loadError = ref(false)
 const entries = ref<ReplanLogResponse['entries']>([])
 const dialogEl = ref<HTMLElement | null>(null)
+// Story 8.2, AC #7 — stuurt het rode i-icoon aan. Al bij mount opgehaald (zie onderaan),
+// niet pas bij het openen — het icoon moet al rood zijn vóórdat er geklikt is.
+const hasUnreadRejection = ref(false)
 
 // Zelfde gedeelde focus-trap als elke andere dialoog in dit project (`useFocusTrap.ts`,
 // 2026-09-07) — geen nieuw dialoog-patroon uitvinden.
@@ -27,13 +30,43 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId))
 }
 
+// Story 8.2 — gedeeld door de stille mount-fetch (alleen voor het icoon) en `open()`
+// (die daarnaast ook de dialoog-UI-state beheert).
+async function fetchLatest(): Promise<ReplanLogResponse | null> {
+  try {
+    const response = await withTimeout($fetch<ReplanLogResponse>('/api/scheduling/replan-log/latest'))
+    entries.value = response.entries
+    hasUnreadRejection.value = response.hasUnreadRejection
+    return response
+  } catch (fout) {
+    if (is401(fout)) {
+      await navigateTo('/inloggen')
+      return null
+    }
+    throw fout
+  }
+}
+
+// Story 8.2, AC #7 — stil, geen dialoog-UI-state (`isOpen`/`isLoading`) erbij betrokken;
+// een mislukte achtergrond-fetch laat het icoon gewoon neutraal (geen foutmelding voor iets
+// dat de gebruiker niet zelf triggerde).
+onMounted(() => {
+  fetchLatest().catch(() => {})
+})
+
 async function open() {
   isOpen.value = true
   isLoading.value = true
   loadError.value = false
   try {
-    const response = await withTimeout($fetch<ReplanLogResponse>('/api/scheduling/replan-log/latest'))
-    entries.value = response.entries
+    const hadUnreadRejection = hasUnreadRejection.value
+    await fetchLatest()
+    if (hadUnreadRejection) {
+      hasUnreadRejection.value = false // optimistisch — niet wachten op de respons hieronder
+      $fetch('/api/scheduling/replan-log/mark-rejection-read', { method: 'POST' }).catch((fout) => {
+        console.error('Kon niet als gelezen markeren:', fout)
+      })
+    }
   } catch (fout) {
     if (is401(fout)) {
       await navigateTo('/inloggen')
@@ -62,7 +95,8 @@ function formatCount(count: number): string {
     :id="`${props.idPrefix}-replan-info-button`"
     type="button"
     class="replan-log-info-button"
-    aria-label="Toon wat er is aangepast bij het herplannen"
+    :class="{ 'replan-log-info-button--unread': hasUnreadRejection }"
+    :aria-label="hasUnreadRejection ? 'Toon wat er is aangepast bij het herplannen — een verplaatsing kon niet worden overgenomen' : 'Toon wat er is aangepast bij het herplannen'"
     @click="open"
   >ⓘ</button>
 
@@ -111,6 +145,14 @@ function formatCount(count: number): string {
   font-size: 0.75rem;
   line-height: 1;
   cursor: pointer;
+}
+
+/* Story 8.2, AC #7 — een geweigerde handmatige verplaatsing (Beslissing B) is voor Evelien
+   potentieel verwarrend; opvallender dan de neutrale stijl hierboven, tot de dialoog geopend is. */
+.replan-log-info-button--unread {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-surface);
 }
 
 .replan-log-dialog {

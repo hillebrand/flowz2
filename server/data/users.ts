@@ -87,6 +87,16 @@ export async function updateHomeworkCalendarColorId(userId: string, colorId: num
   return toDomainUser(user)
 }
 
+// Story 8.2, AC #7 — markeert alle huidige ongelezen `manual_accepted`/`manual_rejected`-
+// wijzigingslogregels als gelezen (zie `getUnreadManualLogEntriesForUser`). Zelfde patroon
+// als `updateHomeworkCalendarColorId` hierboven.
+export async function updateLastReadManualRejectionAt(userId: string, timestamp: string): Promise<void> {
+  await getDb()
+    .update(users)
+    .set({ lastReadManualRejectionAt: timestamp, updatedAt: new Date().toISOString() })
+    .where(eq(users.id, userId))
+}
+
 // Story 2.1 (herzien 2026-09-02, Correct Course, AD-10) — zelfde patroon als
 // `updateHomeworkCalendarColorId` hierboven.
 export async function updateAvailabilityCalendarId(userId: string, calendarId: string): Promise<User> {

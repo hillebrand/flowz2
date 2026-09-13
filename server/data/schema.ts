@@ -40,6 +40,13 @@ export const users = sqliteTable('users', {
   // commentaar hieronder — de scheduling-engine leest ze nog totdat de Epic 3-
   // vervolgstories dat ombouwen). Nullable: `null` = nog niet gekoppeld.
   availabilityCalendarId: text('availability_calendar_id'),
+  // Story 8.2 — laatste moment waarop Evelien/Hillebrand de wijzigingslog-i-dialoog
+  // (Story 6.8, `ReplanLogDialog.vue`) heeft geopend ná een geweigerde handmatige
+  // verplaatsing (`replanChangeLog.loopSource = 'manual_rejected'`). Nullable: `null`
+  // betekent "nog nooit gelezen". Gebruikt om het i-icoon rood te kleuren (AC #7) zolang
+  // er een `manual_rejected`-rij ná dit tijdstip bestaat — server-bijgehouden, niet
+  // client-only, zodat het rood blijft over een paginaherlaad heen.
+  lastReadManualRejectionAt: text('last_read_manual_rejection_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })
@@ -189,6 +196,15 @@ export const sessions = sqliteTable('sessions', {
   // stop-signaal (Stop-knop, leave-confirm-modal, of `beforeunload`/`sendBeacon`).
   lastHeartbeatAt: text('last_heartbeat_at'),
   stoppedAt: text('stopped_at'),
+  // Story 8.2 — gezet zodra Evelien deze sessie handmatig heeft verplaatst in Google
+  // Calendar (via de tweewegs-sync-Cron, `server/cron/calendar-watch-tick.ts`) en die
+  // verplaatsing geldig was (binnen een beschikbaar-tijd-blok, geen overlap). Nullable:
+  // de overgrote meerderheid van sessies is nooit handmatig verplaatst. Zolang dit gezet
+  // is, slaan de vier stille herplan-lussen (`server/domain/scheduling/startup-check.ts`)
+  // de taak van deze sessie over (Beslissing A, story se Dev Notes) — `recalculateTaskPlanning`
+  // heeft geen mechanisme om één sessie te sparen bij het regenereren van een taak se
+  // volledige sessiereeks, dus de uitsluiting moet vóór die aanroep gebeuren, niet erin.
+  manuallyPlacedAt: text('manually_placed_at'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString())
 })

@@ -1,6 +1,10 @@
+---
+baseline_commit: c091c95
+---
+
 # Story 8.2: Handmatige Verplaatsing Overnemen
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -47,12 +51,16 @@ De vijf productbeslissingen die het onderzoek (Research Synthesis, "Vóór fase 
 
 **Beslissing B — ongeldige verplaatsing (buiten blok / overlap / verleden) → weigeren, niet aanpassen, mét een opvallend signaal** (AC #3, #7 — **uitgebreid op verzoek van Hillebrand, 2026-09-13**): geen `manuallyPlacedAt` zetten, geen `sessions`-wijziging. De bestaande write-sync-flow (`syncHomeworkBlocksForDate`) zet het Calendar-event bij de volgende trigger gewoon terug — exact het al-bestaande AD-7-gedrag ("Flowz overschrijft/hermaakt het event gewoon"), hier bewust ongewijzigd benut i.p.v. een nieuw afwijs-mechanisme te bouwen. Een weigering is voor Evelien potentieel verwarrend (ze verplaatste iets, en het "sprong terug") — daarom moet dit **opvallender** zijn dan de bestaande, neutrale i-dialoog-vermelding: het i-icoon naast de "↻ Herplannen"-knop kleurt **rood** zodra er een ongelezen weigering is, en blijft dat (ook na herlaad, dus server-bijgehouden, geen client-only state) totdat de dialoog geopend wordt. Zie Beslissing C voor het onderliggende mechanisme.
 
-**Beslissing C — wijzigingslog-integratie + ongelezen-weigering-indicator**: twee nieuwe `LoopSource`-waarden — `'manual_accepted'` (AC #1/#4) en `'manual_rejected'` (AC #3) — naast de bestaande `'past' | 'overlap' | 'shortfall' | 'out_of_block'` (`shared/types/replan-log.d.ts`). Twee losse waarden i.p.v. één `'manual'`: nodig om Beslissing B's rode-icoon-logica precies op de weigering te kunnen richten, niet op elke handmatige-sync-gebeurtenis (loste ook de oorspronkelijke Open Question "één of twee waarden" op). De Cron-handler hergebruikt de bestaande `recordReplanRun(userId, runId)` + `insertReplanLogEntries(entries)` (`server/data/replan-log.ts`, ongewijzigd) met een eigen, vers gegenereerde `runId` per Cron-tick-verwerkingsronde — de dialoog zelf (`ReplanLogDialog.vue`) en de leesroute (`GET /api/scheduling/replan-log/latest`) tonen "de recentste run voor deze user" (bestaande query) vanzelf, ongeacht of die door een Home-load of een Cron-tick geschreven is; géén wijziging nodig aan die query.
+**Beslissing C — wijzigingslog-integratie + ongelezen-weigering-indicator** (herzien tijdens implementatie, 2026-09-13 — zie onderaan waarom de oorspronkelijke versie van deze beslissing niet klopte): twee nieuwe `LoopSource`-waarden — `'manual_accepted'` (AC #1/#4) en `'manual_rejected'` (AC #3) — naast de bestaande `'past' | 'overlap' | 'shortfall' | 'out_of_block'` (`shared/types/replan-log.d.ts`). Twee losse waarden i.p.v. één `'manual'`: nodig om Beslissing B's rode-icoon-logica precies op de weigering te kunnen richten (loste ook de oorspronkelijke Open Question "één of twee waarden" op).
+
+**Waarom de Cron-schrijfacties NIET via `recordReplanRun`/`replanRuns` lopen (afwijking van het oorspronkelijke voorstel):** `getLatestReplanLogEntriesForUser` (Story 6.8) toont uitsluitend de entries van "de meest recente `replanRuns`-rij". `runStartupReplanCheck` (Story 6.7) schrijft daar een rij bij élke Home-load. De Cron-tick draait elke ~2 minuten, veel vaker dan Evelien de app opent. Zou de Cron-handler ook via `recordReplanRun` een `replanRuns`-rij schrijven, dan is "de meest recente run" bij elke volgende Home-load bijna altijd een (lege) Cron-tick-run i.p.v. die Home-load se eigen automatische-herplan-run — een regressie op Story 6.8's AC #2/#3 (de bestaande i-dialoog zou dan meestal "Niets aangepast" tonen, zelfs als de opstart-check net wél iets herplande). **Fix:** de Cron-handler schrijft `replanChangeLog`-rijen met een lokaal gegenereerde `runId` (`crypto.randomUUID()`) die NOOIT in `replanRuns` terechtkomt — dat houdt "de meest recente automatische run" voor Story 6.8's bestaande gedrag volledig onaangetast.
+
+**Hoe manual-entries dan wél zichtbaar worden:** `server/data/replan-log.ts` krijgt een nieuwe functie die, onafhankelijk van `replanRuns`, alle `replanChangeLog`-rijen met `loopSource IN ('manual_accepted', 'manual_rejected')` ophaalt die nog niet gelezen zijn (`createdAt` ná `users.lastReadManualRejectionAt`, of ná niets als die kolom `null` is). `getLatestReplanLogEntriesForUser`'s aanroeper (`GET /api/scheduling/replan-log/latest`) combineert dit resultaat met de bestaande "laatste automatische run"-entries tot één lijst (AC #6) — de dialoog toont dus altijd beide, ongeacht hoeveel Home-loads er tussen de Cron-mutatie en het openen van de dialoog in zaten.
 
 **Nieuw voor het rode-icoon-mechanisme (server-bijgehouden, AC #7):**
-- Nieuwe kolom `users.lastReadManualRejectionAt` (nullable timestamp).
-- `GET /api/scheduling/replan-log/latest` krijgt een extra veld `hasUnreadRejection: boolean` in de respons (`ReplanLogResponse`) — `true` als er een `replanChangeLog`-rij bestaat met `loopSource = 'manual_rejected'` en `createdAt` ná `users.lastReadManualRejectionAt` (of ná niets, als die kolom nog `null` is).
-- Nieuwe route `POST /api/scheduling/replan-log/mark-rejection-read` — zet `users.lastReadManualRejectionAt` op nu. Aangeroepen door `ReplanLogDialog.vue` zodra de dialoog geopend wordt (ná een succesvolle load van de entries, best-effort/fire-and-forget, zelfde precedent als andere niet-kritieke nevenacties in dit project).
+- Nieuwe kolom `users.lastReadManualRejectionAt` (nullable timestamp) — bepaalt zowel welke manual-entries "ongelezen" zijn (hierboven) als het rode icoon.
+- `GET /api/scheduling/replan-log/latest` krijgt een extra veld `hasUnreadRejection: boolean` in de respons (`ReplanLogResponse`) — `true` als er, binnen de ongelezen manual-entries hierboven, minstens één `loopSource = 'manual_rejected'` is.
+- Nieuwe route `POST /api/scheduling/replan-log/mark-rejection-read` — zet `users.lastReadManualRejectionAt` op nu (dit "leest" zowel `manual_accepted` als `manual_rejected`-entries, ondanks de naam die zich op AC #7 richt — bijvangst, geen probleem: een gelezen accepted-melding hoeft niet apart getrackt te worden). Aangeroepen door `ReplanLogDialog.vue` zodra de dialoog geopend wordt (ná een succesvolle load van de entries, best-effort/fire-and-forget, zelfde precedent als andere niet-kritieke nevenacties in dit project).
 - `ReplanLogDialog.vue` roept de leesroute nu ook **bij mount** aan (niet alleen bij openen) om `hasUnreadRejection` te weten vóór er geklikt is — het i-icoon moet immers al rood zijn zonder dat de dialoog ooit open is geweest.
 
 **Beslissing D — verwijderd event → terugvallen op automatische herplanning, taak niet laten vervallen** (AC #4): sluit aan bij hoe elke andere stille herplan-lus al werkt (nooit werk laten verdwijnen, altijd een geldig alternatief plannen). Een taak volledig laten vervallen bij een verwijderd Calendar-event zou een onomkeerbare actie zijn op basis van een ambigue signaal (verwijderen kan ook "even wegklikken" betekenen, niet "annuleren").
@@ -61,28 +69,32 @@ De vijf productbeslissingen die het onderzoek (Research Synthesis, "Vóór fase 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Datamodel** (AC #1, #2, #7)
-  - [ ] Nieuwe kolom `sessions.manuallyPlacedAt` (text, nullable, ISO-tijdstip) — `server/data/schema.ts`.
-  - [ ] Nieuwe kolom `users.lastReadManualRejectionAt` (text, nullable, ISO-tijdstip) — Beslissing C/AC #7.
-  - [ ] `npx sst shell --stage dev -- npx drizzle-kit generate` + `migrate` (één migratie voor beide kolommen).
-  - [ ] `shared/types/replan-log.d.ts`: `LoopSource` uitbreiden met `'manual_accepted'` en `'manual_rejected'` (Beslissing C — twee waarden, niet één, zodat AC #7's rode icoon precies op de weigering gericht kan worden). `ReplanLogResponse` krijgt een `hasUnreadRejection: boolean`-veld. Controleer `LOOP_REASONS`-record (`server/domain/scheduling/startup-check.ts`) en voeg schuldvrije teksten toe voor beide nieuwe waarden (bv. `'manual_accepted'`: "Je verplaatsing in Google Calendar is overgenomen"; `'manual_rejected'`: een tekst die uitlegt waarom niet — buiten beschikbare tijd / overlapt / in het verleden, zie Beslissing B).
+- [x] **Task 1: Datamodel** (AC #1, #2, #7)
+  - [x] Nieuwe kolom `sessions.manuallyPlacedAt` (text, nullable, ISO-tijdstip) — `server/data/schema.ts`.
+  - [x] Nieuwe kolom `users.lastReadManualRejectionAt` (text, nullable, ISO-tijdstip) — Beslissing C/AC #7.
+  - [x] `npx sst shell --stage dev -- npx drizzle-kit generate` (`0026_overconfident_arachne.sql`) + `migrate` — beide geslaagd tegen de dev-database.
+  - [x] `shared/types/replan-log.d.ts`: `LoopSource` uitgebreid met `'manual_accepted'` en `'manual_rejected'`. `ReplanLogResponse` heeft nu `hasUnreadRejection: boolean`. `LOOP_REASONS`-record (`server/domain/scheduling/startup-check.ts`) uitgebreid met teksten voor beide nieuwe waarden. Noot: dit maakt `latest.get.ts` tijdelijk niet-compilerend (`hasUnreadRejection` ontbreekt in de respons) — opgelost in Task 1b, dat de daadwerkelijke berekening implementeert; bewuste, kortlevende tussenstap binnen deze aaneengesloten implementatiesessie, geen afgerond-gerapporteerde task met een kapotte build.
 
-- [ ] **Task 2: Mutatielogica in de Cron-handler** (AC #1, #3, #4, #5)
-  - [ ] `server/cron/calendar-watch-tick.ts`: `EventsListItem`-interface uitbreiden met `start`/`end` (Google's events.list geeft deze al mee in elk item, momenteel ongebruikt/ongetypeerd) — nodig om de nieuwe tijd van een extern gewijzigd event te lezen.
-  - [ ] `logEventDiff`'s `EXTERNAL-CHANGE`-tak: haal de bijbehorende `Task` op (via `block`'s taak-relatie — zie Dev Notes voor hoe `homeworkCalendarBlocks` een sessie/taak identificeert), valideer de nieuwe tijd (binnen een beschikbaar-tijd-blok? overlapt niet met een andere sessie van een andere taak?) — hergebruik bestaande validatie-primitieven, zie Dev Notes ("wat NIET hergebruikt kan worden: `placeSessionOnDate`"). **Geldig** (AC #1): `updateSessionPlacement`-achtige update met `manuallyPlacedAt` gezet + `updateHomeworkBlockTimes` voor het bijbehorende blok, binnen `withSessionPlacementLocks` voor de betrokken datum(s) (zelfde bestaande lock-primitief, nieuwe aanroeper); log-entry met `loopSource: 'manual_accepted'`. **Ongeldig** (AC #3/#7, Beslissing B): geen mutatie, alleen een log-entry met `loopSource: 'manual_rejected'`.
-  - [ ] `logEventDiff`'s `DELETED`-tak (AC #4, Beslissing D): roep `recalculateTaskPlanning` aan voor de bijbehorende taak (binnen dezelfde locking-verplichting als `recalculate.ts` al afdwingt) — dit vervangt de verdwenen sessie door een nieuw geplande, en de volgende write-sync herstelt het Calendar-event. Log-entry met `loopSource: 'manual_accepted'` (de verwijdering zelf wordt "overgenomen" door terug te vallen op automatische planning).
-  - [ ] Elke mutatie hierboven: wijzigingslog-rij schrijven via `recordReplanRun`/`insertReplanLogEntries` (Beslissing C) — `runId` één keer per Cron-tick-aanroep gegenereerd (analoog aan `runStartupReplanCheck`'s bestaande patroon), niet per gemuteerde sessie.
+- [x] **Task 2: Mutatielogica in de Cron-handler** (AC #1, #3, #4, #5)
+  - [x] `server/cron/calendar-watch-tick.ts`: `EventsListItem` uitgebreid met `start`/`end`.
+  - [x] Nieuwe `findTaskAndSessionForBlock`/`acceptOrRejectManualMove`/`acceptDeletion`/`logManualEntry`-helpers. `acceptOrRejectManualMove` valideert (verleden-check, `getAvailableBlocksForDate`, `sessionsOverlap` — geëxporteerd uit `startup-check.ts`, parametertype verbreed) en muteert geldig binnen `withSessionPlacementLocks`, of weigert (alleen loggen) bij een ongeldige nieuwe tijd. `acceptDeletion` roept `recalculateTaskPlanning` rechtstreeks aan (GEEN eigen lock-wrap — die functie regelt haar eigen locking al intern, zelfde precedent als de vier bestaande herplan-lussen).
+  - [x] `updateSessionPlacement` (`server/data/tasks.ts`) uitgebreid met optionele `manuallyPlacedAt`; `updateHomeworkBlockTimes` (`server/data/homework-blocks.ts`) uitgebreid met optionele `date` (een verplaatsing naar een andere dag moet het blok se `date`-kolom meenemen, anders raakt die uit sync met `startsAt`).
+  - [x] Wijzigingslog-rijen via `insertReplanLogEntries`, met een lokaal gegenereerde `runId` (`crypto.randomUUID()`) die NOOIT in `replanRuns` komt (zie Beslissing C).
+  - [x] `npm run typecheck` groen voor deze wijzigingen (de resterende fout in `latest.get.ts` — `hasUnreadRejection` ontbreekt — is de bekende, bewuste tussenstap uit Task 1, opgelost in Task 1b).
 
-- [ ] **Task 1b: Ongelezen-weigering-indicator (rode i-icoon)** (AC #7, Beslissing B/C)
-  - [ ] `server/data/replan-log.ts`: nieuwe functie die controleert of er een `replanChangeLog`-rij met `loopSource = 'manual_rejected'` bestaat, ná `users.lastReadManualRejectionAt` (of ná niets als die kolom `null` is) — gebruikt door `GET /api/scheduling/replan-log/latest` voor het nieuwe `hasUnreadRejection`-veld.
-  - [ ] `server/data/users.ts`: nieuwe functie om `lastReadManualRejectionAt` bij te werken naar nu (zelfde patroon als `updateHomeworkCalendarColorId` e.a.).
-  - [ ] Nieuwe route `server/api/scheduling/replan-log/mark-rejection-read.post.ts` (auth-gated, POST — dit muteert, geen GET, zelfde precedent als elke andere mutatie-route in dit project).
-  - [ ] `app/components/ReplanLogDialog.vue`: `onMounted` roept de leesroute al aan (niet pas bij `open()`) om `hasUnreadRejection` te weten vóórdat er geklikt is. Het i-icoon (`.replan-log-info-button`) krijgt een `--unread`-modifierklasse (rode achtergrond/rand) zolang `hasUnreadRejection === true`. Bij `open()`, ná een succesvolle load: als `hasUnreadRejection` waar was, roep `mark-rejection-read` aan (fire-and-forget, try/catch) en zet `hasUnreadRejection` direct naar `false` (optimistische UI-update, geen wachten op de respons om het icoon terug te kleuren).
+- [x] **Task 1b: Ongelezen-manual-entries + rode i-icoon** (AC #6, #7, Beslissing B/C)
+  - [x] `server/data/replan-log.ts`: nieuwe `getUnreadManualLogEntriesForUser(userId)`, los van `replanRuns`. Grouping-logica hergebruikt via nieuwe gedeelde `groupByTaskAndLoopSource`-helper (ook door `getLatestReplanLogEntriesForUser` gebruikt, gedrag ongewijzigd).
+  - [x] `server/data/users.ts`: `updateLastReadManualRejectionAt(userId, timestamp)`.
+  - [x] Nieuwe route `server/api/scheduling/replan-log/mark-rejection-read.post.ts` (auth-gated, POST).
+  - [x] `latest.get.ts`: combineert automatische-run-entries + ongelezen manual-entries tot één lijst, plus `hasUnreadRejection`.
+  - [x] `app/components/ReplanLogDialog.vue`: `onMounted` haalt `hasUnreadRejection` op vóór een klik; `.replan-log-info-button--unread` (hergebruikt bestaande `--color-danger`-token) kleurt het icoon rood; `open()` markeert optimistisch als gelezen. `npm run typecheck` volledig groen.
 
-- [ ] **Task 3: `manuallyPlacedAt` respecteren in de vier stille herplan-lussen** (AC #2, Beslissing A)
-  - [ ] `findTaskWithPastIncompleteSession`: sla een taak over zodra één van haar sessies `manuallyPlacedAt` heeft (task-level, zelfde patroon als de bestaande `lastHeartbeatAt`-uitsluiting — zie Dev Notes voor exact waar/waarom).
-  - [ ] `findTaskWithOverlappingSession`: bij een gedetecteerd overlappend paar, als één van de twee sessies `manuallyPlacedAt` heeft: stel de taak van de ANDERE (niet-gepinde) sessie voor als kandidaat. Zijn beide gepind: geen kandidaat, wel een losse wijzigingslog-regel (Beslissing A, "signaal").
-  - [ ] `findTaskWithSessionOutsideAvailableBlock` + de shortfall-detectie-kandidaatselectie (`shortfall.ts`, zie Dev Notes): sla een taak over zodra één van haar sessies `manuallyPlacedAt` heeft.
+- [x] **Task 3: `manuallyPlacedAt` respecteren in de vier stille herplan-lussen** (AC #2, Beslissing A)
+  - [x] `findTaskWithPastIncompleteSession`: task-level uitsluiting, zelfde patroon als `lastHeartbeatAt`.
+  - [x] `findTaskWithOverlappingSession`: bij een overlappend paar wint de gepinde sessie altijd (de niet-gepinde taak wordt kandidaat); bij twee gepinde sessies: geen kandidaat, wel een `logManualOverlapSignal`-wijzigingslogregel (`loopSource: 'overlap'`).
+  - [x] `findTaskWithSessionOutsideAvailableBlock`: task-level uitsluiting (checkt ALLE sessies van de taak, niet alleen de offending sessie).
+  - [x] `runShortfallReplanLoop`: filtert `herplanRecommendations` op taken met een gepinde sessie vóór toepassing (aan de toepassingskant, `detectAnyShortfall`/`shortfall.ts` zelf ongewijzigd — bekende restbeperking gedocumenteerd in de code-comment: een tekort uitsluitend door een gepinde sessie kan de iteratiegrens uitputten, geen datacorruptie).
+  - [x] `sessionsOverlap` geëxporteerd uit `startup-check.ts` (hergebruikt door Task 2). `npm run typecheck` groen.
 
 - [ ] **Task 4: Live-verificatie**
   - [ ] Deploy naar `dev`. Test AC #1 (geldige verplaatsing), AC #3 (buiten blok/overlap/verleden — kies minstens één van de drie live te testen, de andere twee via codepad-inspectie), AC #4 (event verwijderen), AC #5 (titel-wijziging) tegen de échte Calendar, met hetzelfde testaccount/kanaal-patroon als Story 8.1 (`POST /api/calendar/homework-watch/register`).
@@ -140,13 +152,35 @@ De vijf productbeslissingen die het onderzoek (Research Synthesis, "Vóór fase 
 | --- | --- |
 | 2026-09-13 | Story aangemaakt via create-story, ná Hillebrand se expliciete GO op AD-11 (ADOPTED, zie Story 8.1's Change Log). Bouwt op Story 8.1's gepatchte infrastructuur (na de 14-patch-code-review). Vijf productbeslissingen uit het technisch onderzoek verwerkt als concrete voorstellen (Beslissing A-E) i.p.v. als onopgeloste vraag doorgeschoven — ter bevestiging bij Hillebrand vóór dev-story start. Status meteen `ready-for-dev`. |
 | 2026-09-13 | **Beslissing B uitgebreid op verzoek van Hillebrand**: een geweigerde verplaatsing moet zichtbaarder zijn dan de neutrale i-dialoog-vermelding — nieuwe AC #7 (rood i-icoon naast de "↻ Herplannen"-knop, server-bijgehouden "ongelezen"-status, blijft rood tot de dialoog geopend is). Beslissing C uitgebreid: `LoopSource` krijgt `'manual_accepted'`/`'manual_rejected'` (twee waarden i.p.v. één `'manual'`) zodat het rode icoon precies op de weigering gericht kan worden — dit lost tegelijk de oorspronkelijke Open Question "één of twee waarden" op. Nieuwe kolom `users.lastReadManualRejectionAt`, nieuwe route `POST /api/scheduling/replan-log/mark-rejection-read`, nieuwe Task 1b. |
+| 2026-09-13 | Tasks 1, 2, 1b, 3 geïmplementeerd. Tijdens implementatie bleek Beslissing C's oorspronkelijke aanname onjuist: de Cron-run via `recordReplanRun` laten meelopen in `replanRuns` zou Story 6.8's bestaande "toon de meest recente run"-dialoog laten leeglopen bij elke Home-load ná een Cron-tick (regressie). Herzien: de Cron schrijft `replanChangeLog`-rijen met een lokale, nooit-in-`replanRuns`-geregistreerde `runId`; een nieuwe `getUnreadManualLogEntriesForUser` (los van `replanRuns`) levert de manual-entries, gemerged met de bestaande automatische-run-entries in `latest.get.ts`. Zie Beslissing C voor de volledige herziene uitleg. `npm run typecheck` + `npx nuxt build` groen na elke task. HALT vóór Task 4: vereist een `sst deploy` en live Google-Calendar-acties (verplaatsen/verwijderen van een event) die de dev-agent niet zelf kan uitvoeren — zelfde HALT-patroon als Story 8.1's Task 5. Status blijft `in-progress`. |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Sonnet 5
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- Tasks 1, 2, 1b, 3 volledig geïmplementeerd en getypecheckt (`npm run typecheck` + `npx nuxt build`, beide groen na elke task).
+- Beslissing C is tijdens de implementatie herzien (zie Change Log) — de story se tekst hierboven is al bijgewerkt naar de daadwerkelijk geïmplementeerde, correcte versie.
+- **HALT vóór Task 4** (live-verificatie): vereist (a) een `sst deploy --stage dev` — expliciete goedkeuring/uitvoering door Hillebrand nodig, en (b) live Google Calendar-acties (een event verplaatsen naar een geldige/ongeldige tijd, een event verwijderen, een titel wijzigen) die de dev-agent niet zelf kan uitvoeren (geen Google-inloggegevens). Task 5's rapportage kan pas na Task 4's bewijsmateriaal.
+- Aanbeveling voor het vervolg: Hillebrand keurt de deploy goed, voert de live-acties uit uit Task 4's checklist (evt. samen met de dev-agent die meekijkt in CloudWatch/de database, zelfde samenwerkingspatroon als Story 8.1's Task 5).
+
 ### File List
+
+- `server/data/schema.ts` (Task 1: `sessions.manuallyPlacedAt`, `users.lastReadManualRejectionAt`)
+- `server/data/migrations/0026_overconfident_arachne.sql` (Task 1, nieuw)
+- `server/data/migrations/meta/_journal.json`, `server/data/migrations/meta/0026_snapshot.json` (Task 1, migratie-metadata)
+- `shared/types/replan-log.d.ts` (Task 1: `LoopSource`-uitbreiding, `hasUnreadRejection`)
+- `server/domain/scheduling/startup-check.ts` (Task 1: `LOOP_REASONS`; Task 3: task-level `manuallyPlacedAt`-uitsluiting in alle vier lussen, `sessionsOverlap` geëxporteerd + verbreed, nieuwe `logManualOverlapSignal`)
+- `server/cron/calendar-watch-tick.ts` (Task 2: `EventsListItem.start/end`, nieuwe `findTaskAndSessionForBlock`/`acceptOrRejectManualMove`/`acceptDeletion`/`logManualEntry`, `runId` per verwerkingsronde)
+- `server/data/tasks.ts` (Task 2: `updateSessionPlacement` uitgebreid met `manuallyPlacedAt`)
+- `server/data/homework-blocks.ts` (Task 2: `updateHomeworkBlockTimes` uitgebreid met `date`)
+- `server/data/replan-log.ts` (Task 1b: `getUnreadManualLogEntriesForUser`, gedeelde `groupByTaskAndLoopSource`-helper)
+- `server/data/users.ts` (Task 1b: `updateLastReadManualRejectionAt`)
+- `server/api/scheduling/replan-log/latest.get.ts` (Task 1b: merge automatische + ongelezen manual-entries, `hasUnreadRejection`)
+- `server/api/scheduling/replan-log/mark-rejection-read.post.ts` (Task 1b, nieuw)
+- `app/components/ReplanLogDialog.vue` (Task 1b: `onMounted`-fetch, rode `--unread`-icoonstijl, `mark-rejection-read`-aanroep)

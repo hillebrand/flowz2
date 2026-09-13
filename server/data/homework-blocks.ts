@@ -31,10 +31,19 @@ export async function insertHomeworkBlock(
   await getDb().insert(homeworkCalendarBlocks).values({ userId, date, startsAt, endsAt, googleEventId, lastKnownUpdated })
 }
 
-export async function updateHomeworkBlockTimes(id: string, startsAt: string, endsAt: string, lastKnownUpdated?: string): Promise<void> {
+// `date` optioneel (Story 8.2): een handmatige verplaatsing kan een blok naar een andere
+// dag verschuiven — zonder dit bleef `date` achter op de oude dag, terwijl `startsAt` al
+// de nieuwe dag toonde (inconsistent voor `getHomeworkBlocksForDate`-lezers).
+export async function updateHomeworkBlockTimes(id: string, startsAt: string, endsAt: string, lastKnownUpdated?: string, date?: string): Promise<void> {
   await getDb()
     .update(homeworkCalendarBlocks)
-    .set({ startsAt, endsAt, updatedAt: new Date().toISOString(), ...(lastKnownUpdated ? { lastKnownUpdated } : {}) })
+    .set({
+      startsAt,
+      endsAt,
+      updatedAt: new Date().toISOString(),
+      ...(lastKnownUpdated ? { lastKnownUpdated } : {}),
+      ...(date ? { date } : {})
+    })
     .where(eq(homeworkCalendarBlocks.id, id))
 }
 

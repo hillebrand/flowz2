@@ -183,6 +183,13 @@
       "when": 1789240860523,
       "tag": "0025_tricky_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1789303796021,
+      "tag": "0026_overconfident_arachne",
+      "breakpoints": true
     }
   ]
 }

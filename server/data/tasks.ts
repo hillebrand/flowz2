@@ -659,7 +659,7 @@ export async function logSessionAndUpdateRemaining(taskId: string, actualMinutes
 // input — dat leeft op `homeworkCalendarBlocks`, niet meer per sessie.
 export async function updateSessionPlacement(
   sessionId: string,
-  input: { startsAt: string, plannedMinutes: number }
+  input: { startsAt: string, plannedMinutes: number, manuallyPlacedAt?: string }
 ): Promise<Session> {
   const [session] = await getDb()
     .update(sessions)

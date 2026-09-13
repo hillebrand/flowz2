@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { getUserById } from '../data/users'
-import { getHomeworkBlockByGoogleEventId } from '../data/homework-blocks'
+import { getHomeworkBlockByGoogleEventId, updateHomeworkBlockTimes } from '../data/homework-blocks'
+import { getTasksWithSessionOnDateIncludingCompleted, updateSessionPlacement, withSessionPlacementLocks } from '../data/tasks'
+import { insertReplanLogEntries } from '../data/replan-log'
 import {
   completeSyncPass,
   getAllWatchChannels,
   renewWatchChannel
 } from '../data/calendar-watch-channels'
 import { calendarRequestMetVerversing, stopWatchChannel } from '../domain/calendar-sync/homework-events'
-import type { CalendarWatchChannel } from '../data/schema'
+import { getAvailableBlocksForDate } from '../domain/availability/calendar-blocks'
+import { recalculateTaskPlanning } from '../domain/scheduling/recalculate'
+import { sessionsOverlap } from '../domain/scheduling/startup-check'
+import type { CalendarWatchChannel, HomeworkCalendarBlock, NewReplanChangeLogEntry } from '../data/schema'
 
 // Story 8.1, Task 4 — losse Lambda-bundel (`sst.aws.Cron`), GEEN Nitro-runtime. Draait elke
 // ~2 minuten. Herbruikt `server/data/`/`server/domain/auth/` ongewijzigd: die lezen sinds de
@@ -30,6 +35,12 @@ interface EventsListItem {
   id: string
   updated?: string
   status?: string
+  // Story 8.2 — Google's events.list geeft het volledige event-object terug, inclusief
+  // `start`/`end`; tot deze story werd alleen `id`/`updated`/`status` gelezen. Alleen
+  // `dateTime` (niet `date`) is relevant — huiswerk-events zijn altijd getimede events
+  // (`toEventResource` in `homework-events.ts` zet nooit een heeldags-`date`).
+  start?: { dateTime?: string }
+  end?: { dateTime?: string }
 }
 
 interface EventsListResponse {
@@ -97,32 +108,150 @@ async function renewChannelIfNeeded(channel: CalendarWatchChannel): Promise<void
   }
 }
 
+// Story 8.2 — vindt de `{task, session}` die bij een `homeworkCalendarBlocks`-rij hoort.
+// Geen foreign key tussen de twee tabellen (zie de story se Dev Notes) — matcht op
+// datum+exact `startsAt`, zelfde aanpak als `homework-blocks.ts`'s eigen `matchBlocks`.
+async function findTaskAndSessionForBlock(userId: string, block: HomeworkCalendarBlock) {
+  const taskSessions = await getTasksWithSessionOnDateIncludingCompleted(userId, block.date)
+  return taskSessions.find(({ session }) => session.startsAt === block.startsAt)
+}
+
+// Story 8.2, Beslissing C — wijzigingslog-rij voor een handmatige-sync-gebeurtenis.
+// Bewust NIET via `recordReplanRun`: zie de story se Beslissing C voor de volledige
+// uitleg (de Cron-run mag nooit "de meest recente run" voor Story 6.8's bestaande
+// automatische-herplan-dialoog worden — dat zou die dialoog laten leeglopen).
+async function logManualEntry(
+  userId: string,
+  runId: string,
+  taskId: string,
+  sessionId: string,
+  loopSource: 'manual_accepted' | 'manual_rejected',
+  oldStartsAt: string | null,
+  newStartsAt: string | null,
+  reason: string
+): Promise<void> {
+  const label = loopSource === 'manual_accepted' ? 'MANUAL-ACCEPTED' : 'MANUAL-REJECTED'
+  console.log(`[calendar-watch-spike] ${label} user=${userId} taskId=${taskId} sessionId=${sessionId} reden="${reason}"`)
+  const entry: NewReplanChangeLogEntry = { userId, runId, taskId, sessionId, loopSource, oldStartsAt, newStartsAt, reason }
+  try {
+    await insertReplanLogEntries([entry])
+  } catch (fout) {
+    console.error(`[calendar-watch-spike] Kon wijzigingslog niet schrijven voor user=${userId} taak=${taskId}:`, fout)
+  }
+}
+
+// Story 8.2, AC #1/#3, Beslissing B — valideert en (indien geldig) neemt een handmatige
+// verplaatsing over. `placeSessionOnDate` (`session-placement.ts`) is hier NIET herbruikbaar:
+// die zoekt zelf een vrij plekje op een datum, terwijl hier een EXACT gewenst tijdstip
+// (uit Google's event) gevalideerd moet worden — zie de story se Dev Notes.
+async function acceptOrRejectManualMove(
+  userId: string,
+  runId: string,
+  block: HomeworkCalendarBlock,
+  item: EventsListItem
+): Promise<void> {
+  const found = await findTaskAndSessionForBlock(userId, block)
+  if (!found) {
+    console.error(`[calendar-watch-spike] Kon geen taak/sessie vinden voor blok ${block.id} (user=${userId}) — externe wijziging genegeerd.`)
+    return
+  }
+  const { task, session } = found
+
+  const newStartsAt = item.start?.dateTime
+  const newEndsAt = item.end?.dateTime
+  if (!newStartsAt || !newEndsAt) {
+    await logManualEntry(userId, runId, task.id, session.id, 'manual_rejected', session.startsAt, null, 'Kon de nieuwe tijd niet lezen (geen tijdstip op het event)')
+    return
+  }
+
+  const newStartMs = new Date(newStartsAt).getTime()
+  const newEndMs = new Date(newEndsAt).getTime()
+  const newPlannedMinutes = Math.round((newEndMs - newStartMs) / 60_000)
+  const newDate = newStartsAt.slice(0, 10)
+
+  if (newStartMs < Date.now()) {
+    await logManualEntry(userId, runId, task.id, session.id, 'manual_rejected', session.startsAt, null, 'Je nieuwe tijd ligt in het verleden')
+    return
+  }
+
+  const availableBlocks = await getAvailableBlocksForDate(userId, newDate)
+  const fitsInBlock = availableBlocks.some(({ start, end }) => new Date(start).getTime() <= newStartMs && newEndMs <= new Date(end).getTime())
+  if (!fitsInBlock) {
+    await logManualEntry(userId, runId, task.id, session.id, 'manual_rejected', session.startsAt, null, 'Je nieuwe tijd valt buiten een beschikbaar-tijd-blok')
+    return
+  }
+
+  const otherSessionsThatDay = await getTasksWithSessionOnDateIncludingCompleted(userId, newDate)
+  const overlaps = otherSessionsThatDay.some(({ session: other }) =>
+    other.id !== session.id && sessionsOverlap({ startsAt: newStartsAt, plannedMinutes: newPlannedMinutes }, other)
+  )
+  if (overlaps) {
+    await logManualEntry(userId, runId, task.id, session.id, 'manual_rejected', session.startsAt, null, 'Je nieuwe tijd overlapt met een andere sessie')
+    return
+  }
+
+  const oldStartsAt = session.startsAt
+  await withSessionPlacementLocks(userId, [...new Set([block.date, newDate])], async () => {
+    await updateSessionPlacement(session.id, { startsAt: newStartsAt, plannedMinutes: newPlannedMinutes, manuallyPlacedAt: new Date().toISOString() })
+    await updateHomeworkBlockTimes(block.id, newStartsAt, newEndsAt, item.updated, newDate)
+  })
+
+  await logManualEntry(userId, runId, task.id, session.id, 'manual_accepted', oldStartsAt, newStartsAt, 'Je verplaatsing in Google Calendar is overgenomen')
+}
+
+// Story 8.2, AC #4, Beslissing D — een verwijderd event valt terug op automatische
+// herplanning. `recalculateTaskPlanning` regelt zijn eigen locking al intern (zie die
+// functie se commentaar) — hier NIET nog eens in `withSessionPlacementLocks` wrappen,
+// dat zou tegen zichzelf aan lopen (zelfde reden waarom de vier bestaande herplan-lussen
+// dat ook niet doen).
+async function acceptDeletion(userId: string, runId: string, block: HomeworkCalendarBlock): Promise<void> {
+  const found = await findTaskAndSessionForBlock(userId, block)
+  if (!found) {
+    console.error(`[calendar-watch-spike] Kon geen taak/sessie vinden voor verwijderd blok ${block.id} (user=${userId}).`)
+    return
+  }
+  const { task, session } = found
+  const oldStartsAt = session.startsAt
+
+  const result = await recalculateTaskPlanning(task.id)
+  const newStartsAt = result.sessions.length > 0
+    ? result.sessions.reduce((earliest, s) => (s.startsAt < earliest ? s.startsAt : earliest), result.sessions[0]!.startsAt)
+    : null
+
+  await logManualEntry(userId, runId, task.id, session.id, 'manual_accepted', oldStartsAt, newStartsAt, 'Je verwijderde Calendar-event is overgenomen: de taak is opnieuw gepland')
+}
+
 // Vergelijkt elk gewijzigd event se `updated`-veld tegen `homeworkCalendarBlocks.lastKnownUpdated`
-// ("Belangrijk" punt 3) — kern van de spike (AC #3/#4).
+// ("Belangrijk" punt 3) — kern van de spike (AC #3/#4 van Story 8.1). Story 8.2 breidt de
+// `EXTERNAL-CHANGE`/`DELETED`-takken uit met daadwerkelijke mutatie (was tot Story 8.1 alleen
+// loggen); het `ECHO`-pad blijft ONVERANDERD een no-op.
 //
-// Code review 2026-09-13: de blok-lookup gebeurt nu VÓÓR de cancelled-check (was omgekeerd) —
+// Code review 2026-09-13 (Story 8.1): de blok-lookup gebeurt vóór de cancelled-check —
 // dat lost twee dingen tegelijk op. (1) Een geannuleerd niet-huiswerk-event (bv. een verwijderde
-// tandartsafspraak) logde eerder ook `DELETED`, wat de AC #6-meting vertroebelde; nu alleen nog
-// bij een blok dat Flowz kent. (2) Flowz' eigen verwijderingen (`syncHomeworkBlocksForDate`
-// verwijdert de DB-rij al vóór de volgende tick) worden nu correct NIET als externe verwijdering
-// gelogd — geen blok gevonden betekent "niet (meer) van ons", ongeacht de reden.
-async function logEventDiff(userId: string, item: EventsListItem): Promise<void> {
+// tandartsafspraak) logde eerder ook `DELETED`; nu alleen nog bij een blok dat Flowz kent.
+// (2) Flowz' eigen verwijderingen (`syncHomeworkBlocksForDate` verwijdert de DB-rij al vóór
+// de volgende tick) worden correct NIET als externe verwijdering behandeld — geen blok
+// gevonden betekent "niet (meer) van ons", ongeacht de reden.
+async function logEventDiff(userId: string, runId: string, item: EventsListItem): Promise<void> {
   const block = await getHomeworkBlockByGoogleEventId(userId, item.id)
   if (!block) {
-    // Geen bij Flowz bekend/nog bekend huiswerk-event — buiten scope van deze spike, geen actie.
+    // Geen bij Flowz bekend/nog bekend huiswerk-event — buiten scope, geen actie.
     return
   }
 
   if (item.status === 'cancelled') {
     console.log(`[calendar-watch-spike] DELETED user=${userId} googleEventId=${item.id}`)
+    await acceptDeletion(userId, runId, block)
     return
   }
 
   if (block.lastKnownUpdated && item.updated === block.lastKnownUpdated) {
     console.log(`[calendar-watch-spike] ECHO user=${userId} googleEventId=${item.id} updated=${item.updated}`)
-  } else {
-    console.log(`[calendar-watch-spike] EXTERNAL-CHANGE user=${userId} googleEventId=${item.id} updated=${item.updated} lastKnownUpdated=${block.lastKnownUpdated ?? '(geen)'}`)
+    return
   }
+
+  console.log(`[calendar-watch-spike] EXTERNAL-CHANGE user=${userId} googleEventId=${item.id} updated=${item.updated} lastKnownUpdated=${block.lastKnownUpdated ?? '(geen)'}`)
+  await acceptOrRejectManualMove(userId, runId, block, item)
 }
 
 async function processDebouncedChannel(channel: CalendarWatchChannel): Promise<void> {
@@ -138,6 +267,11 @@ async function processDebouncedChannel(channel: CalendarWatchChannel): Promise<v
   // compare-and-swap hieronder gebruikt deze waarde om een notificatie die tijdens de pass
   // binnenkomt niet te laten wissen (code review 2026-09-13).
   const lastChangeNotifiedAtAtStart = channel.lastChangeNotifiedAt
+
+  // Story 8.2 — één `runId` per verwerkingsronde, voor de wijzigingslog-rijen die
+  // `acceptOrRejectManualMove`/`acceptDeletion` schrijven. Bewust NIET via `recordReplanRun`
+  // (zie `logManualEntry`'s commentaar) — deze waarde komt nooit in `replanRuns` terecht.
+  const runId = randomUUID()
 
   const user = await getUserById(channel.userId)
   let pageToken: string | undefined
@@ -170,7 +304,7 @@ async function processDebouncedChannel(channel: CalendarWatchChannel): Promise<v
 
     const body = await response.json() as EventsListResponse
     for (const item of body.items ?? []) {
-      await logEventDiff(channel.userId, item)
+      await logEventDiff(channel.userId, runId, item)
     }
     pageToken = body.nextPageToken
     nextSyncToken = body.nextSyncToken ?? nextSyncToken

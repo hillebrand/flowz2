@@ -29,11 +29,17 @@ export interface StartupCheckResult {
 // Story 6.8 — schuldvrije (NFR2) toelichting per lus, getoond in de i-dialoog naast de
 // "↻ Herplannen"-knop. Beargumenteerd voorstel, geen vastgesteld exact-woorden-contract
 // (zie de story se Open Questions).
+// Story 8.2 — de twee `manual_*`-teksten worden niet via `LOOP_REASONS`/`diffSessionSnapshots`
+// geschreven (die gaan over `recalculateTaskPlanning`-snapshots) maar rechtstreeks vanuit
+// `server/cron/calendar-watch-tick.ts`, dat zelf de reden-tekst bepaalt per geval (buiten
+// blok/overlap/verleden). Hier alleen ter documentatie welke `LoopSource`-waarden bestaan.
 const LOOP_REASONS: Record<LoopSource, string> = {
   past: 'Stond nog gepland op een dag die al voorbij is',
   overlap: 'Overlapte met een andere sessie',
   shortfall: 'Paste niet meer binnen de beschikbare tijd die dag',
-  out_of_block: 'Paste niet meer binnen een beschikbaar-tijd-blok'
+  out_of_block: 'Paste niet meer binnen een beschikbaar-tijd-blok',
+  manual_accepted: 'Je verplaatsing in Google Calendar is overgenomen',
+  manual_rejected: 'Je verplaatsing in Google Calendar kon niet worden overgenomen'
 }
 
 // Snapshot van een taak se sessie-tijden (id → startsAt), vóór een mutatie — vergeleken
@@ -202,6 +208,11 @@ async function findTaskWithPastIncompleteSession(userId: string): Promise<string
   for (const { task } of openTasks) {
     const sessions = await getSessionsForTask(task.id)
     if (sessions.some(session => session.lastHeartbeatAt)) continue
+    // Story 8.2, Beslissing A — zelfde task-level-uitsluitingspatroon als `lastHeartbeatAt`
+    // hierboven: `recalculateTaskPlanning` kan niet één sessie sparen bij het regenereren
+    // van een taak se volledige sessiereeks, dus een handmatig geplaatste sessie in het
+    // verleden moet de HELE taak van deze lus uitsluiten, niet alleen die ene sessie.
+    if (sessions.some(session => session.manuallyPlacedAt)) continue
 
     const hasPastSession = sessions.some((session) => {
       const endMs = new Date(session.startsAt).getTime() + session.plannedMinutes * 60_000
@@ -242,7 +253,12 @@ async function runPastSessionReplanLoop(userId: string, runId: string): Promise<
 // `MAX_BLOCK_CHECK_HORIZON_DAYS` hieronder.
 const MAX_OVERLAP_CHECK_HORIZON_DAYS = 90
 
-function sessionsOverlap(a: Session, b: Session): boolean {
+// Geëxporteerd (Story 8.2) — `server/cron/calendar-watch-tick.ts` heeft dezelfde
+// overlap-formule nodig om een handmatige verplaatsing te valideren (Beslissing B).
+// Parametertype verbreed naar alleen de twee velden die de formule gebruikt (i.p.v. de
+// volledige `Session`) — Story 8.2's aanroep heeft een kandidaat-tijdstip dat nog geen
+// echte sessierij is.
+export function sessionsOverlap(a: { startsAt: string, plannedMinutes: number }, b: { startsAt: string, plannedMinutes: number }): boolean {
   const aStartMs = new Date(a.startsAt).getTime()
   const aEndMs = aStartMs + a.plannedMinutes * 60_000
   const bStartMs = new Date(b.startsAt).getTime()
@@ -255,7 +271,29 @@ function sessionsOverlap(a: Session, b: Session): boolean {
 // Retourneert het taak-id van de LAATST-beginnende van het overlappende paar — na de
 // `doelmoment.ts`-bug-fix (2026-09-13) plaatst een herberekening van die taak haar sessie
 // correct ná het daadwerkelijke eindtijdstip van de andere, niet-verplaatste sessie.
-async function findTaskWithOverlappingSession(userId: string): Promise<string | null> {
+// Story 8.2, code review — wijzigingslog-signaal voor Beslissing A's "twee gepinde
+// sessies overlappen elkaar"-geval: geen automatische correctie (geen van beide mag
+// `recalculateTaskPlanning` ondergaan zonder de pin te vernietigen), wel zichtbaar maken.
+async function logManualOverlapSignal(userId: string, runId: string, taskId: string): Promise<void> {
+  try {
+    await insertReplanLogEntries([{
+      userId,
+      runId,
+      taskId,
+      sessionId: null,
+      loopSource: 'overlap',
+      oldStartsAt: null,
+      newStartsAt: null,
+      reason: 'Deze sessie overlapt met een andere handmatig geplaatste sessie — pas dit zelf aan in Google Calendar of Flowz'
+    }])
+  } catch (fout) {
+    console.error(`[scheduling] Kon overlap-signaal niet loggen voor user ${userId}, taak ${taskId}:`, fout)
+  }
+}
+
+// `runId` erbij (Story 8.2) — nodig voor `logManualOverlapSignal` bij twee overlappende
+// gepinde sessies (Beslissing A).
+async function findTaskWithOverlappingSession(userId: string, runId: string): Promise<string | null> {
   const openTasks = await getOpenTasksWithProgress(userId)
   if (openTasks.length === 0) return null
 
@@ -271,9 +309,22 @@ async function findTaskWithOverlappingSession(userId: string): Promise<string | 
     const taskSessions = await getTasksWithSessionOnDate(userId, candidate)
     const sorted = [...taskSessions].sort((a, b) => a.session.startsAt.localeCompare(b.session.startsAt))
     for (let i = 1; i < sorted.length; i++) {
-      if (sessionsOverlap(sorted[i - 1]!.session, sorted[i]!.session)) {
-        return sorted[i]!.task.id
+      const earlier = sorted[i - 1]!
+      const later = sorted[i]!
+      if (!sessionsOverlap(earlier.session, later.session)) continue
+
+      // Story 8.2, Beslissing A — bij een overlap tussen een gepinde en een niet-gepinde
+      // sessie wint de gepinde altijd: de NIET-gepinde taak wordt de kandidaat, nooit de
+      // gepinde (die zou `recalculateTaskPlanning` de pin laten vernietigen).
+      const earlierPinned = Boolean(earlier.session.manuallyPlacedAt)
+      const laterPinned = Boolean(later.session.manuallyPlacedAt)
+
+      if (earlierPinned && laterPinned) {
+        await logManualOverlapSignal(userId, runId, later.task.id)
+        continue
       }
+      if (laterPinned) return earlier.task.id
+      return later.task.id
     }
 
     candidate = addDays(candidate, 1)
@@ -285,7 +336,7 @@ async function findTaskWithOverlappingSession(userId: string): Promise<string | 
 
 async function runOverlappingSessionReplanLoop(userId: string, runId: string): Promise<boolean> {
   for (let iteration = 0; iteration < MAX_AUTO_REPLAN_ITERATIONS; iteration++) {
-    const taskId = await findTaskWithOverlappingSession(userId)
+    const taskId = await findTaskWithOverlappingSession(userId, runId)
     if (!taskId) return true
 
     const before = await snapshotSessionStarts(taskId)
@@ -336,6 +387,20 @@ async function runShortfallReplanLoop(userId: string, runId: string): Promise<bo
         if (!taskId) {
           console.error(`[scheduling] Kon taak-id niet afleiden uit aanbeveling-id ${recommendation.id} — wijziging wordt toegepast maar niet gelogd.`)
         }
+
+        // Story 8.2, Beslissing A — `detectAnyShortfall`/`generateShortfallRecommendations`
+        // kennen `manuallyPlacedAt` niet, dus filteren we hier, aan de toepassingskant: een
+        // taak met een gepinde sessie wordt door deze lus niet toegepast (zou de pin via
+        // `recalculateTaskPlanning`/`applyShortfallRecommendation` vernietigen). Bekende
+        // restbeperking: als het tekort uitsluitend door de gepinde sessie ontstaat, blijft
+        // de lus dit elke iteratie voorstellen tot `MAX_AUTO_REPLAN_ITERATIONS` uitput en
+        // `resolved: false` rapporteert — geen datacorruptie, zelfde risicoklasse als de
+        // al-bestaande iteratiegrens hierboven.
+        if (taskId) {
+          const taskSessions = await getSessionsForTask(taskId)
+          if (taskSessions.some(session => session.manuallyPlacedAt)) continue
+        }
+
         const before = taskId ? await snapshotSessionStarts(taskId) : null
         await applyShortfallRecommendation(userId, recommendation)
         if (taskId && before) await logSnapshotDiff(userId, runId, taskId, 'shortfall', before)
@@ -390,8 +455,16 @@ async function findTaskWithSessionOutsideAvailableBlock(userId: string): Promise
     const taskSessions = await getTasksWithSessionOnDate(userId, candidate)
     if (taskSessions.length > 0) {
       const blocks = await getAvailableBlocksForDate(userId, candidate)
-      const offender = taskSessions.find(({ session }) => !sessionFitsWithinBlocks(session, blocks))
-      if (offender) return offender.task.id
+      for (const offender of taskSessions) {
+        if (sessionFitsWithinBlocks(offender.session, blocks)) continue
+        // Story 8.2, Beslissing A — task-level uitsluiting (zelfde reden/patroon als
+        // `findTaskWithPastIncompleteSession`): controleert ALLE sessies van de taak, niet
+        // alleen déze offending sessie — een andere, gepinde sessie van dezelfde taak zou
+        // anders alsnog via `recalculateTaskPlanning` vernietigd worden.
+        const allSessionsOfTask = await getSessionsForTask(offender.task.id)
+        if (allSessionsOfTask.some(session => session.manuallyPlacedAt)) continue
+        return offender.task.id
+      }
     }
 
     candidate = addDays(candidate, 1)

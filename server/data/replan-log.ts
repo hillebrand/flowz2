@@ -1,6 +1,6 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray } from 'drizzle-orm'
 import { getDb } from './db'
-import { replanChangeLog, replanRuns, tasks } from './schema'
+import { replanChangeLog, replanRuns, tasks, users } from './schema'
 import type { NewReplanChangeLogEntry } from './schema'
 import type { ReplanLogEntryDto } from '../../shared/types/replan-log'
 
@@ -42,6 +42,28 @@ export async function insertReplanLogEntries(entries: NewReplanChangeLogEntry[])
 // zinvol te tonen — vandaar een simpel `count` i.p.v. de per-sessie `oldStartsAt`/
 // `newStartsAt` (die blijven wel ruw in de tabel staan, voor toekomstig detail-gebruik,
 // alleen déze leesfunctie vat ze samen).
+interface GroupableRow {
+  taskId: string
+  taskTitle: string
+  subject: string
+  loopSource: string
+  reason: string
+}
+
+function groupByTaskAndLoopSource(rows: GroupableRow[]): ReplanLogEntryDto[] {
+  const grouped = new Map<string, ReplanLogEntryDto>()
+  for (const row of rows) {
+    const key = `${row.taskId}:${row.loopSource}`
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.count += 1
+    } else {
+      grouped.set(key, { taskTitle: row.taskTitle, subject: row.subject, reason: row.reason, count: 1 })
+    }
+  }
+  return [...grouped.values()]
+}
+
 export async function getLatestReplanLogEntriesForUser(userId: string): Promise<ReplanLogEntryDto[]> {
   const [latestRun] = await getDb()
     .select({ id: replanRuns.id })
@@ -58,24 +80,45 @@ export async function getLatestReplanLogEntriesForUser(userId: string): Promise<
       taskTitle: tasks.title,
       subject: tasks.subject,
       loopSource: replanChangeLog.loopSource,
-      reason: replanChangeLog.reason,
-      createdAt: replanChangeLog.createdAt
+      reason: replanChangeLog.reason
     })
     .from(replanChangeLog)
     .innerJoin(tasks, eq(replanChangeLog.taskId, tasks.id))
     .where(and(eq(replanChangeLog.userId, userId), eq(replanChangeLog.runId, latestRun.id)))
     .orderBy(replanChangeLog.createdAt)
 
-  const grouped = new Map<string, ReplanLogEntryDto>()
-  for (const row of rows) {
-    const key = `${row.taskId}:${row.loopSource}`
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.count += 1
-    } else {
-      grouped.set(key, { taskTitle: row.taskTitle, subject: row.subject, reason: row.reason, count: 1 })
-    }
-  }
+  return groupByTaskAndLoopSource(rows)
+}
 
-  return [...grouped.values()]
+// Story 8.2 — los van `replanRuns`/"de meest recente run" (zie de story se Beslissing C
+// voor de volledige uitleg): de Cron-tick draait veel vaker dan Evelien de app opent, dus
+// zou een `manual_accepted`/`manual_rejected`-rij bij het eerstvolgende Home-load's eigen
+// (lege) automatische-run-schrijfactie meteen weer "begraven" zijn als deze functie ook via
+// `replanRuns` zocht. Ongelezen = `createdAt` ná `users.lastReadManualRejectionAt` (of ná
+// niets als die kolom nog `null` is).
+export async function getUnreadManualLogEntriesForUser(userId: string): Promise<{ entries: ReplanLogEntryDto[], hasUnreadRejection: boolean }> {
+  const [user] = await getDb().select({ lastReadManualRejectionAt: users.lastReadManualRejectionAt }).from(users).where(eq(users.id, userId))
+  const since = user?.lastReadManualRejectionAt ?? '1970-01-01T00:00:00.000Z'
+
+  const rows = await getDb()
+    .select({
+      taskId: replanChangeLog.taskId,
+      taskTitle: tasks.title,
+      subject: tasks.subject,
+      loopSource: replanChangeLog.loopSource,
+      reason: replanChangeLog.reason
+    })
+    .from(replanChangeLog)
+    .innerJoin(tasks, eq(replanChangeLog.taskId, tasks.id))
+    .where(and(
+      eq(replanChangeLog.userId, userId),
+      inArray(replanChangeLog.loopSource, ['manual_accepted', 'manual_rejected']),
+      gt(replanChangeLog.createdAt, since)
+    ))
+    .orderBy(replanChangeLog.createdAt)
+
+  return {
+    entries: groupByTaskAndLoopSource(rows),
+    hasUnreadRejection: rows.some(row => row.loopSource === 'manual_rejected')
+  }
 }
